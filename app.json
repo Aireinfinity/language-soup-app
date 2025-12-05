@@ -3,6 +3,7 @@
     "name": "language-soup-mobile",
     "slug": "language-soup-mobile",
     "version": "1.0.0",
+    "scheme": "languagesoup",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -13,7 +14,10 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "This app needs access to your microphone to record voice memos for language practice."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -24,6 +28,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "platforms": [
+      "ios"
+    ]
   }
 }
