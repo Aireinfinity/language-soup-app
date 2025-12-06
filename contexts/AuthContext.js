@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import * as Linking from 'expo-linking';
 import { supabase } from '../lib/supabase';
-import { useRouter, useSegments } from 'expo-router';
+import { useRouter, useSegments, useRootNavigationState } from 'expo-router';
 
 const AuthContext = createContext({});
 
@@ -13,6 +13,7 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
     const router = useRouter();
     const segments = useSegments();
+    const navigationState = useRootNavigationState();
 
     useEffect(() => {
         // Check active sessions and subscribe to auth changes
@@ -74,6 +75,7 @@ export const AuthProvider = ({ children }) => {
     // Protected Route Logic & Profile Check
     useEffect(() => {
         if (loading) return;
+        if (!navigationState?.key) return; // Wait for navigation to be ready
 
         const currentRoute = segments[0];
         const publicRoutes = ['index', 'how-it-works', 'login', 'onboarding']; // onboarding needs to be accessible to create profile
@@ -110,9 +112,9 @@ export const AuthProvider = ({ children }) => {
                     router.replace('/onboarding');
                 }
             } else {
-                // If profile exists, go to tabs (unless already there)
+                // If profile exists, show boot screen every time (tap to continue)
                 if (inAuthGroup || inOnboarding) {
-                    router.replace('/(tabs)');
+                    router.replace('/');
                 }
             }
         } catch (error) {

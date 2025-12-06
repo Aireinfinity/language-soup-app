@@ -118,10 +118,18 @@ export function AudioMessage({ audioUrl, duration, senderName, isMe }) {
             }
 
             // Create sound from local URI (instant)
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: false,
+                playsInSilentModeIOS: true,
+                staysActiveInBackground: false,
+                shouldDuckAndroid: true,
+            });
+
             const { sound: newSound, status } = await Audio.Sound.createAsync(
                 { uri: localUri },
                 {
                     shouldPlay: true,
+                    volume: 1.0,  // Max volume for louder playback
                     rate: playbackSpeed,
                     progressUpdateIntervalMillis: 16 // ~60fps updates
                 },
@@ -277,10 +285,14 @@ const WaveformBar = ({ index, totalBars, height, progress, isMe }) => {
 
         return {
             backgroundColor: isMe
-                ? (isPlayed ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.4)')
-                : (isPlayed ? Colors.primary : 'rgba(0, 173, 239, 0.3)'),
+                ? (isPlayed ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)')
+                : (isPlayed ? Colors.primary : 'rgba(0, 173, 239, 0.25)'),
             height: 24 * height, // Static height based on random seed
-            transform: [{ scaleY: isPlayed ? withSpring(1.2) : withSpring(1) }] // Subtle pop effect when played
+            transform: [{
+                scaleY: isPlayed
+                    ? withSpring(1.15, { damping: 4, stiffness: 90 })  // Gentle spring
+                    : withSpring(1, { damping: 4, stiffness: 90 })
+            }]
         };
     });
 

@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Home, Archive, User } from 'lucide-react-native';
+import { Home, Globe2, User, LifeBuoy } from 'lucide-react-native';
 import { Colors } from '../../constants/Colors';
 import { View } from 'react-native';
 
@@ -44,10 +44,17 @@ export default function TabLayout() {
                 }}
             />
             <Tabs.Screen
-                name="archive"
+                name="community"
                 options={{
-                    title: 'Archive',
-                    tabBarIcon: ({ color }) => <Archive size={24} color={color} />,
+                    title: 'Community',
+                    tabBarIcon: ({ color }) => <Globe2 size={24} color={color} />,
+                }}
+            />
+            <Tabs.Screen
+                name="support"
+                options={{
+                    title: 'Support',
+                    tabBarIcon: ({ color }) => <LifeBuoy size={24} color={color} />,
                 }}
             />
             <Tabs.Screen

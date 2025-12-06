@@ -17,14 +17,18 @@ export default function BootScreen() {
         setTimeout(() => setReady(true), 100);
     }, []);
 
-    const handleButtonPress = () => {
-        router.replace('/how-it-works');
+    const handleSkip = () => {
+        router.replace('/(tabs)');
     };
 
     if (!ready) return <View style={styles.container} />;
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
+        <TouchableOpacity
+            style={[styles.container, { paddingTop: insets.top }]}
+            activeOpacity={1}
+            onPress={handleSkip}
+        >
             <View style={styles.textBlock}>
                 {/* Title */}
                 <ThemedText style={styles.headword}>language soup</ThemedText>
@@ -56,15 +60,16 @@ export default function BootScreen() {
             {/* Button */}
             <View style={styles.buttonContainer}>
                 <TouchableOpacity
-                    onPress={handleButtonPress}
+                    onPress={handleSkip}
                     style={styles.soupButton}
                 >
                     <View style={styles.buttonContent}>
                         <ThemedText style={styles.buttonText}>mmm good soup</ThemedText>
                     </View>
                 </TouchableOpacity>
+                <ThemedText style={styles.tapHint}>tap anywhere to skip</ThemedText>
             </View>
-        </View>
+        </TouchableOpacity>
     );
 }
 
@@ -151,5 +156,11 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#ffffff',
         letterSpacing: 1,
+    },
+    tapHint: {
+        fontSize: 14,
+        color: Colors.textLight,
+        marginTop: 12,
+        textAlign: 'center',
     },
 });

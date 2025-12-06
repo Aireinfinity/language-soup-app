@@ -1,21 +1,60 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Text, TextInput, KeyboardAvoidingView, Platform, Animated, PanResponder, Dimensions, Vibration, StatusBar, Image } from 'react-native';
+import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Text, TextInput, KeyboardAvoidingView, Platform, StatusBar, Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
-import { ArrowLeft, Send, Mic, X, Lock, Pause, Play, Check, Clock, Trash2, Square, ChevronLeft, MoreVertical } from 'lucide-react-native';
+import { ArrowLeft, Send, Mic, X, Trash2, Square, ChevronLeft, MoreVertical, Check, Clock } from 'lucide-react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ThemedText } from '../../components/ThemedText';
 import { AudioMessage } from '../../components/AudioMessage';
 import { LiveAudioWaveform } from '../../components/LiveAudioWaveform';
 import { Colors } from '../../constants/Colors';
 import { supabase } from '../../lib/supabase';
-
 import { useAuth } from '../../contexts/AuthContext';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 
-// Message Bubble Component
+const SOUP_COLORS = {
+    blue: '#00adef',
+    pink: '#ec008b',
+    cream: '#FDF5E6',
+};
+
+// Helper to add date separators
+function addDateSeparators(messages) {
+    if (!messages || messages.length === 0) return [];
+
+    const result = [];
+    let lastDate = null;
+
+    messages.forEach((msg) => {
+        const msgDate = new Date(msg.created_at).toDateString();
+
+        if (msgDate !== lastDate) {
+            const date = new Date(msg.created_at);
+            const today = new Date().toDateString();
+            const yesterday = new Date(Date.now() - 86400000).toDateString();
+
+            let label = 'Today';
+            if (msgDate === yesterday) label = 'Yesterday';
+            else if (msgDate !== today) {
+                label = date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+            }
+
+            result.push({
+                id: `date-${msg.created_at}`,
+                type: 'date_separator',
+                label
+            });
+            lastDate = msgDate;
+        }
+
+        result.push(msg);
+    });
+
+    return result;
+}
+
+// Message Bubble Component  
 function MessageBubble({ message, isMe }) {
     const formatTime = (dateString) => {
         if (!dateString) return '';
@@ -83,20 +122,24 @@ function MessageBubble({ message, isMe }) {
 }
 
 export default function ChatScreen() {
-    const { user } = useAuth(); // Get real user
+    const { user } = useAuth();
     const router = useRouter();
     const { id: groupId } = useLocalSearchParams();
     const flatListRef = useRef(null);
     const insets = useSafeAreaInsets();
+    const channelRef = useRef(null);
+    const lastTypingSent = useRef(0);
 
     const [messages, setMessages] = useState([]);
     const [loading, setLoading] = useState(true);
     const [textInput, setTextInput] = useState('');
     const [sending, setSending] = useState(false);
-    const [uploading, setUploading] = useState(false);
     const [groupName, setGroupName] = useState('');
     const [memberCount, setMemberCount] = useState(0);
     const [currentChallenge, setCurrentChallenge] = useState(null);
+    const [allChallenges, setAllChallenges] = useState([]);
+    const [visibleChallenge, setVisibleChallenge] = useState(null);
+    const [typingUsers, setTypingUsers] = useState({});
 
     const {
         isRecording,
@@ -119,7 +162,49 @@ export default function ChatScreen() {
     useEffect(() => {
         if (!currentChallenge || !user) return;
 
-        const channel = setupRealtimeSubscription();
+        const channel = supabase
+            .channel(`chat-${currentChallenge.id}`)
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'app_messages',
+                filter: `challenge_id=eq.${currentChallenge.id}`
+            }, async (payload) => {
+                if (payload.new.sender_id === user.id) return;
+
+                const { data: sender } = await supabase
+                    .from('app_users')
+                    .select('display_name, avatar_url')
+                    .eq('id', payload.new.sender_id)
+                    .single();
+
+                const newMessage = { ...payload.new, sender };
+                setMessages(prev => [...prev, newMessage]);
+                setTimeout(() => scrollToBottom(), 100);
+            })
+            .on('broadcast', { event: 'typing' }, ({ payload }) => {
+                if (payload.user_id === user.id) return;
+
+                setTypingUsers(prev => ({
+                    ...prev,
+                    [payload.user_id]: {
+                        display_name: payload.display_name,
+                        timestamp: Date.now()
+                    }
+                }));
+
+                setTimeout(() => {
+                    setTypingUsers(prev => {
+                        const updated = { ...prev };
+                        delete updated[payload.user_id];
+                        return updated;
+                    });
+                }, 3000);
+            })
+            .subscribe();
+
+        channelRef.current = channel;
+
         return () => {
             supabase.removeChannel(channel);
         };
@@ -127,55 +212,41 @@ export default function ChatScreen() {
 
     const loadChatData = async () => {
         try {
-            console.log('Loading chat data for group:', groupId);
-            // 1. Load group info from app_groups
-            const { data: group, error: groupError } = await supabase
+            const { data: group } = await supabase
                 .from('app_groups')
                 .select('name, member_count')
                 .eq('id', groupId)
                 .single();
 
-            if (groupError) console.error('Error loading group:', groupError);
             if (group) {
-                console.log('Group loaded:', group.name);
                 setGroupName(group.name);
                 setMemberCount(group.member_count || 0);
             }
 
-            // 2. Get current challenge from app_challenges
-            const { data: challenge, error: challengeError } = await supabase
+            const { data: challenges } = await supabase
                 .from('app_challenges')
-                .select('id, prompt_text')
+                .select('id, prompt_text, created_at')
                 .eq('group_id', groupId)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .single();
+                .order('created_at', { ascending: false });
 
-            if (challengeError) console.warn('Error loading challenge (might be none):', challengeError);
+            if (challenges && challenges.length > 0) {
+                setAllChallenges(challenges);
+                setCurrentChallenge(challenges[0]);
+                setVisibleChallenge(challenges[0]);
 
-            if (challenge) {
-                console.log('Current challenge loaded:', challenge.id);
-                setCurrentChallenge(challenge);
-
-                // 3. Load messages for this challenge with sender info
-                const { data: messagesData, error: messagesError } = await supabase
+                const { data: messagesData } = await supabase
                     .from('app_messages')
                     .select(`
                         *,
                         sender:app_users!sender_id(display_name, avatar_url)
                     `)
-                    .eq('challenge_id', challenge.id)
+                    .eq('group_id', groupId)
                     .order('created_at', { ascending: true });
 
-                if (messagesError) console.error('Error loading messages:', messagesError);
-
                 if (messagesData) {
-                    console.log('Messages loaded:', messagesData.length);
                     setMessages(messagesData);
                     setTimeout(() => scrollToBottom(), 100);
                 }
-            } else {
-                console.log('No active challenge found for group');
             }
         } catch (error) {
             console.error('Error loading chat:', error);
@@ -184,54 +255,12 @@ export default function ChatScreen() {
         }
     };
 
-    const setupRealtimeSubscription = () => {
-        const channel = supabase
-            .channel(`chat-${currentChallenge.id}`)
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'app_messages',
-                filter: `challenge_id=eq.${currentChallenge.id}`
-            }, (payload) => {
-                if (payload.new.sender_id === user.id) return; // Ignore own messages
-
-                const newMessage = {
-                    ...payload.new,
-                    sender: {
-                        display_name: 'Other User' // Ideally fetch user details or use a join if possible in realtime (not directly)
-                    }
-                };
-
-                // Fetch sender details for the new message
-                fetchSenderDetails(newMessage);
-            })
-            .subscribe();
-
-        return channel;
-    };
-
-    const fetchSenderDetails = async (message) => {
-        const { data } = await supabase
-            .from('app_users')
-            .select('display_name, avatar_url')
-            .eq('id', message.sender_id)
-            .single();
-
-        if (data) {
-            setMessages(prev => prev.map(msg =>
-                msg.id === message.id ? { ...msg, sender: data } : msg
-            ));
-        } else {
-            setMessages(prev => [...prev, message]);
-            setTimeout(() => scrollToBottom(), 100);
-        }
-    };
-
     const sendMessage = async () => {
-        if (!textInput.trim() || sending || !currentChallenge || !user) return;
+        if (!textInput.trim() || sending || !user || !currentChallenge) return;
 
         const messageText = textInput.trim();
         setTextInput('');
+        setSending(true);
 
         const tempId = `temp-${Date.now()}`;
         const optimisticMessage = {
@@ -243,53 +272,42 @@ export default function ChatScreen() {
             content: messageText,
             created_at: new Date().toISOString(),
             status: 'sending',
-            sender: { display_name: 'Me' } // Placeholder until refresh
+            sender: { display_name: user.user_metadata?.display_name || 'Me' }
         };
 
         setMessages(prev => [...prev, optimisticMessage]);
-        setTimeout(() => scrollToBottom(), 100);
+        setTimeout(() => scrollToBottom(), 50);
 
         try {
-            const { data, error } = await supabase.from('app_messages').insert({
-                sender_id: user.id,
-                group_id: groupId,
-                challenge_id: currentChallenge.id,
-                message_type: 'text',
-                content: messageText
-            }).select().single();
+            const { data, error } = await supabase
+                .from('app_messages')
+                .insert({
+                    sender_id: user.id,
+                    group_id: groupId,
+                    challenge_id: currentChallenge.id,
+                    message_type: 'text',
+                    content: messageText
+                })
+                .select()
+                .single();
 
             if (error) throw error;
 
             setMessages(prev => prev.map(msg =>
                 msg.id === tempId ? { ...data, sender: optimisticMessage.sender } : msg
             ));
-
         } catch (error) {
             console.error('Send failed:', error);
             setMessages(prev => prev.filter(msg => msg.id !== tempId));
             setTextInput(messageText);
+        } finally {
+            setSending(false);
         }
     };
 
     const handleSendVoice = async () => {
-        Vibration.vibrate(50);
         const uri = await stopRecording();
-        if (uri) {
-            await sendVoiceMemo(uri);
-        }
-    };
-
-    const handleMicPress = async () => {
-        Vibration.vibrate(50);
-        if (isRecording) {
-            if (isPaused) {
-                await resumeRecording();
-            } else {
-                await pauseRecording();
-            }
-        } else {
-            await startRecording();
-        }
+        if (uri) await sendVoiceMemo(uri);
     };
 
     const sendVoiceMemo = async (audioUri) => {
@@ -312,46 +330,64 @@ export default function ChatScreen() {
         };
 
         setMessages(prev => [...prev, optimisticMessage]);
-        setTimeout(() => scrollToBottom(), 100);
+        setTimeout(() => scrollToBottom(), 50);
 
         try {
-            const base64 = await FileSystem.readAsStringAsync(audioUri, {
-                encoding: FileSystem.EncodingType.Base64,
+            const fileInfo = await FileSystem.getInfoAsync(audioUri);
+            const audioData = await FileSystem.readAsStringAsync(audioUri, {
+                encoding: FileSystem.EncodingType.Base64
             });
 
-            const fileName = `voice-${Date.now()}.m4a`;
-            const filePath = `${user.id}/${fileName}`;
-
-            const { error: uploadError } = await supabase.storage
+            const fileName = `voice_${Date.now()}.m4a`;
+            const { data: uploadData, error: uploadError } = await supabase.storage
                 .from('voice-memos')
-                .upload(filePath, decode(base64), {
-                    contentType: 'audio/m4a',
-                });
+                .upload(fileName, decode(audioData), { contentType: 'audio/m4a' });
 
             if (uploadError) throw uploadError;
 
             const { data: { publicUrl } } = supabase.storage
                 .from('voice-memos')
-                .getPublicUrl(filePath);
+                .getPublicUrl(fileName);
 
-            const { data, error: insertError } = await supabase.from('app_messages').insert({
-                sender_id: user.id,
-                group_id: groupId,
-                challenge_id: currentChallenge.id,
-                message_type: 'voice',
-                media_url: publicUrl,
-                duration_seconds: duration
-            }).select().single();
+            const { data, error: insertError } = await supabase
+                .from('app_messages')
+                .insert({
+                    sender_id: user.id,
+                    group_id: groupId,
+                    challenge_id: currentChallenge.id,
+                    message_type: 'voice',
+                    media_url: publicUrl,
+                    duration_seconds: duration
+                })
+                .select()
+                .single();
 
             if (insertError) throw insertError;
 
             setMessages(prev => prev.map(msg =>
                 msg.id === tempId ? { ...data, sender: optimisticMessage.sender } : msg
             ));
-
         } catch (error) {
             console.error('Voice upload failed:', error);
             setMessages(prev => prev.filter(msg => msg.id !== tempId));
+        }
+    };
+
+    const handleTextChange = (text) => {
+        setTextInput(text);
+        if (!channelRef.current || !user) return;
+
+        const now = Date.now();
+        if (now - lastTypingSent.current > 2000) {
+            lastTypingSent.current = now;
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'typing',
+                payload: {
+                    user_id: user.id,
+                    display_name: user.user_metadata?.display_name || 'Someone'
+                }
+            });
         }
     };
 
@@ -360,9 +396,36 @@ export default function ChatScreen() {
     };
 
     const renderMessage = ({ item }) => {
+        if (item.type === 'date_separator') {
+            return (
+                <View style={styles.dateSeparator}>
+                    <View style={styles.dateSeparatorBadge}>
+                        <Text style={styles.dateSeparatorText}>{item.label}</Text>
+                    </View>
+                </View>
+            );
+        }
+
         const isMe = item.sender_id === user?.id;
         return <MessageBubble message={item} isMe={isMe} />;
     };
+
+    const typingIndicator = () => {
+        const ids = Object.keys(typingUsers);
+        if (ids.length === 0) return null;
+
+        const name = typingUsers[ids[0]].display_name;
+        const others = ids.length - 1;
+        const text = others > 0 ? `${name} and ${others} others are typing...` : `${name} is typing...`;
+
+        return (
+            <View style={styles.typingIndicator}>
+                <Text style={styles.typingText}>{text}</Text>
+            </View>
+        );
+    };
+
+    const messagesWithDates = addDateSeparators(messages);
 
     if (loading) {
         return (
@@ -376,7 +439,6 @@ export default function ChatScreen() {
         <View style={styles.container}>
             <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-            {/* Absolute Header with Blur */}
             <BlurView intensity={80} tint="light" style={[styles.header, { paddingTop: insets.top }]}>
                 <View style={styles.headerContent}>
                     <Pressable onPress={() => router.back()} style={styles.backButton}>
@@ -385,115 +447,101 @@ export default function ChatScreen() {
 
                     <View style={styles.headerInfo}>
                         <Text style={styles.headerTitle}>{groupName}</Text>
-                        <Text style={styles.headerSubtitle}>
-                            {memberCount} soup lovers active
-                        </Text>
+                        <Text style={styles.headerSubtitle}>{memberCount} members</Text>
                     </View>
 
-                    <View style={styles.headerRight}>
-                        <Pressable style={styles.headerAction}>
-                            <MoreVertical size={24} color={Colors.primary} />
-                        </Pressable>
-                    </View>
+                    <Pressable style={styles.headerAction}>
+                        <MoreVertical size={24} color={Colors.primary} />
+                    </Pressable>
                 </View>
-                <View style={styles.headerBorder} />
             </BlurView>
 
+            {visibleChallenge && (
+                <View style={styles.challengeBanner}>
+                    <Text style={styles.challengeLabel}>Current Challenge</Text>
+                    <Text style={styles.challengeText}>{visibleChallenge.prompt_text}</Text>
+                </View>
+            )}
+
             <KeyboardAvoidingView
-                style={styles.keyboardAvoidingView}
+                style={styles.keyboardView}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 keyboardVerticalOffset={0}
             >
                 <FlatList
                     ref={flatListRef}
-                    data={messages}
+                    data={messagesWithDates}
                     renderItem={renderMessage}
                     keyExtractor={(item) => item.id}
                     contentContainerStyle={[
                         styles.messagesList,
-                        { paddingTop: insets.top + 60, paddingBottom: 20 } // Add padding for absolute header
+                        { paddingTop: insets.top + (currentChallenge ? 130 : 70), paddingBottom: 20 }
                     ]}
                     onContentSizeChange={scrollToBottom}
-                    ListHeaderComponent={
-                        currentChallenge ? (
-                            <View style={styles.challengeCard}>
-                                <Text style={styles.challengeLabel}>Today's Challenge</Text>
-                                <Text style={styles.challengeText}>{currentChallenge.prompt_text}</Text>
-                            </View>
-                        ) : null
-                    }
-                    ListEmptyComponent={
-                        !currentChallenge && (
-                            <View style={styles.emptyState}>
-                                <Text style={styles.emptyText}>No messages yet. Start the conversation! 💬</Text>
-                            </View>
-                        )
-                    }
+                    onViewableItemsChanged={({ viewableItems }) => {
+                        // Find first visible message
+                        const firstVisibleMsg = viewableItems.find(item => item.item.message_type !== undefined && item.item.type !== 'date_separator');
+                        if (firstVisibleMsg && allChallenges.length > 0) {
+                            const msgChallengeId = firstVisibleMsg.item.challenge_id;
+                            const matchingChallenge = allChallenges.find(c => c.id === msgChallengeId);
+                            if (matchingChallenge && matchingChallenge.id !== visibleChallenge?.id) {
+                                setVisibleChallenge(matchingChallenge);
+                            }
+                        }
+                    }}
+                    viewabilityConfig={{
+                        itemVisiblePercentThreshold: 50
+                    }}
                 />
 
-                {/* Input / Recording Container */}
+                {typingIndicator()}
+
                 <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
                     {isRecording ? (
-                        // Recording UI
                         <View style={styles.recordingBar}>
-                            {/* Left: Trash */}
-                            <Pressable onPress={cancelRecording} style={styles.iconButton}>
-                                <Trash2 size={24} color={Colors.textLight} />
+                            <Pressable onPress={cancelRecording} style={styles.cancelButton}>
+                                <Trash2 size={22} color="#FF3B30" />
                             </Pressable>
 
-                            {/* Center: Waveform & Timer */}
-                            <View style={styles.recordingCenter}>
-                                <View style={styles.recordingWaveform}>
-                                    <LiveAudioWaveform metering={metering} />
+                            <View style={styles.recordingMain}>
+                                <View style={styles.waveformWrapper}>
+                                    <LiveAudioWaveform
+                                        metering={metering}
+                                        recordingDuration={recordingDuration}
+                                    />
                                 </View>
                                 <Text style={styles.recordingTimer}>
-                                    {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+                                    {Math.floor(recordingDuration / 60)}:{Math.floor(recordingDuration % 60).toString().padStart(2, '0')}
                                 </Text>
                             </View>
 
-                            {/* Right: Actions (Pause/Resume + Send) */}
-                            <View style={styles.recordingActions}>
-                                <Pressable onPress={handleMicPress} style={styles.iconButton}>
-                                    {isPaused ? (
-                                        <Mic size={24} color={Colors.primary} />
-                                    ) : (
-                                        <Pause size={24} color={Colors.error} />
-                                    )}
-                                </Pressable>
-
-                                <Pressable onPress={handleSendVoice} style={styles.sendButtonSmall}>
-                                    <Send size={18} color="#fff" />
-                                </Pressable>
-                            </View>
+                            <Pressable onPress={handleSendVoice} style={styles.sendVoiceButton}>
+                                <Send size={22} color="#fff" />
+                            </Pressable>
                         </View>
                     ) : (
-                        // Standard Input UI
                         <View style={styles.standardInputBar}>
                             <TextInput
                                 style={styles.textInput}
+                                value={textInput}
+                                onChangeText={handleTextChange}
                                 placeholder="Message..."
                                 placeholderTextColor={Colors.textLight}
-                                value={textInput}
-                                onChangeText={setTextInput}
                                 multiline
                                 maxLength={500}
                             />
 
-                            {textInput.trim().length > 0 ? (
-                                <Pressable onPress={sendMessage} style={styles.sendButton} disabled={sending}>
-                                    {sending ? (
-                                        <ActivityIndicator color="#fff" size="small" />
-                                    ) : (
-                                        <Send size={20} color="#fff" />
-                                    )}
+                            {textInput.trim() ? (
+                                <Pressable onPress={sendMessage} disabled={sending} style={styles.sendButton}>
+                                    <Send size={24} color={Colors.primary} />
                                 </Pressable>
                             ) : (
-                                <Pressable
-                                    onPress={handleMicPress}
-                                    style={styles.micButton}
-                                >
-                                    <Mic size={24} color={Colors.primary} />
-                                </Pressable>
+                                <View style={styles.voiceButtonGroup}>
+                                    <Pressable onPress={startRecording} style={styles.micButton}>
+                                        <Mic size={28} color={Colors.primary} />
+                                    </Pressable>
+                                    <Text style={styles.tapHint}>Tap to{"\n"}record</Text>
+                                </View>
                             )}
                         </View>
                     )}
@@ -506,129 +554,108 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F2F2F7', // Keep iOS gray for standard chat feel, or switch to Colors.background for soup feel
+        backgroundColor: SOUP_COLORS.cream,
     },
     center: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#F2F2F7',
     },
     header: {
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
-        zIndex: 100,
-        overflow: 'hidden',
+        zIndex: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.05)',
     },
     headerContent: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 16,
         paddingBottom: 12,
-        height: 54,
-    },
-    headerBorder: {
-        height: StyleSheet.hairlineWidth,
-        backgroundColor: 'rgba(0,0,0,0.15)',
     },
     backButton: {
         padding: 4,
-        marginRight: 8,
     },
     headerInfo: {
         flex: 1,
-        justifyContent: 'center',
+        marginLeft: 12,
     },
     headerTitle: {
-        fontSize: 17,
-        fontWeight: '600',
-        color: '#000',
-        textAlign: 'center',
+        fontSize: 18,
+        fontWeight: '700',
+        color: Colors.text,
     },
     headerSubtitle: {
-        fontSize: 12,
-        color: '#8E8E93',
-        marginTop: 1,
-        textAlign: 'center',
-    },
-    headerRight: {
-        width: 40,
-        alignItems: 'flex-end',
+        fontSize: 13,
+        color: Colors.textLight,
     },
     headerAction: {
         padding: 4,
     },
-    challengeCard: {
+    challengeBanner: {
+        position: 'absolute',
+        top: 100,  // Moved down to be visible below header
+        left: 16,
+        right: 16,
+        zIndex: 9,
         backgroundColor: '#fff',
-        padding: 16,
-        margin: 16,
-        borderRadius: 16,
+        borderRadius: 12,
+        padding: 12,
+        borderLeftWidth: 3,
+        borderLeftColor: SOUP_COLORS.blue,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
     },
     challengeLabel: {
-        fontSize: 11,
+        fontSize: 10,
         fontWeight: '700',
-        color: Colors.primary,
-        marginBottom: 6,
+        color: SOUP_COLORS.blue,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
+        marginBottom: 4,
     },
     challengeText: {
-        fontSize: 16,
+        fontSize: 14,
+        lineHeight: 18,
         color: '#000',
-        lineHeight: 22,
         fontWeight: '500',
+    },
+    keyboardView: {
+        flex: 1,
     },
     messagesList: {
         paddingHorizontal: 16,
     },
-    emptyState: {
-        padding: 32,
+    dateSeparator: {
         alignItems: 'center',
+        marginVertical: 16,
     },
-    emptyText: {
-        fontSize: 15,
-        color: '#8E8E93',
-        textAlign: 'center',
+    dateSeparatorBadge: {
+        backgroundColor: 'rgba(0,0,0,0.05)',
+        paddingVertical: 4,
+        paddingHorizontal: 12,
+        borderRadius: 12,
+    },
+    dateSeparatorText: {
+        fontSize: 12,
+        color: Colors.textLight,
+        fontWeight: '600',
     },
     messageRow: {
-        marginBottom: 8,
-        width: '100%',
         flexDirection: 'row',
+        marginBottom: 8,
     },
     rowMe: {
         justifyContent: 'flex-end',
     },
     rowThem: {
         justifyContent: 'flex-start',
-    },
-    bubble: {
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        borderRadius: 20,
-        maxWidth: '75%',
-        minWidth: 60,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-    },
-    bubbleMe: {
-        backgroundColor: Colors.primary,
-        borderBottomRightRadius: 4,
-    },
-    bubbleThem: {
-        backgroundColor: '#fff',
-        borderBottomLeftRadius: 4,
-    },
-    bubbleSending: {
-        opacity: 0.7,
     },
     avatarContainer: {
         marginRight: 8,
@@ -650,16 +677,38 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: 'bold',
     },
+    bubble: {
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        maxWidth: '70%',
+        borderRadius: 18,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
+    },
+    bubbleMe: {
+        backgroundColor: Colors.primary,
+        borderBottomRightRadius: 4,
+    },
+    bubbleThem: {
+        backgroundColor: '#fff',
+        borderBottomLeftRadius: 4,
+    },
+    bubbleSending: {
+        opacity: 0.7,
+    },
     senderName: {
-        fontSize: 13,
-        fontWeight: 'bold',
-        color: Colors.primary, // Or a specific color for names like WhatsApp uses
-        marginBottom: 4,
+        fontSize: 12,
+        fontWeight: '600',
+        color: Colors.primary,
+        marginBottom: 2,
     },
     messageText: {
-        fontSize: 17,
+        fontSize: 16,
         color: '#000',
-        lineHeight: 22,
+        lineHeight: 20,
     },
     messageTextMe: {
         color: '#fff',
@@ -667,9 +716,8 @@ const styles = StyleSheet.create({
     footer: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'flex-end',
-        gap: 4,
         marginTop: 4,
+        gap: 4,
     },
     time: {
         fontSize: 11,
@@ -681,84 +729,101 @@ const styles = StyleSheet.create({
     statusIcon: {
         marginLeft: 2,
     },
+    typingIndicator: {
+        paddingHorizontal: 20,
+        paddingVertical: 8,
+    },
+    typingText: {
+        fontSize: 13,
+        color: Colors.textLight,
+        fontStyle: 'italic',
+    },
     inputContainer: {
-        backgroundColor: 'rgba(249,249,249,0.94)',
-        borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: 'rgba(0,0,0,0.15)',
-        paddingHorizontal: 10,
+        backgroundColor: '#fff',
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(0,0,0,0.1)',
+        paddingHorizontal: 12,
         paddingTop: 8,
     },
     standardInputBar: {
         flexDirection: 'row',
         alignItems: 'flex-end',
-        gap: 10,
+        gap: 8,
     },
     textInput: {
         flex: 1,
-        backgroundColor: '#fff',
+        backgroundColor: SOUP_COLORS.cream,
         borderRadius: 20,
         paddingHorizontal: 16,
         paddingVertical: 10,
-        fontSize: 17,
-        maxHeight: 120,
-        borderWidth: 1,
-        borderColor: '#E5E5EA',
+        fontSize: 16,
+        maxHeight: 100,
+        color: '#000',
     },
-    sendButton: {
-        backgroundColor: Colors.primary,
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+    voiceButtonGroup: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    micButton: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: SOUP_COLORS.cream,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    micButton: {
-        width: 36,
-        height: 36,
+    tapHint: {
+        position: 'absolute',
+        bottom: -20,
+        fontSize: 10,
+        color: Colors.textLight,
+        fontWeight: '600',
+        textAlign: 'center',
+        lineHeight: 12,
+        letterSpacing: 0.2,
+    },
+    sendButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: SOUP_COLORS.blue,
         justifyContent: 'center',
         alignItems: 'center',
     },
     recordingBar: {
         flexDirection: 'row',
         alignItems: 'center',
-        height: 44,
-        paddingHorizontal: 4,
-    },
-    recordingCenter: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 8,
         gap: 12,
     },
-    recordingWaveform: {
+    cancelButton: {
+        padding: 8,
+    },
+    recordingMain: {
         flex: 1,
-        maxWidth: 160,
+        alignItems: 'center',
+        gap: 8,
+    },
+    waveformWrapper: {
+        width: '100%',
+        height: 36,
+        backgroundColor: 'rgba(0, 173, 239, 0.08)',
+        borderRadius: 18,
+        overflow: 'hidden',
+        paddingHorizontal: 8,
     },
     recordingTimer: {
         fontSize: 16,
-        fontWeight: '600',
-        color: Colors.primary,
-        fontVariant: ['tabular-nums'],
-        minWidth: 45,
-        textAlign: 'center',
+        fontWeight: '700',
+        color: Colors.text,
+        letterSpacing: 0.5,
     },
-    recordingActions: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 16,
-    },
-    iconButton: {
-        width: 40,
-        height: 40,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    sendButtonSmall: {
-        backgroundColor: Colors.primary,
-        width: 32,
-        height: 32,
-        borderRadius: 16,
+    sendVoiceButton: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: SOUP_COLORS.blue,
         justifyContent: 'center',
         alignItems: 'center',
     },

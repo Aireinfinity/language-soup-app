@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert, Text, Vibration } from 'react-native';
+import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert, Text } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Check } from 'lucide-react-native';
@@ -92,7 +92,6 @@ export default function GroupSelectionScreen() {
             <Pressable
                 style={[styles.groupCard, isSelected && styles.groupCardSelected]}
                 onPress={() => {
-                    Vibration.vibrate(30);
                     toggleGroup(item.id);
                 }}
             >

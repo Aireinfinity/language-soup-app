@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-native-picker/picker": "^2.11.4",
     "@supabase/supabase-js": "^2.86.0",
     "base64-arraybuffer": "^1.0.2",
     "expo": "~54.0.25",
@@ -17,10 +18,13 @@
     "expo-av": "^16.0.7",
     "expo-blur": "^15.0.7",
     "expo-constants": "~18.0.10",
+    "expo-device": "^8.0.10",
     "expo-file-system": "~19.0.19",
+    "expo-haptics": "~15.0.8",
     "expo-image-picker": "^17.0.8",
     "expo-linear-gradient": "~15.0.7",
     "expo-linking": "~8.0.9",
+    "expo-notifications": "^0.32.14",
     "expo-router": "~6.0.15",
     "expo-splash-screen": "^31.0.11",
     "expo-status-bar": "~3.0.8",
@@ -38,6 +42,8 @@
   },
   "private": true,
   "devDependencies": {
-    "babel-preset-expo": "^54.0.7"
+    "@types/react": "~19.1.10",
+    "babel-preset-expo": "^54.0.7",
+    "typescript": "~5.9.2"
   }
 }
