@@ -101,21 +101,6 @@ function MessageBubble({ message, isMe }) {
                         {message.content}
                     </Text>
                 )}
-
-                <View style={styles.footer}>
-                    <Text style={[styles.time, isMe && styles.timeMe]}>
-                        {formatTime(message.created_at)}
-                    </Text>
-                    {isMe && (
-                        <View style={styles.statusIcon}>
-                            {isSending ? (
-                                <Clock size={12} color="rgba(255,255,255,0.7)" />
-                            ) : (
-                                <Check size={12} color="rgba(255,255,255,0.7)" />
-                            )}
-                        </View>
-                    )}
-                </View>
             </View>
         </View>
     );
@@ -457,7 +442,7 @@ export default function ChatScreen() {
             </BlurView>
 
             {visibleChallenge && (
-                <View style={styles.challengeBanner}>
+                <View style={[styles.challengeBanner, { top: insets.top + 65 }]}>
                     <Text style={styles.challengeLabel}>Current Challenge</Text>
                     <Text style={styles.challengeText}>{visibleChallenge.prompt_text}</Text>
                 </View>
@@ -536,11 +521,11 @@ export default function ChatScreen() {
                                     <Send size={24} color={Colors.primary} />
                                 </Pressable>
                             ) : (
-                                <View style={styles.voiceButtonGroup}>
+                                <View style={styles.micContainer}>
                                     <Pressable onPress={startRecording} style={styles.micButton}>
-                                        <Mic size={28} color={Colors.primary} />
+                                        <Mic size={26} color={Colors.primary} />
                                     </Pressable>
-                                    <Text style={styles.tapHint}>Tap to{"\n"}record</Text>
+                                    <Text style={styles.tapHint}>Tap to record</Text>
                                 </View>
                             )}
                         </View>
@@ -597,7 +582,7 @@ const styles = StyleSheet.create({
     },
     challengeBanner: {
         position: 'absolute',
-        top: 100,  // Moved down to be visible below header
+        top: 105,
         left: 16,
         right: 16,
         zIndex: 9,
@@ -678,23 +663,23 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     bubble: {
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        maxWidth: '70%',
-        borderRadius: 18,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        maxWidth: '75%',
+        borderRadius: 20,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
+        shadowOpacity: 0.06,
+        shadowRadius: 3,
         elevation: 1,
     },
     bubbleMe: {
         backgroundColor: Colors.primary,
-        borderBottomRightRadius: 4,
+        borderBottomRightRadius: 6,
     },
     bubbleThem: {
         backgroundColor: '#fff',
-        borderBottomLeftRadius: 4,
+        borderBottomLeftRadius: 6,
     },
     bubbleSending: {
         opacity: 0.7,
@@ -739,9 +724,7 @@ const styles = StyleSheet.create({
         fontStyle: 'italic',
     },
     inputContainer: {
-        backgroundColor: '#fff',
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(0,0,0,0.1)',
+        backgroundColor: SOUP_COLORS.cream,
         paddingHorizontal: 12,
         paddingTop: 8,
     },
@@ -752,7 +735,7 @@ const styles = StyleSheet.create({
     },
     textInput: {
         flex: 1,
-        backgroundColor: SOUP_COLORS.cream,
+        backgroundColor: '#fff',
         borderRadius: 20,
         paddingHorizontal: 16,
         paddingVertical: 10,
@@ -760,27 +743,17 @@ const styles = StyleSheet.create({
         maxHeight: 100,
         color: '#000',
     },
-    voiceButtonGroup: {
+    micContainer: {
         alignItems: 'center',
-        justifyContent: 'center',
+        gap: 2,
     },
     micButton: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
-        backgroundColor: SOUP_COLORS.cream,
-        justifyContent: 'center',
-        alignItems: 'center',
+        padding: 8,
     },
     tapHint: {
-        position: 'absolute',
-        bottom: -20,
-        fontSize: 10,
+        fontSize: 9,
         color: Colors.textLight,
-        fontWeight: '600',
-        textAlign: 'center',
-        lineHeight: 12,
-        letterSpacing: 0.2,
+        fontWeight: '500',
     },
     sendButton: {
         width: 40,
@@ -807,11 +780,11 @@ const styles = StyleSheet.create({
     },
     waveformWrapper: {
         width: '100%',
-        height: 36,
-        backgroundColor: 'rgba(0, 173, 239, 0.08)',
-        borderRadius: 18,
+        height: 42,
+        backgroundColor: 'rgba(0, 173, 239, 0.04)',
+        borderRadius: 21,
         overflow: 'hidden',
-        paddingHorizontal: 8,
+        paddingHorizontal: 12,
     },
     recordingTimer: {
         fontSize: 16,

@@ -232,15 +232,15 @@ export function AudioMessage({ audioUrl, duration, senderName, isMe }) {
             ]}>
                 <Pressable
                     onPress={loadAndPlaySound}
-                    style={[styles.playButton, isMe && styles.playButtonMe]}
+                    style={styles.playButton}
                     disabled={loading}
                 >
                     {loading ? (
-                        <ActivityIndicator size="small" color={isMe ? Colors.primary : '#fff'} />
+                        <ActivityIndicator size="small" color={isMe ? '#fff' : Colors.primary} />
                     ) : isPlaying ? (
-                        <Pause size={20} color={isMe ? Colors.primary : '#fff'} fill={isMe ? Colors.primary : '#fff'} />
+                        <Pause size={22} color={isMe ? '#fff' : Colors.primary} fill={isMe ? '#fff' : Colors.primary} />
                     ) : (
-                        <Play size={20} color={isMe ? Colors.primary : '#fff'} fill={isMe ? Colors.primary : '#fff'} />
+                        <Play size={22} color={isMe ? '#fff' : Colors.primary} fill={isMe ? '#fff' : Colors.primary} />
                     )}
                 </Pressable>
 
@@ -261,16 +261,10 @@ export function AudioMessage({ audioUrl, duration, senderName, isMe }) {
                         {/* We use a Reanimated Text or just update this less frequently? 
                             For 60fps timer we need Reanimated Text, but standard React state is fine for seconds */}
                         <Text style={[styles.duration, isMe && styles.durationMe]}>
-                            {formatDuration(fileDuration)}
+                            {formatDuration(currentPosition || 0)}
                         </Text>
                     </View>
                 </GestureDetector>
-
-                <Pressable onPress={togglePlaybackSpeed} style={[styles.speedButton, isMe && styles.speedButtonMe]}>
-                    <Text style={[styles.speedText, isMe && styles.speedTextMe]}>
-                        {playbackSpeed}x
-                    </Text>
-                </Pressable>
             </Animated.View>
         </GestureHandlerRootView>
     );
@@ -285,13 +279,21 @@ const WaveformBar = ({ index, totalBars, height, progress, isMe }) => {
 
         return {
             backgroundColor: isMe
-                ? (isPlayed ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)')
-                : (isPlayed ? Colors.primary : 'rgba(0, 173, 239, 0.25)'),
-            height: 24 * height, // Static height based on random seed
+                ? (isPlayed ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.25)')
+                : (isPlayed ? Colors.primary : 'rgba(0, 173, 239, 0.18)'),
+            height: 24 * height,
             transform: [{
                 scaleY: isPlayed
-                    ? withSpring(1.15, { damping: 4, stiffness: 90 })  // Gentle spring
-                    : withSpring(1, { damping: 4, stiffness: 90 })
+                    ? withSpring(1.08, {
+                        damping: 12,       // Honey smooth
+                        stiffness: 110,    // Balanced
+                        mass: 0.6          // Weighted
+                    })
+                    : withSpring(1, {
+                        damping: 12,
+                        stiffness: 110,
+                        mass: 0.6
+                    })
             }]
         };
     });
@@ -303,44 +305,37 @@ const styles = StyleSheet.create({
     container: {
         flexDirection: 'row',
         alignItems: 'center',
+        paddingVertical: 2,
+        paddingHorizontal: 4,
         minWidth: 240,
-        backgroundColor: '#fff',
-        borderRadius: 20,
-        borderBottomLeftRadius: 4,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 1,
+        maxWidth: 280,
+        gap: 8,
     },
     containerMe: {
-        backgroundColor: Colors.primary,
-        borderBottomLeftRadius: 20,
-        borderBottomRightRadius: 4,
+        // Parent bubble handles background
     },
     playButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: Colors.primary,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
         justifyContent: 'center',
         alignItems: 'center',
+        flexShrink: 0,
     },
     playButtonMe: {
-        backgroundColor: '#fff',
+        // No background needed
     },
     waveformContainer: {
         flex: 1,
-        height: 44,
-        justifyContent: 'center',
-    },
-    waveform: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    }, waveform: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         height: 24,
         width: '100%',
-        marginBottom: 4,
     },
     waveBar: {
         width: 3,
@@ -355,20 +350,13 @@ const styles = StyleSheet.create({
         color: 'rgba(255,255,255,0.9)',
     },
     speedButton: {
-        paddingHorizontal: 8,
-        paddingVertical: 6,
-        borderRadius: 12,
-        backgroundColor: 'rgba(0,0,0,0.05)',
-    },
-    speedButtonMe: {
-        backgroundColor: 'rgba(255,255,255,0.2)',
+        paddingHorizontal: 6,
+        paddingVertical: 3,
+        marginLeft: 4,
     },
     speedText: {
-        fontSize: 12,
-        fontWeight: '600',
+        fontSize: 11,
         color: Colors.primary,
-    },
-    speedTextMe: {
-        color: '#fff',
+        fontWeight: '600',
     },
 });

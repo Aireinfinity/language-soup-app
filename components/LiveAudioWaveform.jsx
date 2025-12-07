@@ -7,8 +7,8 @@ import Animated, {
     withSpring,
 } from 'react-native-reanimated';
 
-const BAR_COUNT = 90; // Perfect length - slightly longer
-const BAR_INTERVAL = 50; // Faster for more sensitivity
+const BAR_COUNT = 90;
+const BAR_INTERVAL = 55; // ~5 seconds to fill (90 bars * 55ms ≈ 5s)
 
 export function LiveAudioWaveform({ metering, recordingDuration }) {
     const [barHeights, setBarHeights] = useState([]);
@@ -18,8 +18,9 @@ export function LiveAudioWaveform({ metering, recordingDuration }) {
         const currentTime = recordingDuration * 1000;
 
         if (currentTime - lastBarTime.current >= BAR_INTERVAL) {
-            const normalized = Math.max(0, Math.min(1, (metering + 60) / 60));
-            const height = Math.max(0, normalized);
+            // More sensitive to audio - lower threshold, wider range
+            const normalized = Math.max(0, Math.min(1, (metering + 50) / 50));
+            const height = Math.max(0.05, normalized); // Minimum height for silences
 
             setBarHeights(prev => {
                 // Add new bar to BEGINNING so it appears on right with flex-end
@@ -55,23 +56,20 @@ const SilkyBar = ({ height }) => {
     const animatedHeight = useSharedValue(3);
 
     const barPersonality = useRef({
-        damping: 4 + Math.random() * 2,      // 4-6 (very low = ultra fluid, flowing like water)
-        stiffness: 90 + Math.random() * 30,  // 90-120 (gentle, smooth waves)
-        mass: 0.3 + Math.random() * 0.2,     // 0.3-0.5 (very light = responsive, flowing)
-        delay: Math.random() * 25,           // Gentle cascade for wave effect
+        damping: 12 + Math.random() * 3,     // 12-15 (higher = honey smooth, no bounce)
+        stiffness: 100 + Math.random() * 20, // 100-120 (moderate = smooth flow)
+        mass: 0.5 + Math.random() * 0.2,     // 0.5-0.7 (balanced = honey viscosity)
+        delay: 0,                             // No delay = smooth, not rippling
     }).current;
 
     useEffect(() => {
-        const targetHeight = Math.max(3, height * 20); // Smaller max height (20px)
+        const targetHeight = Math.max(3, height * 22); // Slightly taller bars
 
-        // Stagger animation slightly for wave effect
-        setTimeout(() => {
-            animatedHeight.value = withSpring(targetHeight, {
-                damping: barPersonality.damping,
-                stiffness: barPersonality.stiffness,
-                mass: barPersonality.mass,
-            });
-        }, barPersonality.delay);
+        animatedHeight.value = withSpring(targetHeight, {
+            damping: barPersonality.damping,
+            stiffness: barPersonality.stiffness,
+            mass: barPersonality.mass,
+        });
     }, [height]);
 
     const animatedStyle = useAnimatedStyle(() => ({
