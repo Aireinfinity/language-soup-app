@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Users, MessageSquare, Calendar, TrendingUp, Bell, Plus, UserPlus } from 'lucide-react-native';
+import { ArrowLeft, Users, MessageSquare, Calendar, TrendingUp, Bell, Plus, UserPlus, Award } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -121,40 +121,6 @@ export default function AdminDashboard() {
             </View>
 
             <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-                {/* Stats Overview */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>📊 Overview</Text>
-                    <StatCard
-                        icon={Users}
-                        label="Total Users"
-                        value={stats.totalUsers}
-                        color={SOUP_COLORS.blue}
-                    />
-                    <StatCard
-                        icon={TrendingUp}
-                        label="Active (7 days)"
-                        value={stats.activeUsers7d}
-                        color={SOUP_COLORS.green}
-                    />
-                    <StatCard
-                        icon={MessageSquare}
-                        label="Voice Memos (This Week)"
-                        value={stats.voiceMemosThisWeek}
-                        color={SOUP_COLORS.pink}
-                    />
-                </View>
-
-                {/* Group Stats */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>👥 Groups</Text>
-                    {stats.groupStats.map((group) => (
-                        <View key={group.id} style={styles.groupRow}>
-                            <Text style={styles.groupName}>{group.name}</Text>
-                            <Text style={styles.groupCount}>{group.member_count} members</Text>
-                        </View>
-                    ))}
-                </View>
-
                 {/* Quick Actions */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>⚡ Quick Actions</Text>
@@ -195,7 +161,47 @@ export default function AdminDashboard() {
                             onPress={() => router.push('/admin/announcements')}
                             color={SOUP_COLORS.yellow}
                         />
+                        <MenuItem
+                            icon={Award}
+                            label="Community Managers"
+                            onPress={() => router.push('/admin/manage-community-managers')}
+                            color={SOUP_COLORS.green}
+                        />
                     </View>
+                </View>
+
+                {/* Stats Overview */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>📊 Overview</Text>
+                    <StatCard
+                        icon={Users}
+                        label="Total Users"
+                        value={stats.totalUsers}
+                        color={SOUP_COLORS.blue}
+                    />
+                    <StatCard
+                        icon={TrendingUp}
+                        label="Active (7 days)"
+                        value={stats.activeUsers7d}
+                        color={SOUP_COLORS.green}
+                    />
+                    <StatCard
+                        icon={MessageSquare}
+                        label="Voice Memos (This Week)"
+                        value={stats.voiceMemosThisWeek}
+                        color={SOUP_COLORS.pink}
+                    />
+                </View>
+
+                {/* Group Stats */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>👥 Groups</Text>
+                    {stats.groupStats.map((group) => (
+                        <View key={group.id} style={styles.groupRow}>
+                            <Text style={styles.groupName}>{group.name}</Text>
+                            <Text style={styles.groupCount}>{group.member_count} members</Text>
+                        </View>
+                    ))}
                 </View>
             </ScrollView>
         </SafeAreaView>

@@ -44,10 +44,10 @@ export default function AdminSupportThreads() {
                 .from('app_support_messages')
                 .select(`
                     user_id,
-                    message,
+                    content,
                     created_at,
                     from_admin,
-                    app_users!user_id (
+                    app_users!app_support_messages_user_id_fkey (
                         id,
                         display_name,
                         avatar_url
@@ -66,7 +66,7 @@ export default function AdminSupportThreads() {
                         userId,
                         userName: msg.app_users?.display_name || 'Unknown User',
                         avatarUrl: msg.app_users?.avatar_url,
-                        lastMessage: msg.message,
+                        lastMessage: msg.content,
                         isFromAdmin: msg.from_admin,
                         timestamp: msg.created_at,
                         unreadCount: 0 // Could implement unread tracking

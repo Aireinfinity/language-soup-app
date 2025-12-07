@@ -51,17 +51,16 @@ export default function TabLayout() {
                 }}
             />
             <Tabs.Screen
-                name="support"
-                options={{
-                    title: 'Support',
-                    tabBarIcon: ({ color }) => <LifeBuoy size={24} color={color} />,
-                }}
-            />
-            <Tabs.Screen
                 name="profile"
                 options={{
                     title: 'Profile',
                     tabBarIcon: ({ color }) => <User size={24} color={color} />,
+                }}
+            />
+            <Tabs.Screen
+                name="support"
+                options={{
+                    href: null, // Hide from tab bar
                 }}
             />
         </Tabs>

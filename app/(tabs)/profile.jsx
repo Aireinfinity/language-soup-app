@@ -424,18 +424,13 @@ export default function ProfileScreen() {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <Text style={styles.headerTitle}></Text>
+                {/* Sign Out - Top Left */}
+                <Pressable onPress={handleSignOut} style={styles.signOutBtn}>
+                    <LogOut size={20} color={SOUP_COLORS.pink} />
+                </Pressable>
+
+                {/* Admin Buttons - Top Right */}
                 <View style={styles.headerRight}>
-                    {/* Admin/Community Manager Button */}
-                    {user?.role === 'admin' && (
-                        <Pressable
-                            onPress={() => router.push('/admin/dashboard')}
-                            style={styles.adminBtn}
-                        >
-                            <Crown size={16} color={SOUP_COLORS.yellow} />
-                            <Text style={styles.adminBtnText}>Founder Daddy</Text>
-                        </Pressable>
-                    )}
                     {user?.role === 'community_manager' && (
                         <Pressable
                             onPress={() => router.push('/admin/community-dashboard')}
@@ -445,9 +440,6 @@ export default function ProfileScreen() {
                             <Text style={styles.managerBtnText}>Community Manager</Text>
                         </Pressable>
                     )}
-                    <Pressable onPress={handleSignOut} style={styles.signOutBtn}>
-                        <LogOut size={20} color={SOUP_COLORS.pink} />
-                    </Pressable>
                 </View>
             </View>
 

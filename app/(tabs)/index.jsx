@@ -6,7 +6,7 @@ import { ThemedText } from '../../components/ThemedText';
 import { Colors } from '../../constants/Colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { MessageCircle, Users, Sparkles } from 'lucide-react-native';
+import { MessageCircle, Users, Sparkles, Plus, Globe } from 'lucide-react-native';
 import LanguageRequestModal from '../../components/LanguageRequestModal';
 import { FloatingSupportButton } from '../../components/FloatingSupportButton';
 
@@ -23,14 +23,31 @@ export default function HomeScreen() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [showRequestModal, setShowRequestModal] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
+    const [isCommunityManager, setIsCommunityManager] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
             if (user) {
                 loadGroups();
+                checkUserRole();
             }
         }, [user])
     );
+
+    const checkUserRole = async () => {
+        try {
+            const { data } = await supabase
+                .from('app_users')
+                .select('role')
+                .eq('id', user.id)
+                .single();
+            setIsAdmin(data?.role === 'admin');
+            setIsCommunityManager(data?.role === 'community_manager');
+        } catch (error) {
+            console.error('Error checking user role:', error);
+        }
+    };
 
     const loadGroups = async () => {
         try {
@@ -203,7 +220,7 @@ export default function HomeScreen() {
     }
 
     return (
-        <SafeAreaView style={styles.container} edges={['bottom']}>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             <View style={styles.header}>
                 <View style={styles.headerContent}>
                     <Image
@@ -216,15 +233,74 @@ export default function HomeScreen() {
                         <Text style={styles.subtitle}>language practice, served daily</Text>
                     </View>
                 </View>
+                <Pressable
+                    style={styles.headerButton}
+                    onPress={() => router.push('/browse-groups')}
+                >
+                    <Plus size={24} color={SOUP_COLORS.blue} />
+                </Pressable>
             </View>
 
             <FlatList
-                data={groups}
+                data={groups.filter(g => !g.name.toLowerCase().includes('support'))}
                 renderItem={renderGroup}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.list}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+                ListHeaderComponent={
+                    (isAdmin || isCommunityManager) ? (
+                        <View style={styles.adminSection}>
+                            {/* Admin Dashboard Card - Only for admin */}
+                            {isAdmin && (
+                                <Pressable
+                                    style={styles.adminCard}
+                                    onPress={() => router.push('/admin/dashboard')}
+                                >
+                                    <View style={[styles.adminCardIcon, { backgroundColor: SOUP_COLORS.blue }]}>
+                                        <Sparkles size={24} color="#fff" />
+                                    </View>
+                                    <View style={styles.adminCardInfo}>
+                                        <Text style={[styles.adminCardTitle, { color: SOUP_COLORS.blue }]}>Admin Dashboard</Text>
+                                        <Text style={styles.adminCardSubtitle}>Manage groups, users & content</Text>
+                                    </View>
+                                </Pressable>
+                            )}
+
+                            {/* Support Center Card - Only for admin */}
+                            {isAdmin && (
+                                <Pressable
+                                    style={styles.adminCard}
+                                    onPress={() => router.push('/admin/support')}
+                                >
+                                    <View style={[styles.adminCardIcon, { backgroundColor: SOUP_COLORS.pink }]}>
+                                        <MessageCircle size={24} color="#fff" />
+                                    </View>
+                                    <View style={styles.adminCardInfo}>
+                                        <Text style={[styles.adminCardTitle, { color: SOUP_COLORS.pink }]}>Support Center</Text>
+                                        <Text style={styles.adminCardSubtitle}>View user support threads</Text>
+                                    </View>
+                                </Pressable>
+                            )}
+
+                            {/* Community Manager Dashboard - Only for community managers */}
+                            {isCommunityManager && (
+                                <Pressable
+                                    style={styles.adminCard}
+                                    onPress={() => router.push('/admin/community-dashboard')}
+                                >
+                                    <View style={[styles.adminCardIcon, { backgroundColor: SOUP_COLORS.green }]}>
+                                        <Sparkles size={24} color="#fff" />
+                                    </View>
+                                    <View style={styles.adminCardInfo}>
+                                        <Text style={[styles.adminCardTitle, { color: SOUP_COLORS.green }]}>Community Manager</Text>
+                                        <Text style={styles.adminCardSubtitle}>Send challenges to your groups</Text>
+                                    </View>
+                                </Pressable>
+                            )}
+                        </View>
+                    ) : null
                 }
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
@@ -249,8 +325,13 @@ export default function HomeScreen() {
                                 setShowRequestModal(true);
                             }}
                         >
-                            <Sparkles size={18} color={SOUP_COLORS.blue} style={styles.requestIcon} />
-                            <ThemedText style={styles.requestButtonText}>request a group</ThemedText>
+                            <View style={[styles.adminCardIcon, { backgroundColor: SOUP_COLORS.green }]}>
+                                <Sparkles size={22} color="#fff" />
+                            </View>
+                            <View style={styles.adminCardInfo}>
+                                <Text style={[styles.adminCardTitle, { color: SOUP_COLORS.green }]}>Request a Group</Text>
+                                <Text style={styles.adminCardSubtitle}>Can't find your language? Ask us!</Text>
+                            </View>
                         </Pressable>
                     ) : null
                 }
@@ -276,7 +357,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: Colors.background, // cream
-        paddingTop: Platform.OS === 'ios' ? 44 : 0,
     },
     center: {
         flex: 1,
@@ -284,40 +364,82 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     header: {
-        paddingHorizontal: 20,
-        paddingVertical: 20,
-        backgroundColor: '#fff',
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0,0,0,0.05)',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingTop: 4,
+        paddingBottom: 12,
     },
     headerContent: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 16,
+        gap: 12,
+        flex: 1,
     },
     headerLogo: {
-        width: 56,
-        height: 56,
+        width: 52,
+        height: 52,
     },
     headerTextContainer: {
         flex: 1,
     },
     title: {
-        fontSize: 32,
+        fontSize: 28,
         fontWeight: '800',
         color: Colors.primary,
         letterSpacing: -0.5,
-        marginBottom: 2,
+        lineHeight: 34,
     },
     subtitle: {
-        fontSize: 14,
+        fontSize: 13,
         color: Colors.textLight,
         fontWeight: '500',
+        marginTop: 2,
+    },
+    browseButton: {
+        padding: 8,
+    },
+    headerButtons: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    headerButton: {
+        padding: 8,
+    },
+    // Admin Section
+    adminSection: {
+        paddingHorizontal: 16,
+        paddingTop: 8,
+        paddingBottom: 4,
+        gap: 10,
+    },
+    adminCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderRadius: 12,
+        gap: 14,
+    },
+    adminCardIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    adminCardInfo: {
+        flex: 1,
+    },
+    adminCardTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        marginBottom: 2,
+    },
+    adminCardSubtitle: {
+        fontSize: 13,
+        color: '#8E8E93',
     },
     list: {
         paddingVertical: 8,
@@ -325,9 +447,8 @@ const styles = StyleSheet.create({
     groupItem: {
         flexDirection: 'row',
         padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-        backgroundColor: '#fff',
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: 'rgba(0,0,0,0.08)',
     },
     groupAvatar: {
         width: 56,
@@ -435,37 +556,20 @@ const styles = StyleSheet.create({
     },
     requestButton: {
         flexDirection: 'row',
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 16,
+        alignItems: 'center',
+        borderRadius: 12,
+        padding: 12,
         marginHorizontal: 16,
         marginTop: 12,
         marginBottom: 24,
-        borderWidth: 2,
-        borderStyle: 'dashed',
-        borderColor: SOUP_COLORS.blue,
-        alignItems: 'center',
+        gap: 14,
     },
-    requestIconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: '#E3F2FD',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
+    requestIcon: {
+        marginRight: 4,
     },
-    requestTextContainer: {
-        flex: 1,
-    },
-    requestTitle: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: Colors.text,
-        marginBottom: 2,
-    },
-    requestSubtext: {
-        fontSize: 14,
-        color: Colors.textLight,
+    requestButtonText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: SOUP_COLORS.green,
     },
 });

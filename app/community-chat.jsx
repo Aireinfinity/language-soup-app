@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, KeyboardAvoidingView, Platform, Pressable, ActivityIndicator, StatusBar, Image } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Text, TextInput, KeyboardAvoidingView, Platform, StatusBar, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
-import { ChevronLeft, Send, Mic, Trash2 } from 'lucide-react-native';
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
+import { ArrowLeft, Send, Mic, X, Trash2, ChevronLeft, Users, Megaphone } from 'lucide-react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AudioMessage } from '../components/AudioMessage';
 import { LiveAudioWaveform } from '../components/LiveAudioWaveform';
-import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { Colors } from '../constants/Colors';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
+import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 
@@ -19,7 +19,7 @@ const SOUP_COLORS = {
     cream: '#FDF5E6',
 };
 
-// Date separator helper
+// Helper to add date separators
 function addDateSeparators(messages) {
     if (!messages || messages.length === 0) return [];
 
@@ -54,16 +54,68 @@ function addDateSeparators(messages) {
     return result;
 }
 
-export default function SupportChatScreen() {
+// Message Bubble Component  
+function MessageBubble({ message, isMe }) {
+    const formatTime = (dateString) => {
+        if (!dateString) return '';
+        const date = new Date(dateString);
+        return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    };
+
+    return (
+        <View style={[styles.messageRow, isMe ? styles.rowMe : styles.rowThem]}>
+            {!isMe && (
+                <View style={styles.avatarContainer}>
+                    {message.user?.avatar_url ? (
+                        <Image source={{ uri: message.user.avatar_url }} style={styles.avatar} />
+                    ) : (
+                        <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                            <Text style={styles.avatarText}>
+                                {message.user?.display_name?.charAt(0).toUpperCase() || '?'}
+                            </Text>
+                        </View>
+                    )}
+                </View>
+            )}
+
+            <View style={[
+                styles.bubble,
+                message.message_type === 'voice' && styles.bubbleVoice,
+                isMe ? styles.bubbleMe : styles.bubbleThem,
+            ]}>
+                {!isMe && message.user && (
+                    <Text style={styles.senderName}>{message.user.display_name}</Text>
+                )}
+
+                {message.message_type === 'voice' ? (
+                    <AudioMessage
+                        audioUrl={message.media_url}
+                        duration={message.duration_seconds}
+                        senderName={message.user?.display_name}
+                        isMe={isMe}
+                    />
+                ) : (
+                    <Text style={[styles.messageText, isMe && styles.messageTextMe]}>
+                        {message.content}
+                    </Text>
+                )}
+            </View>
+        </View>
+    );
+}
+
+export default function CommunityChatScreen() {
     const { user } = useAuth();
     const router = useRouter();
-    const insets = useSafeAreaInsets();
     const flatListRef = useRef(null);
+    const insets = useSafeAreaInsets();
 
     const [messages, setMessages] = useState([]);
-    const [inputText, setInputText] = useState('');
+    const [announcements, setAnnouncements] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [inputText, setInputText] = useState('');
     const [sending, setSending] = useState(false);
+    const [memberCount, setMemberCount] = useState(0);
 
     const {
         isRecording,
@@ -74,44 +126,74 @@ export default function SupportChatScreen() {
     } = useVoiceRecorder();
 
     useEffect(() => {
-        loadMessages();
+        loadData();
+        const unsubscribe = subscribeToMessages();
+        return unsubscribe;
+    }, []);
 
-        const channel = supabase
-            .channel('support-messages')
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'app_support_messages',
-                filter: `user_id=eq.${user.id}`
-            }, (payload) => {
-                // Replace temp optimistic message with real one, or add if new
-                setMessages(prev => {
-                    const filtered = prev.filter(m => !m.id.startsWith('temp-'));
-                    return [...filtered, payload.new];
-                });
-                scrollToBottom();
-            })
-            .subscribe();
-
-        return () => supabase.removeChannel(channel);
-    }, [user.id]);
-
-    const loadMessages = async () => {
+    const loadData = async () => {
         try {
-            const { data, error } = await supabase
-                .from('app_support_messages')
-                .select('*')
-                .eq('user_id', user.id)
-                .order('created_at', { ascending: true });
+            // Load messages
+            const { data: msgData } = await supabase
+                .from('app_community_messages')
+                .select(`
+                    *,
+                    app_users!app_community_messages_user_id_fkey(display_name, avatar_url)
+                `)
+                .order('created_at', { ascending: true })
+                .limit(100);
 
-            if (error) throw error;
-            setMessages(data || []);
-            scrollToBottom();
+            const formatted = msgData?.map(msg => ({
+                ...msg,
+                user: msg.app_users
+            })) || [];
+
+            setMessages(formatted);
+
+            // Load announcements
+            const { data: announcementData } = await supabase
+                .from('app_community_announcements')
+                .select('*')
+                .eq('active', true)
+                .order('created_at', { ascending: false })
+                .limit(3);
+            setAnnouncements(announcementData || []);
+
+            // Get member count
+            const { count } = await supabase
+                .from('app_users')
+                .select('*', { count: 'exact', head: true });
+            setMemberCount(count || 0);
+
         } catch (error) {
-            console.error('Error loading support messages:', error);
+            console.error('Error loading data:', error);
         } finally {
             setLoading(false);
         }
+    };
+
+    const subscribeToMessages = () => {
+        const channel = supabase
+            .channel('community-chat')
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'app_community_messages' },
+                async (payload) => {
+                    if (payload.new.user_id === user?.id) return;
+
+                    const { data: userData } = await supabase
+                        .from('app_users')
+                        .select('display_name, avatar_url')
+                        .eq('id', payload.new.user_id)
+                        .single();
+
+                    const newMessage = { ...payload.new, user: userData };
+                    setMessages(prev => [...prev, newMessage]);
+                }
+            )
+            .subscribe();
+
+        return () => supabase.removeChannel(channel);
     };
 
     const scrollToBottom = () => {
@@ -121,35 +203,34 @@ export default function SupportChatScreen() {
     };
 
     const sendTextMessage = async () => {
-        if (!inputText.trim()) return;
+        if (!inputText.trim() || sending) return;
 
-        const messageText = inputText.trim();
-        setInputText('');
         setSending(true);
+        const text = inputText.trim();
+        setInputText('');
 
         // Optimistic update
         const optimisticMsg = {
             id: `temp-${Date.now()}`,
             user_id: user.id,
-            content: messageText,
-            from_admin: false,
+            content: text,
             message_type: 'text',
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
+            user: { display_name: user.display_name || 'You', avatar_url: null }
         };
         setMessages(prev => [...prev, optimisticMsg]);
         scrollToBottom();
 
         try {
-            await supabase.from('app_support_messages').insert({
+            await supabase.from('app_community_messages').insert({
                 user_id: user.id,
-                content: messageText,
-                from_admin: false,
+                content: text,
                 message_type: 'text'
             });
         } catch (error) {
             console.error('Error sending message:', error);
+            setInputText(text);
             setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
-            setInputText(messageText);
         } finally {
             setSending(false);
         }
@@ -169,7 +250,7 @@ export default function SupportChatScreen() {
     const uploadVoiceMessage = async (uri, duration) => {
         try {
             const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-            const filePath = `support/${user.id}/voice-${Date.now()}.m4a`;
+            const filePath = `community/${user.id}/voice-${Date.now()}.m4a`;
 
             const { error: uploadError } = await supabase.storage
                 .from('voice-messages')
@@ -181,10 +262,9 @@ export default function SupportChatScreen() {
                 .from('voice-messages')
                 .getPublicUrl(filePath);
 
-            await supabase.from('app_support_messages').insert({
+            await supabase.from('app_community_messages').insert({
                 user_id: user.id,
                 content: '',
-                from_admin: false,
                 message_type: 'voice',
                 media_url: publicUrl,
                 duration_seconds: Math.round(duration / 1000)
@@ -205,49 +285,36 @@ export default function SupportChatScreen() {
             );
         }
 
-        const isFromAdmin = item.from_admin;
-        const formatTime = (dateString) => {
-            const date = new Date(dateString);
-            return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-        };
+        // System message (announcement)
+        if (item.type === 'announcement') {
+            return (
+                <View style={styles.systemMessage}>
+                    <Megaphone size={14} color={SOUP_COLORS.pink} />
+                    <Text style={styles.systemText}>{item.content}</Text>
+                </View>
+            );
+        }
 
         return (
-            <View style={[styles.messageRow, isFromAdmin ? styles.rowThem : styles.rowMe]}>
-                {isFromAdmin && (
-                    <View style={styles.avatarContainer}>
-                        <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                            <Text style={styles.avatarText}>N</Text>
-                        </View>
-                    </View>
-                )}
-
-                <View style={[
-                    styles.bubble,
-                    item.message_type === 'voice' && styles.bubbleVoice,
-                    isFromAdmin ? styles.bubbleThem : styles.bubbleMe,
-                ]}>
-                    {isFromAdmin && (
-                        <Text style={styles.senderName}>Noah</Text>
-                    )}
-
-                    {item.message_type === 'voice' ? (
-                        <AudioMessage
-                            audioUrl={item.media_url}
-                            duration={item.duration_seconds}
-                            senderName={isFromAdmin ? 'Noah' : 'You'}
-                            isMe={!isFromAdmin}
-                        />
-                    ) : (
-                        <Text style={[styles.messageText, !isFromAdmin && styles.messageTextMe]}>
-                            {item.content}
-                        </Text>
-                    )}
-                </View>
-            </View>
+            <MessageBubble
+                message={item}
+                isMe={item.user_id === user?.id}
+            />
         );
     };
 
-    const messagesWithDates = addDateSeparators(messages);
+    // Combine announcements as system messages with regular messages
+    const getMessagesWithAnnouncements = () => {
+        const announcementMessages = announcements.map(a => ({
+            ...a,
+            type: 'announcement'
+        }));
+
+        const withDates = addDateSeparators(messages);
+
+        // Put announcements at the start
+        return [...announcementMessages, ...withDates];
+    };
 
     if (loading) {
         return (
@@ -269,36 +336,49 @@ export default function SupportChatScreen() {
                     </Pressable>
 
                     <View style={styles.headerInfo}>
-                        <Text style={styles.headerTitle}>Chat with Noah</Text>
-                        <Text style={styles.headerSubtitle}>Support • 24/7</Text>
+                        <Text style={styles.headerTitle}>🌍 Community</Text>
+                        <Text style={styles.headerSubtitle}>{memberCount} members</Text>
                     </View>
 
                     <View style={{ width: 30 }} />
                 </View>
             </BlurView>
 
+            {/* Announcement Banner (like challenge banner in group chats) */}
+            {announcements.length > 0 && (
+                <View style={[styles.announcementBanner, { top: insets.top + 65 }]}>
+                    <Megaphone size={16} color={SOUP_COLORS.pink} />
+                    <Text style={styles.announcementBannerText} numberOfLines={2}>
+                        {announcements[0].content}
+                    </Text>
+                </View>
+            )}
+
             <KeyboardAvoidingView
                 style={styles.keyboardView}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 keyboardVerticalOffset={0}
             >
+                {/* Messages */}
                 <FlatList
                     ref={flatListRef}
-                    data={messagesWithDates}
+                    data={addDateSeparators(messages)}
                     renderItem={renderItem}
-                    keyExtractor={item => item.id}
+                    keyExtractor={(item) => item.id}
                     contentContainerStyle={[
                         styles.messagesList,
-                        { paddingTop: insets.top + 70, paddingBottom: 20 }
+                        { paddingTop: insets.top + (announcements.length > 0 ? 130 : 70), paddingBottom: 20 }
                     ]}
-                    onContentSizeChange={() => scrollToBottom()}
-                    ListHeaderComponent={
-                        <View style={styles.welcomeMessage}>
-                            <Text style={styles.welcomeEmoji}>👋</Text>
-                            <Text style={styles.welcomeTitle}>Need help?</Text>
-                            <Text style={styles.welcomeText}>
-                                I'm here to help with anything about Language Soup!
-                            </Text>
+                    onContentSizeChange={() => {
+                        if (flatListRef.current) {
+                            flatListRef.current.scrollToEnd({ animated: true });
+                        }
+                    }}
+                    ListEmptyComponent={
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyEmoji}>👋</Text>
+                            <Text style={styles.emptyTitle}>Welcome to the Community!</Text>
+                            <Text style={styles.emptyText}>Say hi to fellow language learners</Text>
                         </View>
                     }
                 />
@@ -396,29 +476,53 @@ const styles = StyleSheet.create({
         marginTop: 1,
     },
 
+    // Announcement Banner
+    announcementBanner: {
+        position: 'absolute',
+        left: 16,
+        right: 16,
+        zIndex: 99,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        backgroundColor: `${SOUP_COLORS.pink}15`,
+        borderRadius: 16,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderWidth: 1,
+        borderColor: `${SOUP_COLORS.pink}30`,
+    },
+    announcementBannerText: {
+        flex: 1,
+        fontSize: 14,
+        fontWeight: '600',
+        color: SOUP_COLORS.pink,
+        lineHeight: 20,
+    },
+
     // Messages
     messagesList: {
         paddingHorizontal: 16,
     },
-    welcomeMessage: {
+    emptyState: {
+        flex: 1,
+        justifyContent: 'center',
         alignItems: 'center',
-        paddingVertical: 24,
-        marginBottom: 16,
+        paddingVertical: 48,
     },
-    welcomeEmoji: {
+    emptyEmoji: {
         fontSize: 48,
-        marginBottom: 8,
+        marginBottom: 12,
     },
-    welcomeTitle: {
-        fontSize: 18,
+    emptyTitle: {
+        fontSize: 20,
         fontWeight: '700',
         color: '#000',
-        marginBottom: 4,
+        marginBottom: 8,
     },
-    welcomeText: {
+    emptyText: {
         fontSize: 14,
         color: '#8E8E93',
-        textAlign: 'center',
     },
 
     // Date Separator
@@ -437,6 +541,25 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#8E8E93',
         fontWeight: '600',
+    },
+
+    // System Message (Announcement)
+    systemMessage: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: `${SOUP_COLORS.pink}15`,
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 12,
+        marginBottom: 12,
+    },
+    systemText: {
+        fontSize: 13,
+        color: SOUP_COLORS.pink,
+        fontWeight: '600',
+        flex: 1,
     },
 
     // Message Rows
@@ -460,7 +583,7 @@ const styles = StyleSheet.create({
         borderRadius: 16,
     },
     avatarPlaceholder: {
-        backgroundColor: SOUP_COLORS.pink,
+        backgroundColor: SOUP_COLORS.blue,
         justifyContent: 'center',
         alignItems: 'center',
     },

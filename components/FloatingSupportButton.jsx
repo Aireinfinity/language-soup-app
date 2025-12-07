@@ -1,12 +1,10 @@
 import React from 'react';
-import { Pressable, StyleSheet, Animated } from 'react-native';
-import { LifeBuoy } from 'lucide-react-native';
+import { View, Pressable, StyleSheet, Animated, Text } from 'react-native';
+import { MessageCircle } from 'lucide-react-native';
 
 const SOUP_COLORS = {
     blue: '#00adef',
-    pink: '#ff6b9d',
-    yellow: '#ffd93d',
-    green: '#6bcf7f',
+    pink: '#ec008b',
 };
 
 export function FloatingSupportButton({ onPress }) {
@@ -34,8 +32,11 @@ export function FloatingSupportButton({ onPress }) {
             onPressOut={handlePressOut}
             style={styles.container}
         >
-            <Animated.View style={[styles.button, { transform: [{ scale: scaleAnim }] }]}>
-                <LifeBuoy size={24} color="#fff" />
+            <Animated.View style={[styles.buttonContainer, { transform: [{ scale: scaleAnim }] }]}>
+                <View style={styles.button}>
+                    <MessageCircle size={24} color="#fff" />
+                </View>
+                <Text style={styles.label}>24/7 support</Text>
             </Animated.View>
         </Pressable>
     );
@@ -44,9 +45,12 @@ export function FloatingSupportButton({ onPress }) {
 const styles = StyleSheet.create({
     container: {
         position: 'absolute',
-        bottom: 20,
-        right: 20,
+        bottom: 100,
+        right: 16,
         zIndex: 1000,
+    },
+    buttonContainer: {
+        alignItems: 'center',
     },
     button: {
         width: 56,
@@ -57,8 +61,15 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
+        shadowOpacity: 0.25,
         shadowRadius: 8,
         elevation: 8,
+    },
+    label: {
+        marginTop: 6,
+        fontSize: 11,
+        fontWeight: '600',
+        color: SOUP_COLORS.pink,
+        textAlign: 'center',
     },
 });
