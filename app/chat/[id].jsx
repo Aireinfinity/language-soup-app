@@ -82,6 +82,7 @@ function MessageBubble({ message, isMe }) {
 
             <View style={[
                 styles.bubble,
+                message.message_type === 'voice' && styles.bubbleVoice,
                 isMe ? styles.bubbleMe : styles.bubbleThem,
                 isSending && styles.bubbleSending
             ]}>
@@ -462,9 +463,19 @@ export default function ChatScreen() {
                         styles.messagesList,
                         { paddingTop: insets.top + (currentChallenge ? 130 : 70), paddingBottom: 20 }
                     ]}
-                    onContentSizeChange={scrollToBottom}
+                    onLayout={() => {
+                        // Scroll to bottom on first load
+                        if (flatListRef.current && messages.length > 0) {
+                            flatListRef.current.scrollToEnd({ animated: false });
+                        }
+                    }}
+                    onContentSizeChange={() => {
+                        // Scroll to bottom when new messages arrive
+                        if (flatListRef.current) {
+                            flatListRef.current.scrollToEnd({ animated: true });
+                        }
+                    }}
                     onViewableItemsChanged={({ viewableItems }) => {
-                        // Find first visible message
                         const firstVisibleMsg = viewableItems.find(item => item.item.message_type !== undefined && item.item.type !== 'date_separator');
                         if (firstVisibleMsg && allChallenges.length > 0) {
                             const msgChallengeId = firstVisibleMsg.item.challenge_id;
@@ -672,6 +683,10 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.06,
         shadowRadius: 3,
         elevation: 1,
+    },
+    bubbleVoice: {
+        paddingVertical: 4,
+        paddingHorizontal: 6,
     },
     bubbleMe: {
         backgroundColor: Colors.primary,

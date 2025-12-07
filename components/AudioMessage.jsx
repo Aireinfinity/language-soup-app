@@ -261,7 +261,7 @@ export function AudioMessage({ audioUrl, duration, senderName, isMe }) {
                         {/* We use a Reanimated Text or just update this less frequently? 
                             For 60fps timer we need Reanimated Text, but standard React state is fine for seconds */}
                         <Text style={[styles.duration, isMe && styles.durationMe]}>
-                            {formatDuration(currentPosition || 0)}
+                            {formatDuration(fileDuration)}
                         </Text>
                     </View>
                 </GestureDetector>
@@ -305,11 +305,12 @@ const styles = StyleSheet.create({
     container: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 2,
-        paddingHorizontal: 4,
+        paddingVertical: 6,
+        paddingLeft: 2,
+        paddingRight: 4,
         minWidth: 240,
         maxWidth: 280,
-        gap: 8,
+        gap: 6,
     },
     containerMe: {
         // Parent bubble handles background
@@ -330,12 +331,13 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-    }, waveform: {
+    },
+    waveform: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         height: 24,
-        width: '100%',
+        flex: 1,
     },
     waveBar: {
         width: 3,

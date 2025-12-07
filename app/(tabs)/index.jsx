@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, RefreshControl, Text, Image, Platform } from 'react-native';
+import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, RefreshControl, Text, Image, Platform, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '../../components/ThemedText';
@@ -113,59 +113,26 @@ export default function HomeScreen() {
         setRefreshing(false);
     };
 
-    const handleLanguageRequest = async (language, message) => {
+    const handleLanguageRequest = async (requestText, unused) => {
         try {
-            // 1. Insert into language_requests table
+            // Insert group request into database
             const { error: requestError } = await supabase
                 .from('app_language_requests')
                 .insert({
                     user_id: user.id,
-                    language,
-                    message,
+                    language_name: requestText,
                     status: 'pending'
                 });
 
             if (requestError) throw requestError;
 
-            // 2. Find or create support group
-            let supportGroupId = null;
-
-            // Check if user already has a support group
-            const { data: existingMembership } = await supabase
-                .from('app_group_members')
-                .select('group_id, app_groups!inner(id, language)')
-                .eq('user_id', user.id)
-                .eq('app_groups.language', 'Support')
-                .single();
-
-            if (existingMembership) {
-                supportGroupId = existingMembership.group_id;
-            }
-
-            // 3. Send message to support group
-            if (supportGroupId) {
-                await supabase
-                    .from('app_messages')
-                    .insert({
-                        group_id: supportGroupId,
-                        sender_id: user.id,
-                        content: `📩 New Language Request: ${language}\n\n${message ? `Message: ${message}\n\n` : ''}Status: Pending review`,
-                        message_type: 'text'
-                    });
-            }
-
-            // 4. Close modal and show success
+            // Close modal and show success
             setShowRequestModal(false);
-
-            // Refresh groups to show updated support chat
-            await loadGroups();
-
-            // Optional: Navigate to support tab
-            // router.push('/(tabs)/support');
+            Alert.alert('Success', 'Your group request has been submitted! We\'ll review it soon.');
 
         } catch (error) {
             console.error('Error submitting language request:', error);
-            alert('Failed to submit request. Please try again.');
+            Alert.alert('Error', 'Failed to submit request. Please try again.');
         }
     };
     const formatTime = (dateString) => {
@@ -282,13 +249,8 @@ export default function HomeScreen() {
                                 setShowRequestModal(true);
                             }}
                         >
-                            <View style={styles.requestIconContainer}>
-                                <Sparkles size={24} color={SOUP_COLORS.blue} />
-                            </View>
-                            <View style={styles.requestTextContainer}>
-                                <Text style={styles.requestTitle}>Request a Language</Text>
-                                <Text style={styles.requestSubtext}>Don't see your language? Let us know!</Text>
-                            </View>
+                            <Sparkles size={18} color={SOUP_COLORS.blue} style={styles.requestIcon} />
+                            <ThemedText style={styles.requestButtonText}>request a group</ThemedText>
                         </Pressable>
                     ) : null
                 }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Users, MessageSquare, Calendar, TrendingUp, Bell } from 'lucide-react-native';
+import { ArrowLeft, Users, MessageSquare, Calendar, TrendingUp, Bell, Plus, UserPlus } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -160,10 +160,28 @@ export default function AdminDashboard() {
                     <Text style={styles.sectionTitle}>⚡ Quick Actions</Text>
                     <View style={styles.menuGrid}>
                         <MenuItem
+                            icon={Plus}
+                            label="Create Challenge"
+                            onPress={() => router.push('/admin/create-challenge')}
+                            color={SOUP_COLORS.blue}
+                        />
+                        <MenuItem
+                            icon={UserPlus}
+                            label="Create Group"
+                            onPress={() => router.push('/admin/create-group')}
+                            color={SOUP_COLORS.pink}
+                        />
+                        <MenuItem
                             icon={Calendar}
                             label="Send Challenge"
                             onPress={() => router.push('/admin/send-challenge')}
-                            color={SOUP_COLORS.blue}
+                            color={SOUP_COLORS.yellow}
+                        />
+                        <MenuItem
+                            icon={Users}
+                            label="Language Requests"
+                            onPress={() => router.push('/admin/language-requests')}
+                            color={SOUP_COLORS.green}
                         />
                         <MenuItem
                             icon={MessageSquare}
@@ -176,12 +194,6 @@ export default function AdminDashboard() {
                             label="Announcements"
                             onPress={() => router.push('/admin/announcements')}
                             color={SOUP_COLORS.yellow}
-                        />
-                        <MenuItem
-                            icon={Users}
-                            label="Language Requests"
-                            onPress={() => router.push('/admin/language-requests')}
-                            color={SOUP_COLORS.green}
                         />
                     </View>
                 </View>

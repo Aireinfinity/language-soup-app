@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Modal, Pressable, TextInput, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Modal, Pressable, TextInput, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { X } from 'lucide-react-native';
-import { Picker } from '@react-native-picker/picker';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -12,44 +11,19 @@ const SOUP_COLORS = {
     subtext: '#8E8E93',
 };
 
-const AVAILABLE_LANGUAGES = [
-    'Arabic',
-    'Chinese (Mandarin)',
-    'Chinese (Cantonese)',
-    'Dutch',
-    'French',
-    'German',
-    'Greek',
-    'Hebrew',
-    'Hindi',
-    'Italian',
-    'Japanese',
-    'Korean',
-    'Polish',
-    'Portuguese',
-    'Russian',
-    'Spanish',
-    'Swedish',
-    'Thai',
-    'Turkish',
-    'Vietnamese',
-    'Other'
-];
-
 export default function LanguageRequestModal({ visible, onClose, onSubmit }) {
-    const [selectedLanguage, setSelectedLanguage] = useState('');
-    const [message, setMessage] = useState('');
+    const [requestText, setRequestText] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
     const handleSubmit = async () => {
-        if (!selectedLanguage) return;
+        if (!requestText.trim()) return;
 
         setSubmitting(true);
         try {
-            await onSubmit(selectedLanguage, message);
+            // Pass just the text - the handler will parse language/level
+            await onSubmit(requestText, '');
             // Reset form
-            setSelectedLanguage('');
-            setMessage('');
+            setRequestText('');
         } catch (error) {
             console.error('Error submitting request:', error);
         } finally {
@@ -64,52 +38,45 @@ export default function LanguageRequestModal({ visible, onClose, onSubmit }) {
             transparent={true}
             onRequestClose={onClose}
         >
-            <View style={styles.overlay}>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={styles.overlay}
+            >
                 <View style={styles.modalContainer}>
                     {/* Header */}
                     <View style={styles.header}>
-                        <Text style={styles.title}>Request a Language 🌍</Text>
+                        <Text style={styles.title}>Request a Group 🌍</Text>
                         <Pressable onPress={onClose} style={styles.closeButton}>
                             <X size={24} color={SOUP_COLORS.text} />
                         </Pressable>
                     </View>
 
-                    <ScrollView style={styles.content}>
+                    <ScrollView
+                        style={styles.content}
+                        keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator={false}
+                    >
                         {/* Instructions */}
                         <Text style={styles.instructions}>
-                            Don't see the language you want to learn? Let us know and we'll do our best to add it!
+                            What language group would you like to see? Let us know the language and level (e.g., "Spanish Intermediate" or "Korean Beginners")
                         </Text>
 
-                        {/* Language Picker */}
-                        <Text style={styles.label}>Select Language</Text>
-                        <View style={styles.pickerContainer}>
-                            <Picker
-                                selectedValue={selectedLanguage}
-                                onValueChange={(value) => setSelectedLanguage(value)}
-                                style={styles.picker}
-                            >
-                                <Picker.Item label="Choose a language..." value="" />
-                                {AVAILABLE_LANGUAGES.map((lang) => (
-                                    <Picker.Item key={lang} label={lang} value={lang} />
-                                ))}
-                            </Picker>
-                        </View>
-
-                        {/* Optional Message */}
+                        {/* Request Input */}
                         <Text style={styles.label}>
-                            Why would you like to learn this language? (Optional)
+                            What language(s) do you want groups for?
                         </Text>
                         <TextInput
                             style={styles.textArea}
-                            placeholder="E.g., I'm planning to travel to Japan next year..."
+                            placeholder="E.g., Japanese Beginners, French Advanced..."
                             placeholderTextColor={SOUP_COLORS.subtext}
-                            value={message}
-                            onChangeText={setMessage}
+                            value={requestText}
+                            onChangeText={setRequestText}
                             multiline
-                            maxLength={500}
+                            editable
+                            maxLength={200}
                             numberOfLines={4}
                         />
-                        <Text style={styles.charCount}>{message.length}/500</Text>
+                        <Text style={styles.charCount}>{requestText.length}/200</Text>
                     </ScrollView>
 
                     {/* Actions */}
@@ -126,9 +93,9 @@ export default function LanguageRequestModal({ visible, onClose, onSubmit }) {
                             style={[
                                 styles.button,
                                 styles.submitButton,
-                                (!selectedLanguage || submitting) && styles.submitButtonDisabled
+                                (!requestText.trim() || submitting) && styles.submitButtonDisabled
                             ]}
-                            disabled={!selectedLanguage || submitting}
+                            disabled={!requestText.trim() || submitting}
                         >
                             {submitting ? (
                                 <ActivityIndicator color="#fff" />
@@ -138,7 +105,7 @@ export default function LanguageRequestModal({ visible, onClose, onSubmit }) {
                         </Pressable>
                     </View>
                 </View>
-            </View>
+            </KeyboardAvoidingView>
         </Modal>
     );
 }
@@ -191,16 +158,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: SOUP_COLORS.text,
         marginBottom: 8,
-    },
-    pickerContainer: {
-        borderWidth: 1,
-        borderColor: '#E5E5EA',
-        borderRadius: 12,
-        marginBottom: 20,
-        backgroundColor: SOUP_COLORS.cream,
-    },
-    picker: {
-        height: 50,
+        marginTop: 8,
     },
     textArea: {
         borderWidth: 1,
