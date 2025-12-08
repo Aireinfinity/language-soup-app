@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Text, TextInput, KeyboardAvoidingView, Platform, StatusBar, Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
-import { ArrowLeft, Send, Mic, X, Trash2, Square, ChevronLeft, MoreVertical, Check, Clock } from 'lucide-react-native';
+import { ArrowLeft, Send, Mic, X, Trash2, Square, ChevronLeft, MoreVertical, Check, Clock, Globe } from 'lucide-react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AudioMessage } from '../../components/AudioMessage';
 import { LiveAudioWaveform } from '../../components/LiveAudioWaveform';
@@ -121,6 +121,7 @@ export default function ChatScreen() {
     const [textInput, setTextInput] = useState('');
     const [sending, setSending] = useState(false);
     const [groupName, setGroupName] = useState('');
+    const [groupLanguage, setGroupLanguage] = useState('');
     const [memberCount, setMemberCount] = useState(0);
     const [currentChallenge, setCurrentChallenge] = useState(null);
     const [allChallenges, setAllChallenges] = useState([]);
@@ -200,13 +201,14 @@ export default function ChatScreen() {
         try {
             const { data: group } = await supabase
                 .from('app_groups')
-                .select('name, member_count')
+                .select('name, member_count, language')
                 .eq('id', groupId)
                 .single();
 
             if (group) {
                 setGroupName(group.name);
                 setMemberCount(group.member_count || 0);
+                setGroupLanguage(group.language || '');
             }
 
             const { data: challenges } = await supabase
@@ -436,7 +438,19 @@ export default function ChatScreen() {
                         <Text style={styles.headerSubtitle}>{memberCount} members</Text>
                     </View>
 
-                    <Pressable style={styles.headerAction}>
+                    {groupLanguage?.toLowerCase() === 'french' && (
+                        <Pressable
+                            style={styles.nativeButton}
+                            onPress={() => router.push('/native-speakers?language=French')}
+                        >
+                            <Text style={styles.nativeButtonText}>💬 Chat with a Native</Text>
+                        </Pressable>
+                    )}
+
+                    <Pressable
+                        style={styles.headerAction}
+                        onPress={() => router.push(`/group-info?id=${groupId}`)}
+                    >
                         <MoreVertical size={24} color={Colors.primary} />
                     </Pressable>
                 </View>
@@ -459,22 +473,11 @@ export default function ChatScreen() {
                     data={messagesWithDates}
                     renderItem={renderMessage}
                     keyExtractor={(item) => item.id}
+                    inverted={true}
                     contentContainerStyle={[
                         styles.messagesList,
-                        { paddingTop: insets.top + (currentChallenge ? 130 : 70), paddingBottom: 20 }
+                        { paddingTop: 20, paddingBottom: insets.top + (currentChallenge ? 130 : 70) }
                     ]}
-                    onLayout={() => {
-                        // Scroll to bottom on first load
-                        if (flatListRef.current && messages.length > 0) {
-                            flatListRef.current.scrollToEnd({ animated: false });
-                        }
-                    }}
-                    onContentSizeChange={() => {
-                        // Scroll to bottom when new messages arrive
-                        if (flatListRef.current) {
-                            flatListRef.current.scrollToEnd({ animated: true });
-                        }
-                    }}
                     onViewableItemsChanged={({ viewableItems }) => {
                         const firstVisibleMsg = viewableItems.find(item => item.item.message_type !== undefined && item.item.type !== 'date_separator');
                         if (firstVisibleMsg && allChallenges.length > 0) {
@@ -590,6 +593,20 @@ const styles = StyleSheet.create({
     },
     headerAction: {
         padding: 4,
+    },
+    nativeButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: '#19b091',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 14,
+    },
+    nativeButtonText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#fff',
     },
     challengeBanner: {
         position: 'absolute',

@@ -252,36 +252,25 @@ export default function HomeScreen() {
                 ListHeaderComponent={
                     (isAdmin || isCommunityManager) ? (
                         <View style={styles.adminSection}>
-                            {/* Admin Dashboard Card - Only for admin */}
+                            {/* Admin Cards Row - Side by side */}
                             {isAdmin && (
-                                <Pressable
-                                    style={styles.adminCard}
-                                    onPress={() => router.push('/admin/dashboard')}
-                                >
-                                    <View style={[styles.adminCardIcon, { backgroundColor: SOUP_COLORS.blue }]}>
+                                <View style={styles.adminCardRow}>
+                                    <Pressable
+                                        style={[styles.adminCardSmall, { backgroundColor: SOUP_COLORS.blue }]}
+                                        onPress={() => router.push('/admin/dashboard')}
+                                    >
                                         <Sparkles size={24} color="#fff" />
-                                    </View>
-                                    <View style={styles.adminCardInfo}>
-                                        <Text style={[styles.adminCardTitle, { color: SOUP_COLORS.blue }]}>Admin Dashboard</Text>
-                                        <Text style={styles.adminCardSubtitle}>Manage groups, users & content</Text>
-                                    </View>
-                                </Pressable>
-                            )}
+                                        <Text style={styles.adminCardSmallTitle}>Founder Daddy</Text>
+                                    </Pressable>
 
-                            {/* Support Center Card - Only for admin */}
-                            {isAdmin && (
-                                <Pressable
-                                    style={styles.adminCard}
-                                    onPress={() => router.push('/admin/support')}
-                                >
-                                    <View style={[styles.adminCardIcon, { backgroundColor: SOUP_COLORS.pink }]}>
+                                    <Pressable
+                                        style={[styles.adminCardSmall, { backgroundColor: SOUP_COLORS.pink }]}
+                                        onPress={() => router.push('/admin/support')}
+                                    >
                                         <MessageCircle size={24} color="#fff" />
-                                    </View>
-                                    <View style={styles.adminCardInfo}>
-                                        <Text style={[styles.adminCardTitle, { color: SOUP_COLORS.pink }]}>Support Center</Text>
-                                        <Text style={styles.adminCardSubtitle}>View user support threads</Text>
-                                    </View>
-                                </Pressable>
+                                        <Text style={styles.adminCardSmallTitle}>Fuck It's Not Working</Text>
+                                    </Pressable>
+                                </View>
                             )}
 
                             {/* Community Manager Dashboard - Only for community managers */}
@@ -319,20 +308,7 @@ export default function HomeScreen() {
                 }
                 ListFooterComponent={
                     groups.length > 0 ? (
-                        <Pressable
-                            style={styles.requestButton}
-                            onPress={() => {
-                                setShowRequestModal(true);
-                            }}
-                        >
-                            <View style={[styles.adminCardIcon, { backgroundColor: SOUP_COLORS.green }]}>
-                                <Sparkles size={22} color="#fff" />
-                            </View>
-                            <View style={styles.adminCardInfo}>
-                                <Text style={[styles.adminCardTitle, { color: SOUP_COLORS.green }]}>Request a Group</Text>
-                                <Text style={styles.adminCardSubtitle}>Can't find your language? Ask us!</Text>
-                            </View>
-                        </Pressable>
+                        <View style={{ height: 120 }} />
                     ) : null
                 }
             />
@@ -342,6 +318,19 @@ export default function HomeScreen() {
                 onClose={() => setShowRequestModal(false)}
                 onSubmit={handleLanguageRequest}
             />
+
+            {/* Floating Request Group Button (left side) */}
+            {groups.length > 0 && (
+                <Pressable
+                    style={styles.floatingRequestBtn}
+                    onPress={() => setShowRequestModal(true)}
+                >
+                    <View style={styles.floatingRequestCircle}>
+                        <Sparkles size={24} color="#fff" />
+                    </View>
+                    <Text style={styles.floatingRequestLabel}>request group</Text>
+                </Pressable>
+            )}
 
             {/* Floating Support Button (for non-admin users) */}
             {user?.role !== 'admin' && (
@@ -414,6 +403,34 @@ const styles = StyleSheet.create({
         paddingTop: 8,
         paddingBottom: 4,
         gap: 10,
+    },
+    adminCardRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    adminCardSmall: {
+        flex: 1,
+        padding: 16,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    adminCardSmallTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#fff',
+        textAlign: 'center',
+    },
+    adminCardSmallSubtitle: {
+        fontSize: 12,
+        fontWeight: '500',
+        color: 'rgba(255, 255, 255, 0.8)',
     },
     adminCard: {
         flexDirection: 'row',
@@ -571,5 +588,33 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '600',
         color: SOUP_COLORS.green,
+    },
+    // Floating Request Group Button
+    floatingRequestBtn: {
+        position: 'absolute',
+        bottom: 100,
+        left: 16,
+        zIndex: 1000,
+        alignItems: 'center',
+    },
+    floatingRequestCircle: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: SOUP_COLORS.green,
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    floatingRequestLabel: {
+        marginTop: 6,
+        fontSize: 11,
+        fontWeight: '600',
+        color: SOUP_COLORS.green,
+        textAlign: 'center',
     },
 });

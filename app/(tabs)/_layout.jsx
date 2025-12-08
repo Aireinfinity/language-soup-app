@@ -1,35 +1,36 @@
 import { Tabs } from 'expo-router';
-import { Home, Globe2, User, LifeBuoy } from 'lucide-react-native';
+import { Globe, User } from 'lucide-react-native';
 import { Colors } from '../../constants/Colors';
-import { View } from 'react-native';
+import { View, Text } from 'react-native';
 
 export default function TabLayout() {
     return (
         <Tabs
             screenOptions={{
                 headerShown: false,
-                tabBarActiveTintColor: Colors.primary,
-                tabBarInactiveTintColor: Colors.textLight,
+                tabBarActiveTintColor: '#fff',
+                tabBarInactiveTintColor: 'rgba(255, 255, 255, 0.6)',
+                tabBarShowLabel: true,
                 tabBarStyle: {
                     position: 'absolute',
-                    bottom: 20, // Move higher
-                    left: 20,
-                    right: 20,
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
                     elevation: 0,
-                    backgroundColor: 'rgba(255, 255, 255, 0.9)', // Translucent
-                    borderRadius: 24,
-                    height: 60,
+                    backgroundColor: '#19b091',
                     borderTopWidth: 0,
-                    shadowColor: Colors.shadow,
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.1,
-                    shadowRadius: 8,
-                    paddingBottom: 8,
-                    paddingTop: 8,
+                    height: 80,
+                    paddingBottom: 20,
+                    paddingTop: 10,
+                    borderTopLeftRadius: 24,
+                    borderTopRightRadius: 24,
+                },
+                tabBarItemStyle: {
+                    paddingVertical: 4,
                 },
                 tabBarLabelStyle: {
-                    fontSize: 12,
-                    fontWeight: '500',
+                    fontSize: 11,
+                    fontWeight: '600',
                 },
                 tabBarBackground: () => (
                     <View style={{ flex: 1, backgroundColor: 'transparent' }} />
@@ -37,17 +38,17 @@ export default function TabLayout() {
             }}
         >
             <Tabs.Screen
-                name="index"
-                options={{
-                    title: 'Groups',
-                    tabBarIcon: ({ color }) => <Home size={24} color={color} />,
-                }}
-            />
-            <Tabs.Screen
                 name="community"
                 options={{
                     title: 'Community',
-                    tabBarIcon: ({ color }) => <Globe2 size={24} color={color} />,
+                    tabBarIcon: ({ color }) => <Globe size={24} color={color} />,
+                }}
+            />
+            <Tabs.Screen
+                name="index"
+                options={{
+                    title: 'Your Soup',
+                    tabBarIcon: ({ color }) => <Text style={{ fontSize: 24 }}>🍜</Text>,
                 }}
             />
             <Tabs.Screen

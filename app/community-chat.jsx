@@ -303,17 +303,27 @@ export default function CommunityChatScreen() {
         );
     };
 
-    // Combine announcements as system messages with regular messages
-    const getMessagesWithAnnouncements = () => {
-        const announcementMessages = announcements.map(a => ({
-            ...a,
-            type: 'announcement'
-        }));
+    // Find and scroll to announcement message in the chat
+    const scrollToAnnouncementMessage = (announcementId) => {
+        const messagesWithDates = addDateSeparators(messages);
+        // Find message that is the announcement (by matching content or id)
+        const announcement = announcements.find(a => a.id === announcementId);
+        if (!announcement) return;
 
-        const withDates = addDateSeparators(messages);
+        // Find the message index that contains the announcement content
+        const messageIndex = messagesWithDates.findIndex(msg =>
+            msg.message_type === 'announcement' ||
+            (msg.content && msg.content === announcement.content)
+        );
 
-        // Put announcements at the start
-        return [...announcementMessages, ...withDates];
+        if (messageIndex >= 0 && flatListRef.current) {
+            flatListRef.current.scrollToIndex({ index: messageIndex, animated: true });
+        }
+    };
+
+    // Just add date separators, no announcements mixed in
+    const getMessagesWithDates = () => {
+        return addDateSeparators(messages);
     };
 
     if (loading) {
@@ -344,14 +354,18 @@ export default function CommunityChatScreen() {
                 </View>
             </BlurView>
 
-            {/* Announcement Banner (like challenge banner in group chats) */}
+            {/* Announcement Banner - Tap to view on Community tab */}
             {announcements.length > 0 && (
-                <View style={[styles.announcementBanner, { top: insets.top + 65 }]}>
+                <Pressable
+                    style={[styles.announcementBanner, { top: insets.top + 65 }]}
+                    onPress={() => router.back()}
+                >
                     <Megaphone size={16} color={SOUP_COLORS.pink} />
                     <Text style={styles.announcementBannerText} numberOfLines={2}>
                         {announcements[0].content}
                     </Text>
-                </View>
+                    <Text style={styles.tapToViewText}>TAP TO VIEW</Text>
+                </Pressable>
             )}
 
             <KeyboardAvoidingView
@@ -498,6 +512,13 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: SOUP_COLORS.pink,
         lineHeight: 20,
+    },
+    tapToViewText: {
+        fontSize: 9,
+        fontWeight: '700',
+        color: SOUP_COLORS.pink,
+        opacity: 0.7,
+        marginLeft: 8,
     },
 
     // Messages

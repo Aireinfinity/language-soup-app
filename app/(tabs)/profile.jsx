@@ -1,14 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator, TextInput, Alert, Text, Switch } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator, TextInput, Alert, Text, Switch, Modal, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { Camera, Edit2, LogOut, MapPin, Globe, Award, Share2, Sparkles, Flag, Clock, Crown } from 'lucide-react-native';
+import { Camera, Edit2, LogOut, MapPin, Globe, Award, Share2, Sparkles, Flag, Clock, Crown, X, Download } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { decode } from 'base64-arraybuffer';
+import ViewShot from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library';
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // 🎨 SOUP PALETTE
 const SOUP_COLORS = {
@@ -38,6 +43,9 @@ export default function ProfileScreen() {
     const [newLanguages, setNewLanguages] = useState(''); // Comma separated
     const [newLearning, setNewLearning] = useState(''); // Comma separated
     const [uploading, setUploading] = useState(false);
+    const [showWrappedModal, setShowWrappedModal] = useState(false);
+    const [showLevelsInfo, setShowLevelsInfo] = useState(false);
+    const wrappedRef = useRef();
 
     useEffect(() => {
         if (authUser) {
@@ -340,86 +348,352 @@ export default function ProfileScreen() {
         return { currentLevel: 'C2', targetLevel: 'Master', progressPercent: 100, hoursRemaining: 0 };
     };
 
-    const renderStats = () => (
-        <View style={styles.statsSection}>
-            <View style={styles.bigStatCard}>
-                <Text style={styles.bigStatLabel}>Total Voice Memos Sent</Text>
-                <Text style={styles.bigStatNumber}>
-                    {Math.floor((stats?.total_speaking_seconds || 0) / 10)}
-                </Text>
-            </View>
+    const renderStats = () => {
+        // Calculate max for relative bar widths
+        const outputData = stats?.flavor_breakdown || [];
+        const maxOutput = Math.max(...outputData.map(l => l.seconds || 0), 1);
 
-            <Text style={styles.sectionTitle}>Journey to Fluency 🎓</Text>
-            {(stats?.flavor_breakdown || []).map((lang, idx) => {
-                const cefr = getCEFRProgress(lang.seconds || 0);
+        // For input, we'll estimate based on messages received in each language group
+        // This would need a separate RPC in production, for now we'll show the same data as a placeholder
+        const inputData = stats?.listening_breakdown || stats?.flavor_breakdown || [];
+        const maxInput = Math.max(...inputData.map(l => l.seconds || 0), 1);
+        // OUTPUT (Speaking) levels - in MINUTES
+        const getOutputLevel = (minutes) => {
+            if (minutes < 30) return { level: 1, name: 'First Words 🌱', nextGoal: 30, prevGoal: 0, color: '#8BC34A' };
+            if (minutes < 120) return { level: 2, name: 'Sentence Builder 🧱', nextGoal: 120, prevGoal: 30, color: '#4CAF50' };
+            if (minutes < 300) return { level: 3, name: 'Conversation Starter 💬', nextGoal: 300, prevGoal: 120, color: '#00BCD4' };
+            if (minutes < 600) return { level: 4, name: 'Daily Souper 🍜', nextGoal: 600, prevGoal: 300, color: '#FF9800' };
+            if (minutes < 1200) return { level: 5, name: 'Fluent Rambler 🎙️', nextGoal: 1200, prevGoal: 600, color: '#E91E63' };
+            return { level: 6, name: 'Native Vibes 🌟', nextGoal: 1200, prevGoal: 1200, color: '#9C27B0', maxed: true };
+        };
 
-                return (
-                    <View key={idx} style={styles.progressRow}>
-                        <View style={styles.progressHeader}>
-                            <View>
-                                <Text style={styles.progressLang}>{lang.language}</Text>
-                                <Text style={styles.levelBadge}>{cefr.currentLevel} → {cefr.targetLevel}</Text>
+        // INPUT (Listening) levels - in HOURS
+        const getInputLevel = (hours) => {
+            if (hours < 3) return { level: 1, name: 'Ear Training 👂', nextGoal: 3, prevGoal: 0, color: '#8BC34A' };
+            if (hours < 10) return { level: 2, name: 'Word Catcher 🎣', nextGoal: 10, prevGoal: 3, color: '#4CAF50' };
+            if (hours < 30) return { level: 3, name: 'Context King 👑', nextGoal: 30, prevGoal: 10, color: '#00BCD4' };
+            if (hours < 100) return { level: 4, name: 'Comprehension Pro 🧠', nextGoal: 100, prevGoal: 30, color: '#FF9800' };
+            if (hours < 300) return { level: 5, name: 'Native Speed 🚀', nextGoal: 300, prevGoal: 100, color: '#E91E63' };
+            return { level: 6, name: 'Polyglot 🌍', nextGoal: 300, prevGoal: 300, color: '#9C27B0', maxed: true };
+        };
+
+        return (
+            <View style={styles.statsSection}>
+                <View style={styles.bigStatCard}>
+                    <Text style={styles.bigStatLabel}>Total Voice Memos Sent</Text>
+                    <Text style={styles.bigStatNumber}>
+                        {Math.floor((stats?.total_speaking_seconds || 0) / 20)}
+                    </Text>
+                </View>
+
+                {/* COMPREHENSIBLE Section Header with Info Button */}
+                <View style={styles.sectionHeaderRow}>
+                    <View>
+                        <Text style={styles.sectionTitle}>Comprehensible 🧠</Text>
+                        <Text style={styles.sectionSubtitle}>Track your language input & output progress</Text>
+                    </View>
+                    <Pressable
+                        style={styles.infoButton}
+                        onPress={() => setShowLevelsInfo(true)}
+                    >
+                        <Text style={styles.infoButtonText}>?</Text>
+                    </Pressable>
+                </View>
+
+                {/* INPUT - Listening time (FIRST) */}
+                <Text style={styles.subSectionTitle}>Input 👂</Text>
+
+                {inputData.length === 0 ? (
+                    <Text style={styles.emptyText}>No listening data yet. Listen to voice memos!</Text>
+                ) : (
+                    inputData.map((lang, idx) => {
+                        // Estimate listening as ~2x speaking
+                        const listeningSeconds = (lang.seconds || 0) * 2;
+                        const hours = listeningSeconds / 3600; // Convert to hours
+                        const levelInfo = getInputLevel(hours);
+                        const progressInLevel = levelInfo.maxed ? 100 :
+                            ((hours - levelInfo.prevGoal) / (levelInfo.nextGoal - levelInfo.prevGoal)) * 100;
+
+                        return (
+                            <View key={`input-${idx}`} style={styles.metricRow}>
+                                <View style={styles.metricHeader}>
+                                    <Text style={styles.metricLang}>{lang.language}</Text>
+                                    <Text style={[styles.levelBadge, { backgroundColor: levelInfo.color }]}>
+                                        Lv.{levelInfo.level}
+                                    </Text>
+                                </View>
+                                <Text style={styles.levelName}>{levelInfo.name}</Text>
+                                <View style={styles.metricBarBg}>
+                                    <View style={[styles.metricBarFill, { backgroundColor: levelInfo.color, width: `${Math.max(progressInLevel, 3)}%` }]} />
+                                </View>
+                                <Text style={styles.progressText}>
+                                    {hours.toFixed(1)} / {levelInfo.nextGoal} hrs
+                                </Text>
                             </View>
-                            <Text style={styles.progressVal}>{cefr.hoursRemaining} hrs to {cefr.targetLevel}</Text>
-                        </View>
-                        <View style={styles.progressBarBg}>
-                            <View style={[styles.progressBarFill, { width: `${cefr.progressPercent}%` }]} />
-                        </View>
-                    </View>
-                );
-            })}
-        </View>
-    );
+                        );
+                    })
+                )}
 
-    const renderWrapped = () => (
-        <View style={styles.wrappedContainer}>
-            <LinearGradient
-                colors={[SOUP_COLORS.text, '#000']} // Sleek Dark Mode
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.wrappedCard}
+                {/* OUTPUT - Speaking time (SECOND) */}
+                <Text style={[styles.subSectionTitle, { marginTop: 16 }]}>Output 🎤</Text>
+
+                {outputData.length === 0 ? (
+                    <Text style={styles.emptyText}>No speaking data yet. Start chatting!</Text>
+                ) : (
+                    outputData.map((lang, idx) => {
+                        const minutes = Math.floor((lang.seconds || 0) / 60);
+                        const levelInfo = getOutputLevel(minutes);
+                        const progressInLevel = levelInfo.maxed ? 100 :
+                            ((minutes - levelInfo.prevGoal) / (levelInfo.nextGoal - levelInfo.prevGoal)) * 100;
+
+                        return (
+                            <View key={`output-${idx}`} style={styles.metricRow}>
+                                <View style={styles.metricHeader}>
+                                    <Text style={styles.metricLang}>{lang.language}</Text>
+                                    <Text style={[styles.levelBadge, { backgroundColor: levelInfo.color }]}>
+                                        Lv.{levelInfo.level}
+                                    </Text>
+                                </View>
+                                <Text style={styles.levelName}>{levelInfo.name}</Text>
+                                <View style={styles.metricBarBg}>
+                                    <View style={[styles.metricBarFill, { backgroundColor: levelInfo.color, width: `${Math.max(progressInLevel, 3)}%` }]} />
+                                </View>
+                                <Text style={styles.progressText}>
+                                    {minutes} / {levelInfo.nextGoal} min
+                                </Text>
+                            </View>
+                        );
+                    })
+                )}
+            </View>
+        );
+    };
+
+    const renderWrapped = () => {
+        const totalMinutes = Math.floor((stats?.total_speaking_seconds || 0) / 60);
+        const monthlyMinutes = Math.floor((stats?.monthly_speaking_seconds || 0) / 60);
+        const voiceMemoCount = Math.floor((stats?.total_speaking_seconds || 0) / 20); // ~20 sec average
+
+        return (
+            <Pressable onPress={() => setShowWrappedModal(true)}>
+                <View style={styles.wrappedContainer}>
+                    <LinearGradient
+                        colors={['#1a1a2e', '#16213e', '#0f3460']} // Deep space gradient
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.wrappedCard}
+                    >
+                        {/* Decorative elements */}
+                        <View style={styles.wrappedGlow} />
+
+                        <Text style={styles.wrappedTitle}>Your 2025 Wrapped 🍜</Text>
+                        <Text style={styles.wrappedSubtitle}>Language Soup Year in Review</Text>
+
+                        {/* Big Hero Stat */}
+                        <View style={styles.heroStat}>
+                            <Text style={styles.heroNumber}>{totalMinutes}</Text>
+                            <Text style={styles.heroLabel}>minutes of speaking practice</Text>
+                        </View>
+
+                        <View style={styles.trackList}>
+                            {/* Track 1: Top Language */}
+                            <View style={styles.trackRow}>
+                                <View style={[styles.trackIcon, { backgroundColor: SOUP_COLORS.pink }]}>
+                                    <Text style={styles.trackEmoji}>🗣️</Text>
+                                </View>
+                                <View style={styles.trackInfo}>
+                                    <Text style={styles.trackTitle}>Top Language</Text>
+                                    <Text style={styles.trackSubtitle}>{stats?.monthly_top_language || 'Start practicing!'}</Text>
+                                </View>
+                                <Text style={styles.trackStat}>{Math.floor((stats?.monthly_top_language_seconds || 0) / 60)}m</Text>
+                            </View>
+
+                            {/* Track 2: Voice Memos */}
+                            <View style={styles.trackRow}>
+                                <View style={[styles.trackIcon, { backgroundColor: SOUP_COLORS.blue }]}>
+                                    <Text style={styles.trackEmoji}>🎙️</Text>
+                                </View>
+                                <View style={styles.trackInfo}>
+                                    <Text style={styles.trackTitle}>Voice Memos Sent</Text>
+                                    <Text style={styles.trackSubtitle}>Keep that streak going!</Text>
+                                </View>
+                                <Text style={styles.trackStat}>{voiceMemoCount}</Text>
+                            </View>
+
+                            {/* Track 3: Consistency */}
+                            <View style={styles.trackRow}>
+                                <View style={[styles.trackIcon, { backgroundColor: SOUP_COLORS.green }]}>
+                                    <Text style={styles.trackEmoji}>⚡</Text>
+                                </View>
+                                <View style={styles.trackInfo}>
+                                    <Text style={styles.trackTitle}>Vibe Check</Text>
+                                    <Text style={styles.trackSubtitle}>Consistency Level</Text>
+                                </View>
+                                <Text style={styles.trackStat}>{stats?.consistency_label || 'New'}</Text>
+                            </View>
+                        </View>
+
+                        <View style={styles.wrappedFooter}>
+                            <Text style={styles.wrappedBranding}>LANGUAGE SOUP WRAPPED '25 ✨</Text>
+                            <Share2 color="rgba(255,255,255,0.6)" size={16} />
+                        </View>
+                    </LinearGradient>
+                </View>
+            </Pressable>
+        );
+    };
+
+    // Share functions
+    const handleShareWrapped = async () => {
+        try {
+            const uri = await wrappedRef.current.capture();
+            await Sharing.shareAsync(uri, {
+                mimeType: 'image/png',
+                dialogTitle: 'Share your Language Soup Wrapped!'
+            });
+        } catch (error) {
+            console.error('Error sharing:', error);
+            Alert.alert('Error', 'Failed to share. Please try again.');
+        }
+    };
+
+    const handleSaveToPhotos = async () => {
+        try {
+            const { status } = await MediaLibrary.requestPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission needed', 'Please allow access to save photos.');
+                return;
+            }
+
+            const uri = await wrappedRef.current.capture();
+            await MediaLibrary.saveToLibraryAsync(uri);
+            Alert.alert('Saved!', 'Your Wrapped has been saved to your photos! 🎉');
+            setShowWrappedModal(false);
+        } catch (error) {
+            console.error('Error saving:', error);
+            Alert.alert('Error', 'Failed to save. Please try again.');
+        }
+    };
+
+    // Full-screen Wrapped Modal
+    const renderWrappedModal = () => {
+        const totalMinutes = Math.floor((stats?.total_speaking_seconds || 0) / 60);
+        const voiceMemoCount = Math.floor((stats?.total_speaking_seconds || 0) / 20);
+
+        return (
+            <Modal
+                visible={showWrappedModal}
+                animationType="fade"
+                transparent={true}
+                onRequestClose={() => setShowWrappedModal(false)}
             >
-                <Text style={styles.wrappedTitle}>Your Monthly Mix 📼</Text>
+                <View style={styles.modalOverlay}>
+                    <Pressable
+                        style={styles.closeButton}
+                        onPress={() => setShowWrappedModal(false)}
+                    >
+                        <X size={28} color="#fff" />
+                    </Pressable>
 
-                <View style={styles.trackList}>
-                    {/* Track 1: Top Language */}
-                    <View style={styles.trackRow}>
-                        <Text style={styles.trackNum}>1</Text>
-                        <View style={styles.trackInfo}>
-                            <Text style={styles.trackTitle}>Top Liquid</Text>
-                            <Text style={styles.trackSubtitle}>{stats?.monthly_top_language || 'None Yet'}</Text>
-                        </View>
-                        <Text style={styles.trackStat}>{Math.floor((stats?.monthly_top_language_seconds || 0) / 60)}m</Text>
-                    </View>
+                    <ViewShot ref={wrappedRef} options={{ format: 'png', quality: 1 }}>
+                        <LinearGradient
+                            colors={['#0a0a1a', '#1a1a2e', '#16213e', '#0f3460']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.fullWrappedCard}
+                        >
+                            {/* Decorative glowing orbs */}
+                            <View style={[styles.wrappedGlow, { top: -60, right: -60, backgroundColor: SOUP_COLORS.pink }]} />
+                            <View style={[styles.wrappedGlow, { bottom: 100, left: -40, backgroundColor: SOUP_COLORS.blue, width: 100, height: 100 }]} />
+                            <View style={[styles.wrappedGlow, { top: 200, right: -30, backgroundColor: SOUP_COLORS.green, width: 80, height: 80 }]} />
 
-                    {/* Track 2: Total Memos */}
-                    <View style={styles.trackRow}>
-                        <Text style={styles.trackNum}>2</Text>
-                        <View style={styles.trackInfo}>
-                            <Text style={styles.trackTitle}>Voice Memos</Text>
-                            <Text style={styles.trackSubtitle}>Total Sent</Text>
-                        </View>
-                        <Text style={styles.trackStat}>{Math.floor((stats?.monthly_speaking_seconds || 0) / 15)}</Text>
-                    </View>
+                            {/* Header with logo */}
+                            <View style={styles.wrappedHeader}>
+                                <Image
+                                    source={require('../../assets/images/logo.png')}
+                                    style={styles.wrappedLogoImg}
+                                />
+                                <View>
+                                    <Text style={styles.wrappedBrandName}>LANGUAGE SOUP</Text>
+                                    <Text style={styles.wrappedYear}>WRAPPED 2025</Text>
+                                </View>
+                            </View>
 
-                    {/* Track 3: Consistency */}
-                    <View style={styles.trackRow}>
-                        <Text style={styles.trackNum}>3</Text>
-                        <View style={styles.trackInfo}>
-                            <Text style={styles.trackTitle}>Vibe Check</Text>
-                            <Text style={styles.trackSubtitle}>Consistency Level</Text>
-                        </View>
-                        <Text style={styles.trackStat}>{stats?.consistency_label || 'New'}</Text>
+                            {/* User's name */}
+                            <Text style={styles.wrappedUserName}>{user?.display_name || 'Souper Star'}</Text>
+                            <Text style={styles.wrappedTagline}>Your year of slurping languages</Text>
+
+                            {/* Big Hero Stat */}
+                            <View style={styles.fullHeroStat}>
+                                <Text style={styles.fullHeroNumber}>{totalMinutes}</Text>
+                                <Text style={styles.heroLabel}>MINUTES OF SPEAKING PRACTICE</Text>
+                            </View>
+
+                            {/* Stats Grid */}
+                            <View style={styles.fullTrackList}>
+                                <View style={styles.trackRow}>
+                                    <View style={[styles.trackIcon, { backgroundColor: SOUP_COLORS.pink }]}>
+                                        <Text style={styles.trackEmoji}>🗣️</Text>
+                                    </View>
+                                    <View style={styles.trackInfo}>
+                                        <Text style={styles.trackTitle}>Top Language</Text>
+                                        <Text style={styles.trackSubtitle}>{stats?.monthly_top_language || 'None yet'}</Text>
+                                    </View>
+                                    <Text style={styles.trackStat}>{Math.floor((stats?.monthly_top_language_seconds || 0) / 60)}m</Text>
+                                </View>
+
+                                <View style={styles.trackRow}>
+                                    <View style={[styles.trackIcon, { backgroundColor: SOUP_COLORS.blue }]}>
+                                        <Text style={styles.trackEmoji}>🎙️</Text>
+                                    </View>
+                                    <View style={styles.trackInfo}>
+                                        <Text style={styles.trackTitle}>Voice Memos</Text>
+                                        <Text style={styles.trackSubtitle}>Total sent</Text>
+                                    </View>
+                                    <Text style={styles.trackStat}>{voiceMemoCount}</Text>
+                                </View>
+
+                                <View style={styles.trackRow}>
+                                    <View style={[styles.trackIcon, { backgroundColor: SOUP_COLORS.green }]}>
+                                        <Text style={styles.trackEmoji}>🔥</Text>
+                                    </View>
+                                    <View style={styles.trackInfo}>
+                                        <Text style={styles.trackTitle}>Vibe Check</Text>
+                                        <Text style={styles.trackSubtitle}>{stats?.consistency_label || 'New Souper'}</Text>
+                                    </View>
+                                    <Text style={styles.trackEmoji}>⚡</Text>
+                                </View>
+                            </View>
+
+                            {/* Footer with branding */}
+                            <View style={styles.wrappedFooterFull}>
+                                <View style={styles.soupEmojis}>
+                                    <Text style={styles.smallEmoji}>🍜</Text>
+                                    <Text style={styles.smallEmoji}>🥢</Text>
+                                    <Text style={styles.smallEmoji}>🌶️</Text>
+                                    <Text style={styles.smallEmoji}>🍵</Text>
+                                    <Text style={styles.smallEmoji}>🍜</Text>
+                                </View>
+                                <Text style={styles.wrappedHandle}>@languagesoup</Text>
+                                <Text style={styles.wrappedSlogan}>slurp your way to fluency ✨</Text>
+                            </View>
+                        </LinearGradient>
+                    </ViewShot>
+
+                    <View style={styles.shareButtons}>
+                        <Pressable style={styles.shareBtn} onPress={handleSaveToPhotos}>
+                            <Download size={20} color="#fff" />
+                            <Text style={styles.shareBtnText}>Save to Photos</Text>
+                        </Pressable>
+                        <Pressable style={styles.shareBtn} onPress={handleShareWrapped}>
+                            <Share2 size={20} color="#fff" />
+                            <Text style={styles.shareBtnText}>Share</Text>
+                        </Pressable>
                     </View>
                 </View>
-
-                <View style={styles.wrappedFooter}>
-                    <Text style={styles.wrappedBranding}>LANGUAGE SOUP WRAPPED '25 🍜</Text>
-                    <Share2 color="rgba(255,255,255,0.6)" size={16} />
-                </View>
-            </LinearGradient>
-        </View>
-    );
+            </Modal>
+        );
+    };
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -449,6 +723,72 @@ export default function ProfileScreen() {
                 {renderWrapped()}
                 <View style={{ height: 40 }} />
             </ScrollView>
+            {renderWrappedModal()}
+
+            {/* Levels Info Modal */}
+            <Modal
+                visible={showLevelsInfo}
+                animationType="fade"
+                transparent={true}
+                onRequestClose={() => setShowLevelsInfo(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.levelsInfoCard}>
+                        <Pressable
+                            style={styles.closeButton}
+                            onPress={() => setShowLevelsInfo(false)}
+                        >
+                            <Text style={styles.closeButtonText}>✕</Text>
+                        </Pressable>
+
+                        <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollContent}>
+                            <Text style={styles.levelsInfoTitle}>Understanding Your Levels 📊</Text>
+
+                            <View style={styles.comprehensibleExplainer}>
+                                <Text style={styles.comprehensibleTitle}>What is Comprehensible Input?</Text>
+                                <Text style={styles.comprehensibleText}>
+                                    Comprehensible input is language you can understand, even if you don't know every word. It's the foundation of language acquisition - you learn by listening and reading things just slightly above your level.
+                                </Text>
+                                <Text style={styles.comprehensibleText}>
+                                    <Text style={{ fontWeight: '700' }}>Input</Text> (listening) builds your understanding. <Text style={{ fontWeight: '700' }}>Output</Text> (speaking) keeps you motivated and helps you practice what you've learned. Both matter! 🍜
+                                </Text>
+                            </View>
+
+                            <View style={styles.levelTypeSection}>
+                                <Text style={styles.levelTypeTitle}>👂 Input (Listening)</Text>
+                                <Text style={styles.levelTypeDesc}>Estimated hours listening to others</Text>
+                                <View style={styles.levelsList}>
+                                    <Text style={styles.levelItem}>Lv.1 👂 Ear Training (0-3 hrs)</Text>
+                                    <Text style={styles.levelItem}>Lv.2 🎣 Word Catcher (3-10 hrs)</Text>
+                                    <Text style={styles.levelItem}>Lv.3 👑 Context King (10-30 hrs)</Text>
+                                    <Text style={styles.levelItem}>Lv.4 🧠 Comprehension Pro (30-100 hrs)</Text>
+                                    <Text style={styles.levelItem}>Lv.5 🚀 Native Speed (100-300 hrs)</Text>
+                                    <Text style={styles.levelItem}>Lv.6 🌍 Polyglot (300+ hrs)</Text>
+                                </View>
+                            </View>
+
+                            <View style={styles.levelTypeSection}>
+                                <Text style={styles.levelTypeTitle}>🎤 Output (Speaking)</Text>
+                                <Text style={styles.levelTypeDesc}>Measured in minutes of voice messages sent</Text>
+                                <View style={styles.levelsList}>
+                                    <Text style={styles.levelItem}>Lv.1 🌱 First Words (0-30 min)</Text>
+                                    <Text style={styles.levelItem}>Lv.2 🧱 Sentence Builder (30-120 min)</Text>
+                                    <Text style={styles.levelItem}>Lv.3 💬 Conversation Starter (120-300 min)</Text>
+                                    <Text style={styles.levelItem}>Lv.4 🍜 Daily Souper (300-600 min)</Text>
+                                    <Text style={styles.levelItem}>Lv.5 🎙️ Fluent Rambler (600-1200 min)</Text>
+                                    <Text style={styles.levelItem}>Lv.6 🌟 Native Vibes (1200+ min)</Text>
+                                </View>
+                            </View>
+
+                            <Text style={styles.levelsInfoFooter}>
+                                Early levels = quick wins! Later levels = real mastery. You listen way more than you speak, just like real life! 🍜
+                            </Text>
+                        </ScrollView>
+
+                        <Text style={styles.scrollPrompt}>👆 Scroll to see all levels</Text>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -469,6 +809,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: 20,
         paddingVertical: 10,
+        backgroundColor: SOUP_COLORS.cream, // Cream header
     },
     signOutBtn: {
         padding: 8,
@@ -514,6 +855,11 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         paddingHorizontal: 20,
+        backgroundColor: SOUP_COLORS.cream,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        paddingTop: 20,
+        marginTop: -10,
     },
     // IDENTITY
     identitySection: {
@@ -663,8 +1009,63 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '800',
         color: SOUP_COLORS.text,
+        marginBottom: 4,
+        marginLeft: 4,
+    },
+    sectionSubtitle: {
+        fontSize: 13,
+        color: SOUP_COLORS.subtext,
         marginBottom: 16,
         marginLeft: 4,
+    },
+    subSectionTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: SOUP_COLORS.text,
+        marginBottom: 8,
+        marginLeft: 4,
+        marginTop: 8,
+    },
+    emptyText: {
+        fontSize: 14,
+        color: SOUP_COLORS.subtext,
+        fontStyle: 'italic',
+        marginLeft: 4,
+        marginBottom: 16,
+    },
+    metricRow: {
+        marginBottom: 14,
+    },
+    metricHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 6,
+    },
+    metricLang: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: SOUP_COLORS.text,
+    },
+    metricVal: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: SOUP_COLORS.subtext,
+    },
+    metricBarBg: {
+        height: 10,
+        backgroundColor: 'rgba(0,0,0,0.06)',
+        borderRadius: 5,
+        overflow: 'hidden',
+    },
+    metricBarFill: {
+        height: '100%',
+        borderRadius: 5,
+    },
+    outputBar: {
+        backgroundColor: SOUP_COLORS.pink,
+    },
+    inputBar: {
+        backgroundColor: SOUP_COLORS.blue,
     },
     progressRow: {
         marginBottom: 16,
@@ -680,10 +1081,25 @@ const styles = StyleSheet.create({
         color: SOUP_COLORS.text,
     },
     levelBadge: {
-        fontSize: 12,
-        color: SOUP_COLORS.pink,
+        fontSize: 11,
+        color: '#fff',
         fontWeight: '700',
-        marginTop: 2,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 10,
+        overflow: 'hidden',
+    },
+    levelName: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: SOUP_COLORS.subtext,
+        marginBottom: 6,
+    },
+    progressText: {
+        fontSize: 11,
+        color: SOUP_COLORS.subtext,
+        marginTop: 4,
+        textAlign: 'right',
     },
     progressVal: {
         fontSize: 12,
@@ -716,35 +1132,71 @@ const styles = StyleSheet.create({
         fontSize: 28,
         fontWeight: '900',
         color: '#fff',
-        marginBottom: 24,
+        marginBottom: 4,
         letterSpacing: -1,
     },
+    wrappedSubtitle: {
+        fontSize: 13,
+        color: 'rgba(255,255,255,0.5)',
+        fontWeight: '500',
+        marginBottom: 16,
+    },
+    wrappedGlow: {
+        position: 'absolute',
+        top: -50,
+        right: -50,
+        width: 150,
+        height: 150,
+        borderRadius: 75,
+        backgroundColor: SOUP_COLORS.pink,
+        opacity: 0.15,
+    },
+    heroStat: {
+        alignItems: 'center',
+        marginVertical: 20,
+    },
+    heroNumber: {
+        fontSize: 64,
+        fontWeight: '900',
+        color: '#fff',
+        letterSpacing: -2,
+    },
+    heroLabel: {
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.6)',
+        fontWeight: '500',
+        marginTop: -4,
+    },
     trackList: {
-        gap: 20,
-        marginBottom: 30,
+        gap: 16,
+        marginBottom: 24,
     },
     trackRow: {
         flexDirection: 'row',
         alignItems: 'center',
     },
-    trackNum: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: 'rgba(255,255,255,0.4)',
-        width: 24,
+    trackIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    trackEmoji: {
+        fontSize: 18,
     },
     trackInfo: {
         flex: 1,
-        marginLeft: 8,
+        marginLeft: 12,
     },
     trackTitle: {
         color: '#fff',
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: '700',
     },
     trackSubtitle: {
-        color: 'rgba(255,255,255,0.6)',
-        fontSize: 13,
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 12,
         fontWeight: '500',
     },
     trackStat: {
@@ -817,5 +1269,248 @@ const styles = StyleSheet.create({
     inputRow: {
         flexDirection: 'row',
         gap: 12,
+    },
+    // Full-screen Wrapped Modal styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.95)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    closeButton: {
+        position: 'absolute',
+        top: 16,
+        right: 16,
+        zIndex: 10,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(0,0,0,0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    closeButtonText: {
+        fontSize: 24,
+        color: SOUP_COLORS.text,
+        fontWeight: '400',
+    },
+    scrollContent: {
+        flex: 1,
+    },
+    scrollPrompt: {
+        fontSize: 12,
+        color: SOUP_COLORS.subtext,
+        textAlign: 'center',
+        paddingVertical: 12,
+        fontStyle: 'italic',
+    },
+    fullWrappedCard: {
+        width: SCREEN_WIDTH - 40,
+        borderRadius: 24,
+        padding: 32,
+        overflow: 'hidden',
+    },
+    fullWrappedTitle: {
+        fontSize: 32,
+        fontWeight: '900',
+        color: '#fff',
+        marginBottom: 4,
+        letterSpacing: -1,
+    },
+    fullHeroStat: {
+        alignItems: 'center',
+        marginVertical: 32,
+    },
+    fullHeroNumber: {
+        fontSize: 80,
+        fontWeight: '900',
+        color: '#fff',
+        letterSpacing: -3,
+    },
+    fullTrackList: {
+        gap: 20,
+        marginBottom: 32,
+    },
+    shareButtons: {
+        flexDirection: 'row',
+        gap: 16,
+        marginTop: 24,
+    },
+    shareBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        paddingHorizontal: 20,
+        paddingVertical: 14,
+        borderRadius: 30,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.3)',
+    },
+    shareBtnText: {
+        color: '#fff',
+        fontSize: 15,
+        fontWeight: '600',
+    },
+    // Heavy branding styles
+    wrappedHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        marginBottom: 24,
+    },
+    wrappedLogo: {
+        fontSize: 48,
+    },
+    wrappedLogoImg: {
+        width: 50,
+        height: 50,
+        borderRadius: 12,
+    },
+    wrappedBrandName: {
+        fontSize: 16,
+        fontWeight: '900',
+        color: '#fff',
+        letterSpacing: 3,
+    },
+    wrappedYear: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: SOUP_COLORS.pink,
+        letterSpacing: 2,
+    },
+    wrappedUserName: {
+        fontSize: 28,
+        fontWeight: '900',
+        color: '#fff',
+        marginBottom: 4,
+    },
+    wrappedTagline: {
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.6)',
+        fontStyle: 'italic',
+        marginBottom: 16,
+    },
+    wrappedFooterFull: {
+        alignItems: 'center',
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255,255,255,0.1)',
+        paddingTop: 20,
+        marginTop: 8,
+    },
+    soupEmojis: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 12,
+    },
+    smallEmoji: {
+        fontSize: 20,
+    },
+    wrappedHandle: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: SOUP_COLORS.blue,
+        letterSpacing: 1,
+    },
+    wrappedSlogan: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.5)',
+        marginTop: 4,
+        fontStyle: 'italic',
+    },
+    // Section Header Row with Info Button
+    sectionHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 4,
+    },
+    infoButton: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: SOUP_COLORS.blue,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 2,
+    },
+    infoButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    // Levels Info Modal
+    levelsInfoCard: {
+        backgroundColor: '#fff',
+        borderRadius: 24,
+        padding: 24,
+        maxWidth: '90%',
+        maxHeight: '80%',
+    },
+    levelsInfoTitle: {
+        fontSize: 22,
+        fontWeight: '800',
+        color: SOUP_COLORS.text,
+        marginBottom: 16,
+        textAlign: 'center',
+    },
+    comprehensibleExplainer: {
+        marginBottom: 20,
+        padding: 16,
+        backgroundColor: '#f0f9ff',
+        borderRadius: 12,
+        borderLeftWidth: 4,
+        borderLeftColor: SOUP_COLORS.blue,
+    },
+    comprehensibleTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: SOUP_COLORS.text,
+        marginBottom: 8,
+    },
+    comprehensibleText: {
+        fontSize: 13,
+        color: SOUP_COLORS.text,
+        lineHeight: 20,
+        marginBottom: 8,
+    },
+    levelsInfoSubtitle: {
+        fontSize: 14,
+        color: SOUP_COLORS.subtext,
+        marginBottom: 20,
+        textAlign: 'center',
+    },
+    levelTypeSection: {
+        marginBottom: 20,
+        padding: 16,
+        backgroundColor: SOUP_COLORS.cream,
+        borderRadius: 12,
+    },
+    levelTypeTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: SOUP_COLORS.text,
+        marginBottom: 4,
+    },
+    levelTypeDesc: {
+        fontSize: 13,
+        color: SOUP_COLORS.subtext,
+        marginBottom: 12,
+    },
+    levelsList: {
+        gap: 6,
+    },
+    levelItem: {
+        fontSize: 13,
+        color: SOUP_COLORS.text,
+        paddingLeft: 8,
+    },
+    levelsInfoFooter: {
+        fontSize: 13,
+        color: SOUP_COLORS.subtext,
+        textAlign: 'center',
+        fontStyle: 'italic',
+        marginTop: 8,
     },
 });

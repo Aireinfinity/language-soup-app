@@ -18,11 +18,11 @@ const SOUP_COLORS = {
 
 export default function CommunityScreen() {
     const router = useRouter();
-
     const [announcements, setAnnouncements] = useState([]);
     const [activeGroups, setActiveGroups] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [memberCount, setMemberCount] = useState(0);
+    const [loading, setLoading] = useState(true);
+    const [expandedAnnouncements, setExpandedAnnouncements] = useState({});
 
     useEffect(() => {
         loadData();
@@ -121,20 +121,7 @@ export default function CommunityScreen() {
                     <ChevronRight size={24} color={SOUP_COLORS.subtext} />
                 </Pressable>
 
-                {/* Announcements */}
-                {announcements.length > 0 && (
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>📢 Announcements</Text>
-                        <FlatList
-                            data={announcements}
-                            renderItem={renderAnnouncement}
-                            keyExtractor={(item) => item.id}
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.announcementsList}
-                        />
-                    </View>
-                )}
+
 
                 {/* Active Groups */}
                 <View style={styles.section}>
@@ -153,19 +140,43 @@ export default function CommunityScreen() {
                 {announcements.length > 0 && (
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>📣 Admin Announcements</Text>
-                        {announcements.map(item => (
-                            <View key={item.id} style={styles.fullAnnouncementCard}>
-                                <View style={styles.announcementIconLarge}>
-                                    <Megaphone size={18} color="#fff" />
-                                </View>
-                                <View style={styles.announcementContent}>
-                                    <Text style={styles.announcementFullText}>{item.content}</Text>
-                                    <Text style={styles.announcementDate}>
-                                        {new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                    </Text>
-                                </View>
-                            </View>
-                        ))}
+                        {announcements.map(item => {
+                            const isLong = item.content.length > 100;
+                            const isExpanded = expandedAnnouncements[item.id];
+                            const displayText = (isLong && !isExpanded)
+                                ? item.content.substring(0, 100) + '...'
+                                : item.content;
+
+                            return (
+                                <Pressable
+                                    key={item.id}
+                                    style={styles.fullAnnouncementCard}
+                                    onPress={() => {
+                                        if (isLong) {
+                                            setExpandedAnnouncements(prev => ({
+                                                ...prev,
+                                                [item.id]: !prev[item.id]
+                                            }));
+                                        }
+                                    }}
+                                >
+                                    <View style={styles.announcementIconLarge}>
+                                        <Megaphone size={18} color="#fff" />
+                                    </View>
+                                    <View style={styles.announcementContent}>
+                                        <Text style={styles.announcementFullText}>{displayText}</Text>
+                                        {isLong && (
+                                            <Text style={styles.readMoreText}>
+                                                {isExpanded ? 'Show less' : 'Read more'}
+                                            </Text>
+                                        )}
+                                        <Text style={styles.announcementDate}>
+                                            {new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                        </Text>
+                                    </View>
+                                </Pressable>
+                            );
+                        })}
                     </View>
                 )}
             </ScrollView>
@@ -364,5 +375,12 @@ const styles = StyleSheet.create({
     announcementDate: {
         fontSize: 12,
         color: SOUP_COLORS.subtext,
+    },
+    readMoreText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: SOUP_COLORS.blue,
+        marginTop: 6,
+        marginBottom: 4,
     },
 });
