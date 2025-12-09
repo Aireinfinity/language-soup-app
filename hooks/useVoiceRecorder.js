@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Audio } from 'expo-av';
+import { Alert } from 'react-native';
 
 // Global flag to prevent multiple recordings
 let globalRecording = null;
@@ -23,7 +24,14 @@ export const useVoiceRecorder = () => {
             }
 
             const { status } = await Audio.requestPermissionsAsync();
-            if (status !== 'granted') return;
+            if (status !== 'granted') {
+                Alert.alert(
+                    'Microphone Access Required',
+                    'Please enable microphone access in your device settings to record voice messages.',
+                    [{ text: 'OK' }]
+                );
+                return;
+            }
 
             await Audio.setAudioModeAsync({
                 allowsRecordingIOS: true,
@@ -47,6 +55,11 @@ export const useVoiceRecorder = () => {
 
         } catch (err) {
             console.error('Failed to start recording:', err);
+            Alert.alert(
+                'Recording Error',
+                'Could not start recording. Please try again.',
+                [{ text: 'OK' }]
+            );
             setIsRecording(false);
         }
     };
@@ -87,6 +100,11 @@ export const useVoiceRecorder = () => {
             return uri;
         } catch (err) {
             console.error('Failed to stop recording:', err);
+            Alert.alert(
+                'Recording Error',
+                'Could not save recording. Please try again.',
+                [{ text: 'OK' }]
+            );
             setIsRecording(false);
             return null;
         }

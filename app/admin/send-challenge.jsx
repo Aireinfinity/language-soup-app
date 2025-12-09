@@ -22,7 +22,8 @@ export default function SendChallengeScreen() {
 
     const [groups, setGroups] = useState([]);
     const [selectedGroup, setSelectedGroup] = useState(groupId || null);
-    const [challengeText, setChallengeText] = useState('');
+    const [englishVersion, setEnglishVersion] = useState('');
+    const [nativeVersion, setNativeVersion] = useState('');
     const [sending, setSending] = useState(false);
     const [loading, setLoading] = useState(true);
 
@@ -59,19 +60,22 @@ export default function SendChallengeScreen() {
     };
 
     const sendChallenge = async () => {
-        if (!selectedGroup || !challengeText.trim()) {
-            Alert.alert('Missing Info', 'Please select a group and enter a challenge');
+        if (!selectedGroup || !englishVersion.trim() || !nativeVersion.trim()) {
+            Alert.alert('Missing Info', 'Please select a group and enter both versions');
             return;
         }
 
         setSending(true);
         try {
+            // Combine English and native versions
+            const combinedPrompt = `${englishVersion.trim()}\n${nativeVersion.trim()}`;
+
             // Insert challenge
             const { data: challenge, error } = await supabase
                 .from('app_challenges')
                 .insert({
                     group_id: selectedGroup,
-                    prompt_text: challengeText.trim(),
+                    prompt_text: combinedPrompt,
                     created_by: user.id
                 })
                 .select()
@@ -138,26 +142,40 @@ export default function SendChallengeScreen() {
                 </View>
 
                 <View style={styles.section}>
-                    <Text style={styles.label}>Challenge Prompt</Text>
+                    <Text style={styles.label}>English Version</Text>
                     <TextInput
                         style={styles.textArea}
-                        value={challengeText}
-                        onChangeText={setChallengeText}
-                        placeholder="e.g., What's your favorite holiday tradition?"
+                        value={englishVersion}
+                        onChangeText={setEnglishVersion}
+                        placeholder="What's your favorite holiday tradition?"
                         placeholderTextColor={SOUP_COLORS.subtext}
                         multiline
-                        maxLength={300}
+                        maxLength={150}
                     />
-                    <Text style={styles.charCount}>{challengeText.length}/300</Text>
+                    <Text style={styles.charCount}>{englishVersion.length}/150</Text>
+                </View>
+
+                <View style={styles.section}>
+                    <Text style={styles.label}>Native Language Version</Text>
+                    <TextInput
+                        style={styles.textArea}
+                        value={nativeVersion}
+                        onChangeText={setNativeVersion}
+                        placeholder="¿Cuál es tu tradición navideña favorita?"
+                        placeholderTextColor={SOUP_COLORS.subtext}
+                        multiline
+                        maxLength={150}
+                    />
+                    <Text style={styles.charCount}>{nativeVersion.length}/150</Text>
                 </View>
 
                 <Pressable
                     style={[
                         styles.sendButton,
-                        (!selectedGroup || !challengeText.trim() || sending) && styles.sendButtonDisabled
+                        (!selectedGroup || !englishVersion.trim() || !nativeVersion.trim() || sending) && styles.sendButtonDisabled
                     ]}
                     onPress={sendChallenge}
-                    disabled={!selectedGroup || !challengeText.trim() || sending}
+                    disabled={!selectedGroup || !englishVersion.trim() || !nativeVersion.trim() || sending}
                 >
                     {sending ? (
                         <ActivityIndicator size="small" color="#fff" />
@@ -219,9 +237,15 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '700',
         color: '#000',
-        marginBottom: 12,
+        marginBottom: 8,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
+    },
+    formatHint: {
+        fontSize: 13,
+        color: SOUP_COLORS.subtext,
+        marginBottom: 12,
+        fontStyle: 'italic',
     },
     groupOption: {
         flexDirection: 'row',

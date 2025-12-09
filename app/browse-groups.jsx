@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Users, Plus, LogOut } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
@@ -20,6 +20,7 @@ export default function BrowseGroups() {
     const [loading, setLoading] = useState(true);
     const [groups, setGroups] = useState([]);
     const [myGroupIds, setMyGroupIds] = useState([]);
+    const [actionLoading, setActionLoading] = useState({}); // Track loading state per group
 
     useEffect(() => {
         loadGroups();
@@ -52,6 +53,7 @@ export default function BrowseGroups() {
     };
 
     const joinGroup = async (groupId) => {
+        setActionLoading(prev => ({ ...prev, [groupId]: true }));
         try {
             const { error } = await supabase
                 .from('app_group_members')
@@ -72,10 +74,18 @@ export default function BrowseGroups() {
             await loadGroups();
         } catch (error) {
             console.error('Error joining group:', error);
+            Alert.alert(
+                'Could Not Join Group',
+                'Something went wrong. Please try again.',
+                [{ text: 'OK' }]
+            );
+        } finally {
+            setActionLoading(prev => ({ ...prev, [groupId]: false }));
         }
     };
 
     const leaveGroup = async (groupId) => {
+        setActionLoading(prev => ({ ...prev, [groupId]: true }));
         try {
             const { error } = await supabase
                 .from('app_group_members')
@@ -95,11 +105,19 @@ export default function BrowseGroups() {
             await loadGroups();
         } catch (error) {
             console.error('Error leaving group:', error);
+            Alert.alert(
+                'Could Not Leave Group',
+                'Something went wrong. Please try again.',
+                [{ text: 'OK' }]
+            );
+        } finally {
+            setActionLoading(prev => ({ ...prev, [groupId]: false }));
         }
     };
 
     const renderGroup = ({ item }) => {
         const isMember = myGroupIds.includes(item.id);
+        const isLoading = actionLoading[item.id];
 
         return (
             <View style={styles.groupCard}>
@@ -137,9 +155,16 @@ export default function BrowseGroups() {
                         <Pressable
                             style={[styles.button, styles.joinButton]}
                             onPress={() => joinGroup(item.id)}
+                            disabled={isLoading}
                         >
-                            <Plus size={16} color="#fff" />
-                            <Text style={styles.joinButtonText}>Join</Text>
+                            {isLoading ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <>
+                                    <Plus size={16} color="#fff" />
+                                    <Text style={styles.joinButtonText}>Join</Text>
+                                </>
+                            )}
                         </Pressable>
                     )}
                 </View>

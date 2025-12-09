@@ -18,7 +18,8 @@ export default function CreateChallenge() {
     const [loading, setLoading] = useState(false);
     const [groups, setGroups] = useState([]);
     const [formData, setFormData] = useState({
-        promptText: '',
+        englishVersion: '',
+        nativeVersion: '',
         groupId: ''
     });
 
@@ -39,8 +40,8 @@ export default function CreateChallenge() {
     };
 
     const handleCreate = async () => {
-        if (!formData.promptText.trim()) {
-            Alert.alert('Error', 'Please enter a challenge prompt');
+        if (!formData.englishVersion.trim() || !formData.nativeVersion.trim()) {
+            Alert.alert('Error', 'Please enter both English and native language versions');
             return;
         }
 
@@ -52,10 +53,13 @@ export default function CreateChallenge() {
         setLoading(true);
         Keyboard.dismiss();
         try {
+            // Combine English and native versions with newline
+            const combinedPrompt = `${formData.englishVersion.trim()}\n${formData.nativeVersion.trim()}`;
+
             const { error } = await supabase
                 .from('app_challenges')
                 .insert({
-                    prompt_text: formData.promptText,
+                    prompt_text: combinedPrompt,
                     group_id: formData.groupId
                 });
 
@@ -87,15 +91,28 @@ export default function CreateChallenge() {
 
                 <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
                     <View style={styles.section}>
-                        <Text style={styles.label}>Challenge Prompt *</Text>
+                        <Text style={styles.label}>English Version *</Text>
                         <TextInput
                             style={styles.textArea}
-                            value={formData.promptText}
-                            onChangeText={(text) => setFormData(prev => ({ ...prev, promptText: text }))}
-                            placeholder="e.g., Describe your favorite childhood memory"
+                            value={formData.englishVersion}
+                            onChangeText={(text) => setFormData(prev => ({ ...prev, englishVersion: text }))}
+                            placeholder="What's your favorite holiday tradition?"
                             placeholderTextColor="#999"
                             multiline
-                            numberOfLines={4}
+                            numberOfLines={3}
+                        />
+                    </View>
+
+                    <View style={styles.section}>
+                        <Text style={styles.label}>Native Language Version *</Text>
+                        <TextInput
+                            style={styles.textArea}
+                            value={formData.nativeVersion}
+                            onChangeText={(text) => setFormData(prev => ({ ...prev, nativeVersion: text }))}
+                            placeholder="¿Cuál es tu tradición navideña favorita?"
+                            placeholderTextColor="#999"
+                            multiline
+                            numberOfLines={3}
                         />
                     </View>
 
@@ -172,7 +189,13 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: '#000',
+        marginBottom: 4,
+    },
+    formatHint: {
+        fontSize: 13,
+        color: SOUP_COLORS.subtext,
         marginBottom: 8,
+        fontStyle: 'italic',
     },
     textArea: {
         backgroundColor: '#fff',

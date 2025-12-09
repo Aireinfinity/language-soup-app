@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, KeyboardAvoidingView, Platform, Pressable, ActivityIndicator, StatusBar, Image } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { BlurView } from 'expo-blur';
-import { ChevronLeft, Send, Mic, Trash2 } from 'lucide-react-native';
+import { ChevronLeft, Send, Mic, Trash2, Edit3 } from 'lucide-react-native';
+import TicketModal from '../../../components/TicketModal';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
 import { AudioMessage } from '../../../components/AudioMessage';
@@ -61,6 +61,8 @@ export default function AdminSupportThreadScreen() {
     const insets = useSafeAreaInsets();
     const flatListRef = useRef(null);
 
+    const [modalVisible, setModalVisible] = useState(false);
+
     const [messages, setMessages] = useState([]);
     const [threadUser, setThreadUser] = useState(null);
     const [inputText, setInputText] = useState('');
@@ -81,13 +83,24 @@ export default function AdminSupportThreadScreen() {
         const channel = supabase
             .channel(`support-thread-${userId}`)
             .on('postgres_changes', {
-                event: 'INSERT',
+                event: '*', // Listen to INSERT and UPDATE
                 schema: 'public',
                 table: 'app_support_messages',
                 filter: `user_id=eq.${userId}`
             }, (payload) => {
-                setMessages(prev => [...prev, payload.new]);
-                scrollToBottom();
+                if (payload.eventType === 'INSERT') {
+                    // Deduplicate by ID
+                    if (!messages.find(m => m.id === payload.new.id)) {
+                        setMessages(prev => {
+                            if (prev.find(m => m.id === payload.new.id)) return prev;
+                            return [...prev, payload.new];
+                        });
+                        scrollToBottom();
+                    }
+                } else if (payload.eventType === 'UPDATE') {
+                    setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
+                    // Also update threadUser if tagging changed? No, tagging is on message.
+                }
             })
             .subscribe();
 
@@ -146,12 +159,19 @@ export default function AdminSupportThreadScreen() {
         scrollToBottom();
 
         try {
-            await supabase.from('app_support_messages').insert({
+            const { data, error } = await supabase.from('app_support_messages').insert({
                 user_id: userId,
                 content: messageText,
                 from_admin: true,
                 message_type: 'text'
-            });
+            }).select().single();
+
+            if (error) throw error;
+
+            // Replace optimistic message with real one
+            setMessages(prev => prev.map(m =>
+                m.id === optimisticMsg.id ? data : m
+            ));
         } catch (error) {
             console.error('Error sending message:', error);
             setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
@@ -197,6 +217,59 @@ export default function AdminSupportThreadScreen() {
             });
         } catch (error) {
             console.error('Error uploading voice message:', error);
+        }
+    };
+
+    const updateThreadStatus = async (priority, status, category = null) => {
+        try {
+            // We need to update the LATEST message from this user to tag the thread?
+            // Actually, the dashboard query groups by user_id and grabs *some* message. 
+            // The DB schema says `app_support_messages` has these columns.
+            // Ideally we'd have a `support_tickets` table, but we embedded metadata on messages.
+            // So we update the MOST RECENT message from this user to tag the "thread".
+            // Or better: update ALL messages? Or just the last one?
+            // "Ticket" concept is loose. Updating the last message works for the dashboard query.
+
+            // First find last message ID
+            const { data: lastMsg } = await supabase
+                .from('app_support_messages')
+                .select('id')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+            if (lastMsg) {
+                // If it's a full update from modal
+                if (typeof priority === 'object') {
+                    const formData = priority; // It's actually the object passed from modal
+                    await supabase
+                        .from('app_support_messages')
+                        .update({
+                            priority: formData.priority,
+                            status: formData.status,
+                            category: formData.category,
+                            title: formData.title,
+                            public_visible: formData.public_visible
+                        })
+                        .eq('id', lastMsg.id);
+                } else {
+                    // Quick Action
+                    const updatePayload = { priority, status };
+                    if (category) updatePayload.category = category;
+
+                    await supabase
+                        .from('app_support_messages')
+                        .update(updatePayload)
+                        .eq('id', lastMsg.id);
+                }
+
+                // Refresh local data to show new status?
+                // The subscription might not catch UPDATEs if I only listen to INSERT.
+                // I need to listen to UPDATE too.
+            }
+        } catch (error) {
+            console.error('Error updating status:', error);
         }
     };
 
@@ -269,10 +342,10 @@ export default function AdminSupportThreadScreen() {
         <View style={styles.container}>
             <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-            <BlurView intensity={80} tint="light" style={[styles.header, { paddingTop: insets.top }]}>
+            <SafeAreaView style={styles.header} edges={['top']}>
                 <View style={styles.headerContent}>
                     <Pressable onPress={() => router.back()} style={styles.backButton}>
-                        <ChevronLeft size={30} color={Colors.primary} />
+                        <ChevronLeft size={30} color={SOUP_COLORS.blue} />
                     </Pressable>
 
                     <View style={styles.headerInfo}>
@@ -282,7 +355,49 @@ export default function AdminSupportThreadScreen() {
 
                     <View style={{ width: 30 }} />
                 </View>
-            </BlurView>
+
+                {/* Quick Actions */}
+                <View style={styles.quickActions}>
+                    <Pressable
+                        style={[styles.actionBtn, { backgroundColor: SOUP_COLORS.red }]}
+                        onPress={() => updateThreadStatus('P0', 'investigating')}
+                    >
+                        <Text style={styles.actionBtnText}>Urgent</Text>
+                    </Pressable>
+                    <Pressable
+                        style={[styles.actionBtn, { backgroundColor: SOUP_COLORS.yellow }]}
+                        onPress={() => updateThreadStatus('P1', 'investigating', 'bug')}
+                    >
+                        <Text style={styles.actionBtnText}>Bug</Text>
+                    </Pressable>
+                    <Pressable
+                        style={[styles.actionBtn, { backgroundColor: SOUP_COLORS.green }]}
+                        onPress={() => updateThreadStatus('P2', 'new', 'feature_request')}
+                    >
+                        <Text style={styles.actionBtnText}>Request</Text>
+                    </Pressable>
+                    <Pressable
+                        style={[styles.actionBtn, { backgroundColor: '#2ecc71' }]} // Distinct green
+                        onPress={() => updateThreadStatus(null, 'fixed')}
+                    >
+                        <Text style={styles.actionBtnText}>Resolve</Text>
+                    </Pressable>
+                    <Pressable
+                        style={[styles.actionBtn, { backgroundColor: '#636e72', marginLeft: 8 }]}
+                        onPress={() => setModalVisible(true)}
+                    >
+                        <Edit3 size={14} color="#fff" />
+                    </Pressable>
+                </View>
+
+                <TicketModal
+                    visible={modalVisible}
+                    onClose={() => setModalVisible(false)}
+                    onSubmit={updateThreadStatus}
+                    initialData={messages.length > 0 ? messages[messages.length - 1] : null}
+                // Pass last message as initial data to edit its tags
+                />
+            </SafeAreaView>
 
             <KeyboardAvoidingView
                 style={styles.keyboardView}
@@ -296,7 +411,7 @@ export default function AdminSupportThreadScreen() {
                     keyExtractor={item => item.id}
                     contentContainerStyle={[
                         styles.messagesList,
-                        { paddingTop: insets.top + 70, paddingBottom: 20 }
+                        { paddingTop: 20, paddingBottom: 20 }
                     ]}
                     onContentSizeChange={() => scrollToBottom()}
                 />
@@ -349,8 +464,28 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: SOUP_COLORS.cream },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     keyboardView: { flex: 1 },
-    header: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(0,0,0,0.1)' },
+    container: { flex: 1, backgroundColor: SOUP_COLORS.cream },
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    keyboardView: { flex: 1 },
+    header: { backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(0,0,0,0.1)' },
     headerContent: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 10 },
+
+    quickActions: {
+        flexDirection: 'row',
+        paddingHorizontal: 16,
+        paddingBottom: 12,
+        gap: 8,
+    },
+    actionBtn: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+    },
+    actionBtnText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '700',
+    },
     backButton: { padding: 4 },
     headerInfo: { flex: 1, alignItems: 'center' },
     headerTitle: { fontSize: 17, fontWeight: '600', color: '#000' },

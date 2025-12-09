@@ -64,27 +64,57 @@ function MessageBubble({ message, isMe }) {
 
     return (
         <View style={[styles.messageRow, isMe ? styles.rowMe : styles.rowThem]}>
-            {!isMe && (
-                <View style={styles.avatarContainer}>
-                    {message.user?.avatar_url ? (
-                        <Image source={{ uri: message.user.avatar_url }} style={styles.avatar} />
-                    ) : (
-                        <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                            <Text style={styles.avatarText}>
-                                {message.user?.display_name?.charAt(0).toUpperCase() || '?'}
-                            </Text>
-                        </View>
-                    )}
-                </View>
-            )}
+            {/* Show avatar for everyone */}
+            <View style={[styles.avatarContainer, isMe && { order: 2, marginLeft: 8, marginRight: 0 }]}>
+                {message.user?.avatar_url ? (
+                    <Image source={{ uri: message.user.avatar_url }} style={styles.avatar} />
+                ) : (
+                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                        <Text style={styles.avatarText}>
+                            {message.user?.display_name?.charAt(0).toUpperCase() || '?'}
+                        </Text>
+                    </View>
+                )}
+            </View>
 
             <View style={[
                 styles.bubble,
                 message.message_type === 'voice' && styles.bubbleVoice,
                 isMe ? styles.bubbleMe : styles.bubbleThem,
+                isMe && { marginRight: 0, order: 1 }
             ]}>
                 {!isMe && message.user && (
-                    <Text style={styles.senderName}>{message.user.display_name}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                        <Text style={styles.senderName}>{message.user.display_name}</Text>
+                        {message.user.fluent_languages && message.user.fluent_languages.slice(0, 2).map((lang, idx) => (
+                            <View key={idx} style={{
+                                backgroundColor: 'rgba(255,255,255,0.2)',
+                                borderRadius: 4,
+                                paddingHorizontal: 4,
+                                paddingVertical: 1,
+                                marginLeft: 4
+                            }}>
+                                <Text style={{ fontSize: 9, color: '#fff', opacity: 0.9 }}>{lang}</Text>
+                            </View>
+                        ))}
+                    </View>
+                )}
+
+                {/* Show languages for Me too */}
+                {isMe && message.user && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2, justifyContent: 'flex-end' }}>
+                        {message.user.fluent_languages && message.user.fluent_languages.slice(0, 2).map((lang, idx) => (
+                            <View key={idx} style={{
+                                backgroundColor: 'rgba(255,255,255,0.3)',
+                                borderRadius: 4,
+                                paddingHorizontal: 4,
+                                paddingVertical: 1,
+                                marginLeft: 4
+                            }}>
+                                <Text style={{ fontSize: 9, color: '#fff', fontWeight: '600' }}>{lang}</Text>
+                            </View>
+                        ))}
+                    </View>
                 )}
 
                 {message.message_type === 'voice' ? (
@@ -116,6 +146,18 @@ export default function CommunityChatScreen() {
     const [inputText, setInputText] = useState('');
     const [sending, setSending] = useState(false);
     const [memberCount, setMemberCount] = useState(0);
+    const [userProfile, setUserProfile] = useState(null);
+
+    // Fetch my own full profile to show my languages in optimistic updates
+    useEffect(() => {
+        if (user) {
+            supabase.from('app_users')
+                .select('display_name, avatar_url, fluent_languages')
+                .eq('id', user.id)
+                .single()
+                .then(({ data }) => setUserProfile(data));
+        }
+    }, [user]);
 
     const {
         isRecording,
@@ -131,22 +173,53 @@ export default function CommunityChatScreen() {
         return unsubscribe;
     }, []);
 
+    useEffect(() => {
+        // Scroll to bottom whenever messages change
+        if (messages.length > 0) {
+            setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: false });
+            }, 100);
+        }
+    }, [messages]);
+
     const loadData = async () => {
         try {
-            // Load messages
-            const { data: msgData } = await supabase
+            // Load messages raw
+            const { data: msgData, error } = await supabase
                 .from('app_community_messages')
-                .select(`
-                    *,
-                    app_users!app_community_messages_user_id_fkey(display_name, avatar_url)
-                `)
+                .select('*')
                 .order('created_at', { ascending: true })
                 .limit(100);
 
-            const formatted = msgData?.map(msg => ({
+            if (error) {
+                console.error('Error loading msgs:', error);
+                return;
+            }
+
+            if (!msgData || msgData.length === 0) {
+                setMessages([]);
+                return;
+            }
+
+            // Collect user IDs
+            const userIds = [...new Set(msgData.map(m => m.user_id).filter(Boolean))];
+
+            // Fetch users
+            const { data: usersData } = await supabase
+                .from('app_users')
+                .select('id, display_name, avatar_url, fluent_languages')
+                .in('id', userIds);
+
+            // Map users to messages
+            const userMap = {};
+            usersData?.forEach(u => {
+                userMap[u.id] = u;
+            });
+
+            const formatted = msgData.map(msg => ({
                 ...msg,
-                user: msg.app_users
-            })) || [];
+                user: userMap[msg.user_id] || { display_name: 'Unknown', avatar_url: null, fluent_languages: [] }
+            }));
 
             setMessages(formatted);
 
@@ -183,7 +256,7 @@ export default function CommunityChatScreen() {
 
                     const { data: userData } = await supabase
                         .from('app_users')
-                        .select('display_name, avatar_url')
+                        .select('display_name, avatar_url, fluent_languages')
                         .eq('id', payload.new.user_id)
                         .single();
 
@@ -216,7 +289,12 @@ export default function CommunityChatScreen() {
             content: text,
             message_type: 'text',
             created_at: new Date().toISOString(),
-            user: { display_name: user.display_name || 'You', avatar_url: null }
+            created_at: new Date().toISOString(),
+            user: {
+                display_name: userProfile?.display_name || user.user_metadata?.display_name || 'Me',
+                avatar_url: userProfile?.avatar_url || null,
+                fluent_languages: userProfile?.fluent_languages || []
+            }
         };
         setMessages(prev => [...prev, optimisticMsg]);
         scrollToBottom();
@@ -376,18 +454,14 @@ export default function CommunityChatScreen() {
                 {/* Messages */}
                 <FlatList
                     ref={flatListRef}
-                    data={addDateSeparators(messages)}
+                    data={[...addDateSeparators(messages)].reverse()}
                     renderItem={renderItem}
                     keyExtractor={(item) => item.id}
+                    inverted
                     contentContainerStyle={[
                         styles.messagesList,
-                        { paddingTop: insets.top + (announcements.length > 0 ? 130 : 70), paddingBottom: 20 }
+                        { paddingBottom: insets.top + (announcements.length > 0 ? 130 : 70), paddingTop: 20 }
                     ]}
-                    onContentSizeChange={() => {
-                        if (flatListRef.current) {
-                            flatListRef.current.scrollToEnd({ animated: true });
-                        }
-                    }}
                     ListEmptyComponent={
                         <View style={styles.emptyState}>
                             <Text style={styles.emptyEmoji}>👋</Text>

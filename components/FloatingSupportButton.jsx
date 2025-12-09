@@ -36,7 +36,7 @@ export function FloatingSupportButton({ onPress }) {
                 <View style={styles.button}>
                     <MessageCircle size={24} color="#fff" />
                 </View>
-                <Text style={styles.label}>24/7 support</Text>
+                <Text style={styles.label}>get help</Text>
             </Animated.View>
         </Pressable>
     );

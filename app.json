@@ -15,8 +15,11 @@
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.aireinfinity.languagesoup",
+      "buildNumber": "1",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "This app needs access to your microphone to record voice memos for language practice."
+        "NSMicrophoneUsageDescription": "This app needs access to your microphone to record voice memos for language practice.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -34,6 +37,12 @@
     ],
     "platforms": [
       "ios"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "affb0dd3-57d0-467c-b84c-d08c10e3b9ce"
+      }
+    }
   }
 }

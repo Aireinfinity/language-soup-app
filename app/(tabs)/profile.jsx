@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator, TextInput, Alert, Text, Switch, Modal, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator, TextInput, Alert, Text, Switch, Modal, Dimensions, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -38,10 +38,14 @@ export default function ProfileScreen() {
     // Editable States
     const [newName, setNewName] = useState('');
     const [newBio, setNewBio] = useState('');
-    const [newLocation, setNewLocation] = useState('');
-    const [newOrigin, setNewOrigin] = useState('');
-    const [newLanguages, setNewLanguages] = useState(''); // Comma separated
-    const [newLearning, setNewLearning] = useState(''); // Comma separated
+    const [newTimezone, setNewTimezone] = useState('');
+    const [newLanguages, setNewLanguages] = useState([]);
+    const [newLearning, setNewLearning] = useState([]);
+    const [availableLanguages, setAvailableLanguages] = useState([]);
+    const [availableTimezones, setAvailableTimezones] = useState([]);
+    const [languageSearch, setLanguageSearch] = useState('');
+    const [learningSearch, setLearningSearch] = useState('');
+    const [timezoneSearch, setTimezoneSearch] = useState('');
     const [uploading, setUploading] = useState(false);
     const [showWrappedModal, setShowWrappedModal] = useState(false);
     const [showLevelsInfo, setShowLevelsInfo] = useState(false);
@@ -65,10 +69,9 @@ export default function ProfileScreen() {
                 setUser(userData);
                 setNewName(userData.display_name);
                 setNewBio(userData.bio || '');
-                setNewLocation(userData.location || '');
-                setNewOrigin(userData.origin || '');
-                setNewLanguages((userData.fluent_languages || []).join(', '));
-                setNewLearning((userData.learning_languages || []).join(', '));
+                setNewTimezone(userData.timezone || '');
+                setNewLanguages(userData.fluent_languages || []);
+                setNewLearning(userData.learning_languages || []);
             }
 
             const { data: groupData } = await supabase
@@ -77,10 +80,61 @@ export default function ProfileScreen() {
                 .eq('user_id', authUser.id);
 
             if (groupData) {
-                setGroups(groupData.map(g => g.app_groups));
-            }
+                const userGroups = groupData.map(item => item.app_groups);
+                setGroups(userGroups);
 
-            const { data: statsData } = await supabase
+                // Comprehensive language list (100+ languages)
+                // Comprehensive language list with dialects and regional variants
+                const allLanguages = [
+                    'Afrikaans', 'Akan', 'Albanian', 'Amharic',
+                    'Arabic (Modern Standard)', 'Arabic (Egyptian)', 'Arabic (Levantine)', 'Arabic (Gulf)', 'Arabic (Maghrebi)', 'Arabic (Sudanese)',
+                    'Armenian', 'Assamese', 'Aymara', 'Azerbaijani',
+                    'Bambara', 'Basque', 'Belarusian', 'Bengali', 'Bhojpuri', 'Bosnian', 'Breton', 'Bulgarian', 'Burmese',
+                    'Catalan', 'Cantonese', 'Cebuano', 'Cherokee', 'Chewa', 'Chinese (Mandarin)', 'Chinese (Hakka)', 'Chinese (Hokkien)', 'Chinese (Wu)',
+                    'Corsican', 'Cree', 'Croatian', 'Czech',
+                    'Danish', 'Dari', 'Divehi', 'Dogri', 'Dutch',
+                    'English (US)', 'English (UK)', 'English (Australian)', 'English (Canadian)', 'Esperanto', 'Estonian', 'Ewe',
+                    'Faroese', 'Fijian', 'Filipino', 'Finnish', 'French', 'French (Canadian)', 'Frisian', 'Fulani',
+                    'Galician', 'Ganda', 'Georgian', 'German', 'German (Swiss)', 'Greek', 'Guarani', 'Gujarati',
+                    'Haitian Creole', 'Hausa', 'Hawaiian', 'Hebrew', 'Hindi', 'Hmong', 'Hungarian',
+                    'Icelandic', 'Igbo', 'Ilocano', 'Indonesian', 'Inuktitut', 'Irish', 'Italian',
+                    'Japanese', 'Javanese',
+                    'Kannada', 'Kazakh', 'Khmer', 'Kinyarwanda', 'Konkani', 'Korean', 'Kurdish (Kurmanji)', 'Kurdish (Sorani)', 'Kyrgyz',
+                    'Lao', 'Latin', 'Latvian', 'Lingala', 'Lithuanian', 'Luganda', 'Luxembourgish',
+                    'Macedonian', 'Maithili', 'Malagasy', 'Malay', 'Malayalam', 'Maltese', 'Manx', 'Maori', 'Marathi', 'Mayan', 'Mongolian',
+                    'Nahuatl', 'Navajo', 'Nepali', 'Norwegian',
+                    'Occitan', 'Odia', 'Oromo',
+                    'Pashto', 'Persian (Farsi)', 'Polish',
+                    'Portuguese (Brazil)', 'Portuguese (Portugal)',
+                    'Punjabi',
+                    'Quechua',
+                    'Romanian', 'Romansh', 'Russian',
+                    'Samoan', 'Sanskrit', 'Scots Gaelic', 'Serbian', 'Sesotho', 'Shona', 'Sindhi', 'Sinhala', 'Slovak', 'Slovenian', 'Somali',
+                    'Spanish (Spain)', 'Spanish (Latin America)', 'Spanish (Rioplatense)',
+                    'Sundanese', 'Swahili', 'Swedish',
+                    'Tagalog', 'Tahitian', 'Tajik', 'Tamil', 'Tatar', 'Telugu', 'Thai', 'Tibetan', 'Tigrinya', 'Tonga', 'Tswana', 'Turkish', 'Turkmen', 'Twi',
+                    'Ukrainian', 'Urdu', 'Uyghur', 'Uzbek',
+                    'Vietnamese',
+                    'Welsh', 'Wolof',
+                    'Xhosa',
+                    'Yiddish', 'Yoruba',
+                    'Zulu'
+                ].sort();
+                setAvailableLanguages(allLanguages);
+
+                // Simplified Timezones
+                const allTimezones = [
+                    'UTC', 'GMT',
+                    'EST', 'CST', 'MST', 'PST',
+                    'EDT', 'CDT', 'MDT', 'PDT',
+                    'CET', 'CEST', 'EET', 'EEST', 'WET', 'WEST',
+                    'JST', 'KST', 'CST (China)', 'IST (India)',
+                    'AEST', 'ACST', 'AWST',
+                    'NZST', 'NZDT',
+                    'HST', 'AKST', 'AST'
+                ].sort();
+                setAvailableTimezones(allTimezones);
+            } const { data: statsData } = await supabase
                 .rpc('get_user_stats', { uid: authUser.id });
 
             if (statsData) {
@@ -95,30 +149,33 @@ export default function ProfileScreen() {
     };
 
     const handleSave = async () => {
+        // Optimistic update - update local state immediately
+        const updates = {
+            display_name: (newName || '').trim(),
+            bio: (newBio || '').trim(),
+            timezone: (newTimezone || '').trim(),
+            fluent_languages: newLanguages || [],
+            learning_languages: newLearning || []
+        };
+
+        // Update local user object immediately so UI reflects changes
+        setUser(prev => ({ ...prev, ...updates }));
+        setEditing(false); // Close modal immediately
+
         try {
-            const langArray = newLanguages.split(',').map(l => l.trim()).filter(l => l.length > 0);
-            const learningArray = newLearning.split(',').map(l => l.trim()).filter(l => l.length > 0);
-
-            const updates = {
-                display_name: newName.trim(),
-                bio: newBio.trim(),
-                location: newLocation.trim(),
-                origin: newOrigin.trim(),
-                fluent_languages: langArray,
-                learning_languages: learningArray
-            };
-
+            // Send to backend in background
             const { error } = await supabase
                 .from('app_users')
                 .update(updates)
                 .eq('id', authUser.id);
 
-            if (error) throw error;
-
-            setUser(prev => ({ ...prev, ...updates }));
-            setEditing(false);
+            if (error) {
+                console.error('Error saving profile (background):', error);
+                // Optionally show a silent toast or just retry later
+                // adhering to request "let it save if anything happens" - we don't block UI
+            }
         } catch (error) {
-            Alert.alert('Error', 'Failed to save changes');
+            console.error('Crash saving profile:', error);
         }
     };
 
@@ -196,72 +253,13 @@ export default function ProfileScreen() {
                 </View>
             </Pressable>
 
-            {editing ? (
-                <View style={styles.editForm}>
-                    <Text style={styles.inputLabel}>Name</Text>
-                    <TextInput
-                        style={styles.nameInput}
-                        value={newName}
-                        onChangeText={setNewName}
-                        placeholder="Name"
-                    />
-
-                    <Text style={styles.inputLabel}>Bio</Text>
-                    <TextInput
-                        style={styles.bioInput}
-                        value={newBio}
-                        onChangeText={setNewBio}
-                        placeholder="Short bio..."
-                        multiline
-                    />
-
-                    <View style={styles.inputRow}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.inputLabel}>Location (Live)</Text>
-                            <TextInput
-                                style={styles.locationInput}
-                                value={newLocation}
-                                onChangeText={setNewLocation}
-                                placeholder="e.g. NYC"
-                            />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.inputLabel}>From (Origin)</Text>
-                            <TextInput
-                                style={styles.locationInput}
-                                value={newOrigin}
-                                onChangeText={setNewOrigin}
-                                placeholder="e.g. Brazil"
-                            />
-                        </View>
-                    </View>
-
-                    <Text style={styles.inputLabel}>Fluent Languages (Comma separated)</Text>
-                    <TextInput
-                        style={styles.locationInput}
-                        value={newLanguages}
-                        onChangeText={setNewLanguages}
-                        placeholder="e.g. English, Spanish"
-                    />
-
-                    <Text style={styles.inputLabel}>Cooking Up / Learning (Comma separated)</Text>
-                    <TextInput
-                        style={styles.locationInput}
-                        value={newLearning}
-                        onChangeText={setNewLearning}
-                        placeholder="e.g. French, Korean"
-                    />
-
-                    <Pressable onPress={handleSave} style={styles.saveBtn}>
-                        <Text style={styles.saveBtnText}>Save Changes</Text>
-                    </Pressable>
-                </View>
-            ) : (
+            {/* Always show profile info, edit button opens modal */}
+            {(
                 <View style={styles.infoCenter}>
                     <View style={styles.nameRow}>
                         <Text style={styles.name}>{user?.display_name || 'Anonymous Souper'}</Text>
                         <Pressable onPress={() => setEditing(true)} hitSlop={10}>
-                            <Edit2 size={16} color={SOUP_COLORS.subtext} />
+                            <Edit2 size={18} color={SOUP_COLORS.blue} />
                         </Pressable>
                     </View>
 
@@ -717,13 +715,239 @@ export default function ProfileScreen() {
                 </View>
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent}>
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                keyboardShouldPersistTaps="handled"
+            >
                 {renderIdentity()}
                 {renderStats()}
                 {renderWrapped()}
-                <View style={{ height: 40 }} />
+                <View style={{ height: 400 }} />
             </ScrollView>
             {renderWrappedModal()}
+
+            {/* Edit Profile Modal */}
+            <Modal
+                visible={editing}
+                animationType="slide"
+                presentationStyle="pageSheet"
+            >
+                <SafeAreaView style={styles.modalContainer} edges={['top']}>
+                    <View style={styles.modalHeader}>
+                        <Pressable onPress={() => setEditing(false)}>
+                            <Text style={styles.modalCancel}>Cancel</Text>
+                        </Pressable>
+                        <Text style={styles.modalTitle}>Edit Profile</Text>
+                        <Pressable onPress={handleSave}>
+                            <Text style={styles.modalSave}>Save</Text>
+                        </Pressable>
+                    </View>
+
+                    <KeyboardAvoidingView
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                        style={{ flex: 1 }}
+                    >
+                        <ScrollView
+                            style={styles.modalScroll}
+                            keyboardShouldPersistTaps="handled"
+                        >
+                            <View style={styles.modalContent}>
+                                <Text style={styles.modalLabel}>Name</Text>
+                                <TextInput
+                                    style={styles.modalInput}
+                                    value={newName}
+                                    onChangeText={setNewName}
+                                    placeholder="Your name"
+                                    placeholderTextColor="#999"
+                                />
+
+                                <Text style={styles.modalLabel}>Bio</Text>
+                                <TextInput
+                                    style={[styles.modalInput, styles.modalTextArea]}
+                                    value={newBio}
+                                    onChangeText={setNewBio}
+                                    placeholder="Short bio..."
+                                    placeholderTextColor="#999"
+                                    multiline
+                                    numberOfLines={3}
+                                />
+
+                                <Text style={styles.modalLabel}>Timezone</Text>
+                                {/* Selected Timezone always visible */}
+                                {newTimezone ? (
+                                    <View style={[styles.languageChips, { marginBottom: 8 }]}>
+                                        <Pressable
+                                            style={[styles.languageChip, styles.languageChipSelected]}
+                                            onPress={() => setNewTimezone('')}
+                                        >
+                                            <Text style={[styles.languageChipText, styles.languageChipTextSelected]}>
+                                                {newTimezone} ✕
+                                            </Text>
+                                        </Pressable>
+                                    </View>
+                                ) : null}
+
+                                <TextInput
+                                    style={[styles.modalInput, { marginBottom: 12 }]}
+                                    value={timezoneSearch}
+                                    onChangeText={setTimezoneSearch}
+                                    placeholder="Start typing timezone..."
+                                    placeholderTextColor="#999"
+                                />
+                                <View style={styles.languageChips}>
+                                    {(() => {
+                                        // Only show search results if user is typing
+                                        if (!timezoneSearch) return null;
+
+                                        const filtered = availableTimezones.filter(tz =>
+                                            tz.toLowerCase().includes(timezoneSearch.toLowerCase())
+                                        );
+
+                                        const toShow = filtered.slice(0, 3);
+
+                                        return (
+                                            <>
+                                                {toShow.map(tz => (
+                                                    <Pressable
+                                                        key={tz}
+                                                        style={styles.languageChip}
+                                                        onPress={() => {
+                                                            setNewTimezone(tz);
+                                                            setTimezoneSearch(''); // Clear search after select
+                                                        }}
+                                                    >
+                                                        <Text style={styles.languageChipText}>
+                                                            {tz}
+                                                        </Text>
+                                                    </Pressable>
+                                                ))}
+                                            </>
+                                        );
+                                    })()}
+                                </View>
+
+                                <Text style={styles.modalLabel}>Fluent Languages</Text>
+                                {/* Selected Languages always visible */}
+                                {newLanguages.length > 0 && (
+                                    <View style={[styles.languageChips, { marginBottom: 8 }]}>
+                                        {newLanguages.map(lang => (
+                                            <Pressable
+                                                key={lang}
+                                                style={[styles.languageChip, styles.languageChipSelected]}
+                                                onPress={() => setNewLanguages(newLanguages.filter(l => l !== lang))}
+                                            >
+                                                <Text style={[styles.languageChipText, styles.languageChipTextSelected]}>
+                                                    {lang} ✕
+                                                </Text>
+                                            </Pressable>
+                                        ))}
+                                    </View>
+                                )}
+
+                                <TextInput
+                                    style={[styles.modalInput, { marginBottom: 12 }]}
+                                    value={languageSearch}
+                                    onChangeText={setLanguageSearch}
+                                    placeholder="Start typing..."
+                                    placeholderTextColor="#999"
+                                />
+                                <View style={styles.languageChips}>
+                                    {(() => {
+                                        // Filter out already selected ones from search results
+                                        const filtered = availableLanguages.filter(lang =>
+                                            !newLanguages.includes(lang) &&
+                                            lang.toLowerCase().includes(languageSearch.toLowerCase())
+                                        );
+                                        // Only show search results if user is typing
+                                        if (!languageSearch) return null;
+
+                                        const toShow = filtered.slice(0, 3);
+
+                                        return (
+                                            <>
+                                                {toShow.map(lang => (
+                                                    <Pressable
+                                                        key={lang}
+                                                        style={styles.languageChip}
+                                                        onPress={() => {
+                                                            setNewLanguages([...newLanguages, lang]);
+                                                            setLanguageSearch(''); // Clear search after adding
+                                                        }}
+                                                    >
+                                                        <Text style={styles.languageChipText}>
+                                                            {lang}
+                                                        </Text>
+                                                    </Pressable>
+                                                ))}
+                                            </>
+                                        );
+                                    })()}
+                                </View>
+
+                                <Text style={styles.modalLabel}>Learning</Text>
+                                {/* Selected Learning Languages always visible */}
+                                {newLearning.length > 0 && (
+                                    <View style={[styles.languageChips, { marginBottom: 8 }]}>
+                                        {newLearning.map(lang => (
+                                            <Pressable
+                                                key={lang}
+                                                style={[styles.languageChip, styles.languageChipSelected]}
+                                                onPress={() => setNewLearning(newLearning.filter(l => l !== lang))}
+                                            >
+                                                <Text style={[styles.languageChipText, styles.languageChipTextSelected]}>
+                                                    {lang} ✕
+                                                </Text>
+                                            </Pressable>
+                                        ))}
+                                    </View>
+                                )}
+
+                                <TextInput
+                                    style={[styles.modalInput, { marginBottom: 12 }]}
+                                    value={learningSearch}
+                                    onChangeText={setLearningSearch}
+                                    placeholder="Start typing..."
+                                    placeholderTextColor="#999"
+                                />
+                                <View style={styles.languageChips}>
+                                    {(() => {
+                                        // Filter out already selected ones from search results
+                                        const filtered = availableLanguages.filter(lang =>
+                                            !newLearning.includes(lang) &&
+                                            lang.toLowerCase().includes(learningSearch.toLowerCase())
+                                        );
+                                        // Only show search results if user is typing
+                                        if (!learningSearch) return null;
+
+                                        const toShow = filtered.slice(0, 3);
+
+                                        return (
+                                            <>
+                                                {toShow.map(lang => (
+                                                    <Pressable
+                                                        key={lang}
+                                                        style={styles.languageChip}
+                                                        onPress={() => {
+                                                            setNewLearning([...newLearning, lang]);
+                                                            setLearningSearch(''); // Clear search after adding
+                                                        }}
+                                                    >
+                                                        <Text style={styles.languageChipText}>
+                                                            {lang}
+                                                        </Text>
+                                                    </Pressable>
+                                                ))}
+                                            </>
+                                        );
+                                    })()}
+                                </View>
+
+                                <View style={{ height: 100 }} />
+                            </View>
+                        </ScrollView>
+                    </KeyboardAvoidingView>
+                </SafeAreaView>
+            </Modal>
 
             {/* Levels Info Modal */}
             <Modal
@@ -1512,5 +1736,87 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         fontStyle: 'italic',
         marginTop: 8,
+    },
+    // Edit Modal Styles
+    modalContainer: {
+        flex: 1,
+        backgroundColor: SOUP_COLORS.cream,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.1)',
+        backgroundColor: '#fff',
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: SOUP_COLORS.text,
+    },
+    modalCancel: {
+        fontSize: 16,
+        color: SOUP_COLORS.subtext,
+    },
+    modalSave: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: SOUP_COLORS.blue,
+    },
+    modalScroll: {
+        flex: 1,
+    },
+    modalContent: {
+        padding: 20,
+    },
+    modalLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: SOUP_COLORS.text,
+        marginBottom: 8,
+        marginTop: 16,
+    },
+    modalInput: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        padding: 14,
+        fontSize: 16,
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.1)',
+    },
+    modalTextArea: {
+        minHeight: 80,
+        textAlignVertical: 'top',
+    },
+    modalRow: {
+        flexDirection: 'row',
+    },
+    languageChips: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginTop: 4,
+    },
+    languageChip: {
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 20,
+        backgroundColor: '#fff',
+        borderWidth: 2,
+        borderColor: SOUP_COLORS.blue,
+    },
+    languageChipSelected: {
+        backgroundColor: SOUP_COLORS.blue,
+    },
+    languageChipText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: SOUP_COLORS.blue,
+    },
+    languageChipTextSelected: {
+        color: '#fff',
     },
 });

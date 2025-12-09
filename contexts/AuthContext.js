@@ -1,7 +1,11 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '../lib/supabase';
 import { useRouter, useSegments, useRootNavigationState } from 'expo-router';
+
+// Warm up the browser to improve startup time
+WebBrowser.maybeCompleteAuthSession();
 
 const AuthContext = createContext({});
 
@@ -32,39 +36,47 @@ export const AuthProvider = ({ children }) => {
         return () => subscription.unsubscribe();
     }, []);
 
+    const setSessionFromUrl = async (url) => {
+        if (!url) return;
+
+        try {
+            // Parse Supabase URL (hash or query params)
+            // Format: ...#access_token=...&refresh_token=...
+            // Or: ...?access_token=...&refresh_token=...
+
+            const getParam = (name) => {
+                const regex = new RegExp(`[#?&]${name}=([^&]*)`);
+                const results = regex.exec(url);
+                return results ? decodeURIComponent(results[1]) : null;
+            };
+
+            const access_token = getParam('access_token');
+            const refresh_token = getParam('refresh_token');
+
+            if (access_token && refresh_token) {
+                const { error } = await supabase.auth.setSession({
+                    access_token,
+                    refresh_token,
+                });
+                if (error) console.error('Error setting session:', error);
+            }
+        } catch (err) {
+            console.error('Error parsing session from URL:', err);
+        }
+    };
+
     // Protected Route Logic
     useEffect(() => {
-        // Handle deep links for Magic Link login
+        // Handle deep links for OAuth login (if browser redirects automatically)
         const handleDeepLink = (event) => {
-            let url = event.url;
-            if (!url) return;
-
-            // Parse the URL to see if it contains auth tokens
-            // Supabase magic links usually come as: languagesoup://login-callback#access_token=...&refresh_token=...
-            if (url.includes('access_token') && url.includes('refresh_token')) {
-                const getParam = (name) => {
-                    const regex = new RegExp(`[#?&]${name}=([^&]*)`);
-                    const results = regex.exec(url);
-                    return results ? decodeURIComponent(results[1]) : null;
-                };
-
-                const access_token = getParam('access_token');
-                const refresh_token = getParam('refresh_token');
-
-                if (access_token && refresh_token) {
-                    supabase.auth.setSession({
-                        access_token,
-                        refresh_token,
-                    }).catch(err => console.error('Error setting session from URL:', err));
-                }
-            }
+            if (event.url) setSessionFromUrl(event.url);
         };
 
         const subscription = Linking.addEventListener('url', handleDeepLink);
 
         // Check for initial URL if app was opened via link
         Linking.getInitialURL().then((url) => {
-            if (url) handleDeepLink({ url });
+            if (url) setSessionFromUrl(url);
         });
 
         return () => {
@@ -91,8 +103,6 @@ export const AuthProvider = ({ children }) => {
             if (currentRoute === 'login' || currentRoute === 'index' || !currentRoute) {
                 checkProfileAndRedirect(user, true, false);
             }
-            // We allow staying on 'how-it-works' even if logged in, 
-            // but 'onboarding' is handled by checkProfileAndRedirect logic
         }
     }, [user, loading, segments]);
 
@@ -119,8 +129,62 @@ export const AuthProvider = ({ children }) => {
             }
         } catch (error) {
             console.error('Error checking profile:', error);
-            // Fallback to tabs if error, to avoid getting stuck
             if (inAuthGroup) router.replace('/(tabs)');
+        }
+    };
+
+    // GOOGLE AUTH - Commented out until Apple Developer account is approved
+    // Uncomment when ready to use with TestFlight/Production builds
+    /*
+    const signInWithGoogle = async () => {
+        try {
+            const redirectUrl = Linking.createURL('login-callback', { scheme: 'languagesoup' });
+            console.log('Using Redirect URL:', redirectUrl);
+
+            const { data, error } = await supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: {
+                    queryParams: {
+                        access_type: 'offline',
+                        prompt: 'consent',
+                    },
+                    redirectTo: redirectUrl,
+                    skipBrowserRedirect: true,
+                },
+            });
+
+            if (error) throw error;
+
+            if (data?.url) {
+                const result = await WebBrowser.openAuthSessionAsync(
+                    data.url,
+                    redirectUrl
+                );
+
+                if (result.type === 'success' && result.url) {
+                    await setSessionFromUrl(result.url);
+                }
+            }
+
+            return { success: true };
+        } catch (error) {
+            console.error('Google login error:', error);
+            throw error;
+        }
+    };
+    */
+
+    // EMAIL AUTH - Active for Expo Go testing
+    const signInWithMagicLink = async (email) => {
+        try {
+            const { error } = await supabase.auth.signInWithOtp({
+                email,
+            });
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            console.error('Magic link error:', error);
+            throw error;
         }
     };
 
@@ -139,40 +203,27 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const signInWithMagicLink = async (email) => {
-        try {
-            const { error } = await supabase.auth.signInWithOtp({
-                email,
-                // No options = defaults to 6-digit OTP code
-            });
-            if (error) throw error;
-            return { success: true };
-        } catch (error) {
-            console.error('Magic link error:', error);
-            throw error;
-        }
-    };
-
     const signInWithGuest = async () => {
         try {
-            // For guest access, we'll create an anonymous user
-            // In Supabase, we can enable anonymous sign-ins, or just create a random email/pass
-            // For simplicity and speed without configuring Supabase dashboard right now,
-            // we will create a random "guest" account.
-
-            const guestId = Math.random().toString(36).substring(7);
-            const email = `guest_${guestId}@languagesoup.app`;
-            const password = `guest_${guestId}_secret`;
-
-            const { data, error } = await supabase.auth.signUp({
-                email,
-                password,
-            });
-
+            const { data, error } = await supabase.auth.signInAnonymously();
             if (error) throw error;
             return data;
         } catch (error) {
             console.error('Guest login failed:', error);
+            throw error;
+        }
+    };
+
+    const signInWithPassword = async (email, password) => {
+        try {
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            });
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('Password login failed:', error);
             throw error;
         }
     };
@@ -187,9 +238,11 @@ export const AuthProvider = ({ children }) => {
             user,
             session,
             loading,
-            signInWithGuest,
             signInWithMagicLink,
             verifyOtp,
+            signInWithGuest,
+            signInWithPassword,
+            // signInWithGoogle, // Commented out - uncomment when using TestFlight
             signOut
         }}>
             {!loading && children}

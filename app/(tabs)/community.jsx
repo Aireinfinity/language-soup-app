@@ -14,6 +14,8 @@ const SOUP_COLORS = {
     text: '#2d3436',
     subtext: '#636e72',
     card: '#ffffff',
+    red: '#FF3B30',
+    yellow: '#FFCC00',
 };
 
 export default function CommunityScreen() {
@@ -23,6 +25,8 @@ export default function CommunityScreen() {
     const [memberCount, setMemberCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [expandedAnnouncements, setExpandedAnnouncements] = useState({});
+
+    const [knownIssues, setKnownIssues] = useState([]);
 
     useEffect(() => {
         loadData();
@@ -38,6 +42,18 @@ export default function CommunityScreen() {
                 .order('created_at', { ascending: false })
                 .limit(5);
             setAnnouncements(announcementData || []);
+
+            // Load Known Issues
+            const { data: issuesData } = await supabase
+                .from('app_support_messages')
+                .select('id, title, priority, category, status')
+                .eq('public_visible', true)
+                .neq('status', 'fixed')
+                .order('created_at', { ascending: false })
+                .limit(10); // Limit to avoid clutter? Or fetch all? User said "put based on tickets". Let's show 10.
+
+            // Actually, let's show all open public issues but maybe limit if too many.
+            setKnownIssues(issuesData || []);
 
             // Load active groups (by member count)
             const { data: groupData } = await supabase
@@ -66,6 +82,16 @@ export default function CommunityScreen() {
                 <Megaphone size={14} color="#fff" />
             </View>
             <Text style={styles.announcementText} numberOfLines={2}>{item.content}</Text>
+        </View>
+    );
+
+    const renderIssue = ({ item }) => (
+        <View style={styles.issueCard}>
+            <View style={[styles.issueBadge, { backgroundColor: getPriorityColor(item.priority) }]}>
+                <Text style={styles.issueBadgeText}>{item.priority || 'Bug'}</Text>
+            </View>
+            <Text style={styles.issueTitle} numberOfLines={2}>{item.title || 'Untitled Issue'}</Text>
+            <Text style={styles.issueStatus}>{item.status}</Text>
         </View>
     );
 
@@ -121,7 +147,20 @@ export default function CommunityScreen() {
                     <ChevronRight size={24} color={SOUP_COLORS.subtext} />
                 </Pressable>
 
-
+                {/* Known Issues / Roadmap */}
+                {knownIssues.length > 0 && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>🛠️ Bugs we're working on</Text>
+                        <FlatList
+                            data={knownIssues}
+                            renderItem={renderIssue}
+                            keyExtractor={item => item.id}
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.groupsList}
+                        />
+                    </View>
+                )}
 
                 {/* Active Groups */}
                 <View style={styles.section}>
@@ -383,4 +422,49 @@ const styles = StyleSheet.create({
         marginTop: 6,
         marginBottom: 4,
     },
+
+    // Issue Cards
+    issueCard: {
+        backgroundColor: '#fff',
+        width: 160,
+        padding: 12,
+        borderRadius: 16,
+        marginRight: 12,
+        justifyContent: 'space-between',
+        height: 110,
+    },
+    issueBadge: {
+        alignSelf: 'flex-start',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 8,
+        marginBottom: 8,
+    },
+    issueBadgeText: {
+        color: '#fff',
+        fontSize: 10,
+        fontWeight: '700',
+    },
+    issueTitle: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: SOUP_COLORS.text,
+        lineHeight: 18,
+        flex: 1,
+    },
+    issueStatus: {
+        fontSize: 11,
+        color: SOUP_COLORS.subtext,
+        marginTop: 6,
+        textTransform: 'capitalize',
+    },
 });
+
+function getPriorityColor(p) {
+    switch (p) {
+        case 'P0': return SOUP_COLORS.red || '#FF3B30';
+        case 'P1': return SOUP_COLORS.yellow || '#FFCC00';
+        case 'P2': return SOUP_COLORS.green || '#19b091';
+        default: return '#ccc';
+    }
+}

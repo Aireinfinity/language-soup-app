@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Text, TextInput, KeyboardAvoidingView, Platform, StatusBar, Image } from 'react-native';
+import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Text, TextInput, KeyboardAvoidingView, Platform, StatusBar, Image, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { ArrowLeft, Send, Mic, X, Trash2, Square, ChevronLeft, MoreVertical, Check, Clock, Globe } from 'lucide-react-native';
@@ -66,28 +66,58 @@ function MessageBubble({ message, isMe }) {
 
     return (
         <View style={[styles.messageRow, isMe ? styles.rowMe : styles.rowThem]}>
-            {!isMe && (
-                <View style={styles.avatarContainer}>
-                    {message.sender?.avatar_url ? (
-                        <Image source={{ uri: message.sender.avatar_url }} style={styles.avatar} />
-                    ) : (
-                        <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                            <Text style={styles.avatarText}>
-                                {message.sender?.display_name?.charAt(0).toUpperCase() || '?'}
-                            </Text>
-                        </View>
-                    )}
-                </View>
-            )}
+            {/* Avatar now shown for everyone, me and them */}
+            <View style={[styles.avatarContainer, isMe && { order: 2, marginLeft: 8, marginRight: 0 }]}>
+                {message.sender?.avatar_url ? (
+                    <Image source={{ uri: message.sender.avatar_url }} style={styles.avatar} />
+                ) : (
+                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                        <Text style={styles.avatarText}>
+                            {message.sender?.display_name?.charAt(0).toUpperCase() || '?'}
+                        </Text>
+                    </View>
+                )}
+            </View>
 
             <View style={[
                 styles.bubble,
                 message.message_type === 'voice' && styles.bubbleVoice,
                 isMe ? styles.bubbleMe : styles.bubbleThem,
-                isSending && styles.bubbleSending
+                isSending && styles.bubbleSending,
+                isMe && { marginRight: 0, order: 1 } // Flex order doesn't work like this in RN usually, handled by rowMe
             ]}>
                 {!isMe && message.sender && (
-                    <Text style={styles.senderName}>{message.sender.display_name}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                        <Text style={styles.senderName}>{message.sender.display_name}</Text>
+                        {message.sender.fluent_languages && message.sender.fluent_languages.slice(0, 2).map((lang, idx) => (
+                            <View key={idx} style={{
+                                backgroundColor: 'rgba(255,255,255,0.2)',
+                                borderRadius: 4,
+                                paddingHorizontal: 4,
+                                paddingVertical: 1,
+                                marginLeft: 4
+                            }}>
+                                <Text style={{ fontSize: 9, color: '#fff', opacity: 0.9 }}>{lang}</Text>
+                            </View>
+                        ))}
+                    </View>
+                )}
+
+                {/* Show languages for Me too? user said "let the user see their own avatar/ photo when they send a text" and "based on the languages a user has in their profile can u put them on their texts" */}
+                {isMe && message.sender && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2, justifyContent: 'flex-end' }}>
+                        {message.sender.fluent_languages && message.sender.fluent_languages.slice(0, 2).map((lang, idx) => (
+                            <View key={idx} style={{
+                                backgroundColor: 'rgba(255,255,255,0.3)',
+                                borderRadius: 4,
+                                paddingHorizontal: 4,
+                                paddingVertical: 1,
+                                marginLeft: 4
+                            }}>
+                                <Text style={{ fontSize: 9, color: '#fff', fontWeight: '600' }}>{lang}</Text>
+                            </View>
+                        ))}
+                    </View>
                 )}
 
                 {message.message_type === 'voice' ? (
@@ -127,18 +157,81 @@ export default function ChatScreen() {
     const [allChallenges, setAllChallenges] = useState([]);
     const [visibleChallenge, setVisibleChallenge] = useState(null);
     const [typingUsers, setTypingUsers] = useState({});
+    const [recordingUsers, setRecordingUsers] = useState({});
+    const [userProfile, setUserProfile] = useState(null);
+
+    useEffect(() => {
+        if (user) {
+            loadChatData();
+            loadUserProfile();
+        }
+    }, [groupId, user]);
+
+    const loadUserProfile = async () => {
+        const { data } = await supabase
+            .from('app_users')
+            .select('display_name, avatar_url, fluent_languages')
+            .eq('id', user.id)
+            .single();
+        setUserProfile(data);
+    };
 
     const {
         isRecording,
         isPaused,
         recordingDuration,
         metering,
-        startRecording,
+        startRecording: startRecordingOriginal,
         stopRecording,
         cancelRecording,
         pauseRecording,
         resumeRecording
     } = useVoiceRecorder();
+
+    const startRecording = async () => {
+        await startRecordingOriginal();
+
+        // Broadcast recording status
+        if (channelRef.current && userProfile) {
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'recording',
+                payload: {
+                    user_id: user.id,
+                    display_name: userProfile?.display_name || 'Someone',
+                    avatar_url: userProfile?.avatar_url
+                }
+            });
+        }
+    };
+
+    const handleStopRecording = async () => {
+        const result = await stopRecording();
+
+        // Broadcast stop recording
+        if (channelRef.current) {
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'recording_stop',
+                payload: { user_id: user.id }
+            });
+        }
+
+        return result;
+    };
+
+    const handleCancelRecording = async () => {
+        await cancelRecording();
+
+        // Broadcast stop recording
+        if (channelRef.current) {
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'recording_stop',
+                payload: { user_id: user.id }
+            });
+        }
+    };
 
     useEffect(() => {
         if (user) {
@@ -161,7 +254,7 @@ export default function ChatScreen() {
 
                 const { data: sender } = await supabase
                     .from('app_users')
-                    .select('display_name, avatar_url')
+                    .select('display_name, avatar_url, fluent_languages')
                     .eq('id', payload.new.sender_id)
                     .single();
 
@@ -176,6 +269,7 @@ export default function ChatScreen() {
                     ...prev,
                     [payload.user_id]: {
                         display_name: payload.display_name,
+                        avatar_url: payload.avatar_url,
                         timestamp: Date.now()
                     }
                 }));
@@ -186,7 +280,54 @@ export default function ChatScreen() {
                         delete updated[payload.user_id];
                         return updated;
                     });
-                }, 3000);
+                }, 10000); // 10 seconds for typing
+            })
+            .on('broadcast', { event: 'recording' }, ({ payload }) => {
+                if (payload.user_id === user.id) return;
+
+                setRecordingUsers(prev => ({
+                    ...prev,
+                    [payload.user_id]: {
+                        display_name: payload.display_name,
+                        avatar_url: payload.avatar_url,
+                        timestamp: Date.now()
+                    }
+                }));
+
+                setTimeout(() => {
+                    setRecordingUsers(prev => {
+                        const updated = { ...prev };
+                        delete updated[payload.user_id];
+                        return updated;
+                    });
+                }, 5000);
+            })
+            .on('broadcast', { event: 'recording_stop' }, ({ payload }) => {
+                if (payload.user_id === user.id) return;
+                setRecordingUsers(prev => {
+                    const updated = { ...prev };
+                    delete updated[payload.user_id];
+                    return updated;
+                });
+            })
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'app_challenges',
+                filter: `group_id=eq.${groupId}`
+            }, async (payload) => {
+                // New challenge added - reload challenges
+                const { data: challenges } = await supabase
+                    .from('app_challenges')
+                    .select('id, prompt_text, created_at')
+                    .eq('group_id', groupId)
+                    .order('created_at', { ascending: false });
+
+                if (challenges && challenges.length > 0) {
+                    setAllChallenges(challenges);
+                    setCurrentChallenge(challenges[0]);
+                    setVisibleChallenge(challenges[0]);
+                }
             })
             .subscribe();
 
@@ -226,7 +367,7 @@ export default function ChatScreen() {
                     .from('app_messages')
                     .select(`
                         *,
-                        sender:app_users!sender_id(display_name, avatar_url)
+                        sender:app_users!sender_id(display_name, avatar_url, fluent_languages)
                     `)
                     .eq('group_id', groupId)
                     .order('created_at', { ascending: true });
@@ -260,7 +401,11 @@ export default function ChatScreen() {
             content: messageText,
             created_at: new Date().toISOString(),
             status: 'sending',
-            sender: { display_name: user.user_metadata?.display_name || 'Me' }
+            sender: {
+                display_name: userProfile?.display_name || user.user_metadata?.display_name || 'Me',
+                avatar_url: userProfile?.avatar_url,
+                fluent_languages: userProfile?.fluent_languages || []
+            }
         };
 
         setMessages(prev => [...prev, optimisticMessage]);
@@ -286,6 +431,11 @@ export default function ChatScreen() {
             ));
         } catch (error) {
             console.error('Send failed:', error);
+            Alert.alert(
+                'Message Failed',
+                'Could not send message. Please check your connection and try again.',
+                [{ text: 'OK' }]
+            );
             setMessages(prev => prev.filter(msg => msg.id !== tempId));
             setTextInput(messageText);
         } finally {
@@ -294,7 +444,7 @@ export default function ChatScreen() {
     };
 
     const handleSendVoice = async () => {
-        const uri = await stopRecording();
+        const uri = await handleStopRecording();
         if (uri) await sendVoiceMemo(uri);
     };
 
@@ -357,6 +507,11 @@ export default function ChatScreen() {
             ));
         } catch (error) {
             console.error('Voice upload failed:', error);
+            Alert.alert(
+                'Voice Message Failed',
+                'Could not upload voice message. Please check your connection and try again.',
+                [{ text: 'OK' }]
+            );
             setMessages(prev => prev.filter(msg => msg.id !== tempId));
         }
     };
@@ -366,21 +521,23 @@ export default function ChatScreen() {
         if (!channelRef.current || !user) return;
 
         const now = Date.now();
-        if (now - lastTypingSent.current > 2000) {
+        if (now - lastTypingSent.current > 3000) {
             lastTypingSent.current = now;
             channelRef.current.send({
                 type: 'broadcast',
                 event: 'typing',
                 payload: {
                     user_id: user.id,
-                    display_name: user.user_metadata?.display_name || 'Someone'
+                    display_name: userProfile?.display_name || 'Someone',
+                    avatar_url: userProfile?.avatar_url
                 }
             });
         }
     };
 
     const scrollToBottom = () => {
-        flatListRef.current?.scrollToEnd({ animated: true });
+        // For inverted list, offset 0 is the bottom (most recent)
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     };
 
     const renderMessage = ({ item }) => {
@@ -399,21 +556,49 @@ export default function ChatScreen() {
     };
 
     const typingIndicator = () => {
-        const ids = Object.keys(typingUsers);
-        if (ids.length === 0) return null;
+        // Check for recording first, then typing
+        const recordingIds = Object.keys(recordingUsers);
+        const typingIds = Object.keys(typingUsers);
 
-        const name = typingUsers[ids[0]].display_name;
-        const others = ids.length - 1;
-        const text = others > 0 ? `${name} and ${others} others are typing...` : `${name} is typing...`;
+        if (recordingIds.length === 0 && typingIds.length === 0) return null;
+
+        const isRecording = recordingIds.length > 0;
+        const firstUser = isRecording ? recordingUsers[recordingIds[0]] : typingUsers[typingIds[0]];
 
         return (
             <View style={styles.typingIndicator}>
-                <Text style={styles.typingText}>{text}</Text>
+                {/* Avatar */}
+                <View style={styles.typingAvatarContainer}>
+                    {firstUser.avatar_url ? (
+                        <Image source={{ uri: firstUser.avatar_url }} style={styles.typingAvatar} />
+                    ) : (
+                        <View style={[styles.typingAvatar, styles.avatarPlaceholder]}>
+                            <Text style={styles.avatarText}>
+                                {firstUser.display_name?.charAt(0).toUpperCase() || '?'}
+                            </Text>
+                        </View>
+                    )}
+                </View>
+
+                {/* Animated dots or mic */}
+                <View style={styles.typingBubble}>
+                    {isRecording ? (
+                        <Mic size={16} color="#8E8E93" />
+                    ) : (
+                        <View style={styles.typingDots}>
+                            <View style={[styles.dot, styles.dot1]} />
+                            <View style={[styles.dot, styles.dot2]} />
+                            <View style={[styles.dot, styles.dot3]} />
+                        </View>
+                    )}
+                </View>
             </View>
         );
     };
 
-    const messagesWithDates = addDateSeparators(messages);
+
+    const messagesWithDates = [...addDateSeparators(messages)].reverse();
+
 
     if (loading) {
         return (
@@ -458,7 +643,7 @@ export default function ChatScreen() {
 
             {visibleChallenge && (
                 <View style={[styles.challengeBanner, { top: insets.top + 65 }]}>
-                    <Text style={styles.challengeLabel}>Current Challenge</Text>
+                    <Text style={styles.challengeHashtag}>#challenge</Text>
                     <Text style={styles.challengeText}>{visibleChallenge.prompt_text}</Text>
                 </View>
             )}
@@ -474,6 +659,7 @@ export default function ChatScreen() {
                     renderItem={renderMessage}
                     keyExtractor={(item) => item.id}
                     inverted={true}
+                    initialScrollIndex={0}
                     contentContainerStyle={[
                         styles.messagesList,
                         { paddingTop: 20, paddingBottom: insets.top + (currentChallenge ? 130 : 70) }
@@ -498,7 +684,7 @@ export default function ChatScreen() {
                 <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
                     {isRecording ? (
                         <View style={styles.recordingBar}>
-                            <Pressable onPress={cancelRecording} style={styles.cancelButton}>
+                            <Pressable onPress={handleCancelRecording} style={styles.cancelButton}>
                                 <Trash2 size={22} color="#FF3B30" />
                             </Pressable>
 
@@ -532,7 +718,7 @@ export default function ChatScreen() {
 
                             {textInput.trim() ? (
                                 <Pressable onPress={sendMessage} disabled={sending} style={styles.sendButton}>
-                                    <Send size={24} color={Colors.primary} />
+                                    <Send size={24} color="#fff" />
                                 </Pressable>
                             ) : (
                                 <View style={styles.micContainer}>
@@ -625,19 +811,18 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 3,
     },
-    challengeLabel: {
-        fontSize: 10,
+    challengeHashtag: {
+        fontSize: 12,
         fontWeight: '700',
         color: SOUP_COLORS.blue,
-        textTransform: 'uppercase',
-        letterSpacing: 0.5,
-        marginBottom: 4,
+        marginBottom: 6,
     },
     challengeText: {
         fontSize: 14,
-        lineHeight: 18,
+        lineHeight: 20,
         color: '#000',
         fontWeight: '500',
+        paddingLeft: 12,
     },
     keyboardView: {
         flex: 1,
@@ -747,13 +932,46 @@ const styles = StyleSheet.create({
         marginLeft: 2,
     },
     typingIndicator: {
-        paddingHorizontal: 20,
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        paddingHorizontal: 16,
         paddingVertical: 8,
+        marginBottom: 4,
     },
-    typingText: {
-        fontSize: 13,
-        color: Colors.textLight,
-        fontStyle: 'italic',
+    typingAvatarContainer: {
+        marginRight: 8,
+    },
+    typingAvatar: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+    },
+    typingBubble: {
+        backgroundColor: '#fff',
+        borderRadius: 18,
+        borderBottomLeftRadius: 4,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+    },
+    typingDots: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    dot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#8E8E93',
+    },
+    dot1: {
+        opacity: 0.4,
+    },
+    dot2: {
+        opacity: 0.6,
+    },
+    dot3: {
+        opacity: 0.8,
     },
     inputContainer: {
         backgroundColor: SOUP_COLORS.cream,

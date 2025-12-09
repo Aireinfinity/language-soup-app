@@ -333,7 +333,7 @@ export default function HomeScreen() {
             )}
 
             {/* Floating Support Button (for non-admin users) */}
-            {user?.role !== 'admin' && (
+            {!isAdmin && (
                 <FloatingSupportButton
                     onPress={() => router.push('/support-chat')}
                 />

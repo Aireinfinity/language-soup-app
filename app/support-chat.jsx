@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, FlatList, TextInput, KeyboardAvoidingView, Plat
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
-import { ChevronLeft, Send, Mic, Trash2 } from 'lucide-react-native';
+import { ChevronLeft, Send, Mic, Trash2, AlertCircle } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { AudioMessage } from '../components/AudioMessage';
@@ -17,6 +17,7 @@ const SOUP_COLORS = {
     blue: '#00adef',
     pink: '#ec008b',
     cream: '#FDF5E6',
+    green: '#2ecc71',
 };
 
 // Date separator helper
@@ -258,24 +259,25 @@ export default function SupportChatScreen() {
     }
 
     return (
-        <View style={styles.container}>
-            <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
-
-            {/* Header */}
-            <BlurView intensity={80} tint="light" style={[styles.header, { paddingTop: insets.top }]}>
-                <View style={styles.headerContent}>
-                    <Pressable onPress={() => router.back()} style={styles.backButton}>
-                        <ChevronLeft size={30} color={Colors.primary} />
-                    </Pressable>
-
-                    <View style={styles.headerInfo}>
-                        <Text style={styles.headerTitle}>Chat with Noah</Text>
-                        <Text style={styles.headerSubtitle}>Support • 24/7</Text>
+        <SafeAreaView style={styles.container} edges={['top']}>
+            <View style={styles.header}>
+                <Pressable onPress={() => router.back()} style={styles.backButton}>
+                    <ChevronLeft size={28} color={SOUP_COLORS.blue} />
+                </Pressable>
+                <View>
+                    <Text style={styles.headerTitle}>Get Help</Text>
+                    <View style={styles.statusBadge}>
+                        <View style={styles.statusDot} />
+                        <Text style={styles.statusText}>Usually responds in a few hours</Text>
                     </View>
-
-                    <View style={{ width: 30 }} />
                 </View>
-            </BlurView>
+            </View>
+
+            <View style={styles.noticeBar}>
+                <Text style={styles.noticeText}>
+                    hey! i'm noah, i check messages 3x daily (morning, afternoon, evening). usually respond within a few hours 🍜
+                </Text>
+            </View>
 
             <KeyboardAvoidingView
                 style={styles.keyboardView}
@@ -289,7 +291,7 @@ export default function SupportChatScreen() {
                     keyExtractor={item => item.id}
                     contentContainerStyle={[
                         styles.messagesList,
-                        { paddingTop: insets.top + 70, paddingBottom: 20 }
+                        { paddingBottom: 20 }
                     ]}
                     onContentSizeChange={() => scrollToBottom()}
                     ListHeaderComponent={
@@ -344,7 +346,7 @@ export default function SupportChatScreen() {
                     )}
                 </View>
             </KeyboardAvoidingView>
-        </View>
+        </SafeAreaView>
     );
 }
 
@@ -387,13 +389,50 @@ const styles = StyleSheet.create({
     },
     headerTitle: {
         fontSize: 17,
-        fontWeight: '600',
+        fontWeight: '700',
         color: '#000',
+        textAlign: 'center',
+    },
+    statusBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 2,
+    },
+    statusDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: SOUP_COLORS.green, // Assuming green exists or hardcode #34C759
+        marginRight: 4,
+    },
+    statusText: {
+        fontSize: 11,
+        color: '#636e72',
+        fontWeight: '500',
+    },
+    noticeBar: {
+        backgroundColor: '#fff',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: 'rgba(0,0,0,0.05)',
+    },
+    noticeText: {
+        fontSize: 13,
+        color: '#636e72',
+        lineHeight: 18,
+        textAlign: 'center',
     },
     headerSubtitle: {
         fontSize: 12,
         color: '#8E8E93',
         marginTop: 1,
+    },
+    knownIssuesButton: {
+        padding: 4,
+        width: 30,
+        alignItems: 'center',
     },
 
     // Messages
