@@ -90,31 +90,31 @@ export default function ProfileScreen() {
                     'Arabic (Modern Standard)', 'Arabic (Egyptian)', 'Arabic (Levantine)', 'Arabic (Gulf)', 'Arabic (Maghrebi)', 'Arabic (Sudanese)',
                     'Armenian', 'Assamese', 'Aymara', 'Azerbaijani',
                     'Bambara', 'Basque', 'Belarusian', 'Bengali', 'Bhojpuri', 'Bosnian', 'Breton', 'Bulgarian', 'Burmese',
-                    'Catalan', 'Cantonese', 'Cebuano', 'Cherokee', 'Chewa', 'Chinese (Mandarin)', 'Chinese (Hakka)', 'Chinese (Hokkien)', 'Chinese (Wu)',
+                    'Catalan', 'Cantonese', 'Cebuano', 'Cherokee', 'Chewa', 'Chinese (Mandarin) / 中文', 'Chinese (Hakka)', 'Chinese (Hokkien)', 'Chinese (Wu)',
                     'Corsican', 'Cree', 'Croatian', 'Czech',
-                    'Danish', 'Dari', 'Divehi', 'Dogri', 'Dutch',
+                    'Danish', 'Dari', 'Divehi', 'Dogri', 'Dutch / Nederlands',
                     'English (US)', 'English (UK)', 'English (Australian)', 'English (Canadian)', 'Esperanto', 'Estonian', 'Ewe',
-                    'Faroese', 'Fijian', 'Filipino', 'Finnish', 'French', 'French (Canadian)', 'Frisian', 'Fulani',
-                    'Galician', 'Ganda', 'Georgian', 'German', 'German (Swiss)', 'Greek', 'Guarani', 'Gujarati',
-                    'Haitian Creole', 'Hausa', 'Hawaiian', 'Hebrew', 'Hindi', 'Hmong', 'Hungarian',
-                    'Icelandic', 'Igbo', 'Ilocano', 'Indonesian', 'Inuktitut', 'Irish', 'Italian',
-                    'Japanese', 'Javanese',
-                    'Kannada', 'Kazakh', 'Khmer', 'Kinyarwanda', 'Konkani', 'Korean', 'Kurdish (Kurmanji)', 'Kurdish (Sorani)', 'Kyrgyz',
+                    'Faroese', 'Fijian', 'Filipino', 'Finnish', 'French / Français', 'French (Canadian)', 'Frisian', 'Fulani',
+                    'Galician', 'Ganda', 'Georgian', 'German / Deutsch', 'German (Swiss)', 'Greek / Ελληνικά', 'Guarani', 'Gujarati',
+                    'Haitian Creole', 'Hausa', 'Hawaiian', 'Hebrew / עברית', 'Hindi / हिन्दी', 'Hmong', 'Hungarian / Magyar',
+                    'Icelandic', 'Igbo', 'Ilocano', 'Indonesian', 'Inuktitut', 'Irish', 'Italian / Italiano',
+                    'Japanese / 日本語', 'Javanese',
+                    'Kannada', 'Kazakh', 'Khmer', 'Kinyarwanda', 'Konkani', 'Korean / 한국어', 'Kurdish (Kurmanji)', 'Kurdish (Sorani)', 'Kyrgyz',
                     'Lao', 'Latin', 'Latvian', 'Lingala', 'Lithuanian', 'Luganda', 'Luxembourgish',
                     'Macedonian', 'Maithili', 'Malagasy', 'Malay', 'Malayalam', 'Maltese', 'Manx', 'Maori', 'Marathi', 'Mayan', 'Mongolian',
                     'Nahuatl', 'Navajo', 'Nepali', 'Norwegian',
                     'Occitan', 'Odia', 'Oromo',
-                    'Pashto', 'Persian (Farsi)', 'Polish',
-                    'Portuguese (Brazil)', 'Portuguese (Portugal)',
+                    'Pashto', 'Persian (Farsi) / فارسی', 'Polish / Polski',
+                    'Portuguese (Brazil) / Português', 'Portuguese (Portugal)',
                     'Punjabi',
                     'Quechua',
-                    'Romanian', 'Romansh', 'Russian',
+                    'Romanian', 'Romansh', 'Russian / Русский',
                     'Samoan', 'Sanskrit', 'Scots Gaelic', 'Serbian', 'Sesotho', 'Shona', 'Sindhi', 'Sinhala', 'Slovak', 'Slovenian', 'Somali',
-                    'Spanish (Spain)', 'Spanish (Latin America)', 'Spanish (Rioplatense)',
-                    'Sundanese', 'Swahili', 'Swedish',
-                    'Tagalog', 'Tahitian', 'Tajik', 'Tamil', 'Tatar', 'Telugu', 'Thai', 'Tibetan', 'Tigrinya', 'Tonga', 'Tswana', 'Turkish', 'Turkmen', 'Twi',
-                    'Ukrainian', 'Urdu', 'Uyghur', 'Uzbek',
-                    'Vietnamese',
+                    'Spanish (Spain) / Español', 'Spanish (Latin America)', 'Spanish (Rioplatense)',
+                    'Sundanese', 'Swahili', 'Swedish / Svenska',
+                    'Tagalog', 'Tahitian', 'Tajik', 'Tamil', 'Tatar', 'Telugu', 'Thai / ไทย', 'Tibetan', 'Tigrinya', 'Tonga', 'Tswana', 'Turkish / Türkçe', 'Turkmen', 'Twi',
+                    'Ukrainian / Українська', 'Urdu', 'Uyghur', 'Uzbek',
+                    'Vietnamese / Tiếng Việt',
                     'Welsh', 'Wolof',
                     'Xhosa',
                     'Yiddish', 'Yoruba',
@@ -280,10 +280,10 @@ export default function ProfileScreen() {
 
                     {user.bio ? <Text style={styles.bio}>"{user.bio}"</Text> : null}
 
-                    {/* Fluent Languages */}
+                    {/* Conversational Languages */}
                     {user.fluent_languages && user.fluent_languages.length > 0 && (
                         <View style={styles.langRow}>
-                            <Text style={styles.labelSmall}>I speak fluently:</Text>
+                            <Text style={styles.labelSmall}>I speak conversationally:</Text>
                             <View style={styles.langChips}>
                                 {user.fluent_languages.map((lang, i) => (
                                     <View key={i} style={styles.chip}>
@@ -803,7 +803,7 @@ export default function ProfileScreen() {
                                             tz.toLowerCase().includes(timezoneSearch.toLowerCase())
                                         );
 
-                                        const toShow = filtered.slice(0, 3);
+                                        const toShow = filtered.slice(0, 20);
 
                                         return (
                                             <>
@@ -826,7 +826,7 @@ export default function ProfileScreen() {
                                     })()}
                                 </View>
 
-                                <Text style={styles.modalLabel}>Fluent Languages</Text>
+                                <Text style={styles.modalLabel}>Conversational Languages</Text>
                                 {/* Selected Languages always visible */}
                                 {newLanguages.length > 0 && (
                                     <View style={[styles.languageChips, { marginBottom: 8 }]}>
@@ -861,7 +861,7 @@ export default function ProfileScreen() {
                                         // Only show search results if user is typing
                                         if (!languageSearch) return null;
 
-                                        const toShow = filtered.slice(0, 3);
+                                        const toShow = filtered.slice(0, 20);
 
                                         return (
                                             <>
@@ -919,7 +919,7 @@ export default function ProfileScreen() {
                                         // Only show search results if user is typing
                                         if (!learningSearch) return null;
 
-                                        const toShow = filtered.slice(0, 3);
+                                        const toShow = filtered.slice(0, 20);
 
                                         return (
                                             <>

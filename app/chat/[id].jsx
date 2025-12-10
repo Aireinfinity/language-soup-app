@@ -9,6 +9,7 @@ import { LiveAudioWaveform } from '../../components/LiveAudioWaveform';
 import { Colors } from '../../constants/Colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
@@ -64,81 +65,98 @@ function MessageBubble({ message, isMe }) {
 
     const isSending = message.status === 'sending' || message.status === 'uploading';
 
+    const avatarElement = (
+        <View style={[styles.avatarContainer, isMe && styles.avatarContainerMe]}>
+            {message.sender?.avatar_url ? (
+                <Image source={{ uri: message.sender.avatar_url }} style={styles.avatar} />
+            ) : (
+                <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                    <Text style={styles.avatarText}>
+                        {message.sender?.display_name?.charAt(0).toUpperCase() || '?'}
+                    </Text>
+                </View>
+            )}
+        </View>
+    );
+
+    const bubbleElement = (
+        <View style={[
+            styles.bubble,
+            message.message_type === 'voice' && styles.bubbleVoice,
+            isMe ? styles.bubbleMe : styles.bubbleThem,
+            isSending && styles.bubbleSending,
+        ]}>
+            {!isMe && message.sender && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                    <Text style={styles.senderName}>{message.sender.display_name}</Text>
+                    {message.sender.fluent_languages && message.sender.fluent_languages.slice(0, 2).map((lang, idx) => (
+                        <View key={idx} style={{
+                            backgroundColor: 'rgba(255,255,255,0.2)',
+                            borderRadius: 4,
+                            paddingHorizontal: 4,
+                            paddingVertical: 1,
+                            marginLeft: 4
+                        }}>
+                            <Text style={{ fontSize: 9, color: '#fff', opacity: 0.9 }}>{lang}</Text>
+                        </View>
+                    ))}
+                </View>
+            )}
+
+            {/* Show languages for Me too? user said "let the user see their own avatar/ photo when they send a text" and "based on the languages a user has in their profile can u put them on their texts" */}
+            {isMe && message.sender && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2, justifyContent: 'flex-end' }}>
+                    {message.sender.fluent_languages && message.sender.fluent_languages.slice(0, 2).map((lang, idx) => (
+                        <View key={idx} style={{
+                            backgroundColor: 'rgba(255,255,255,0.3)',
+                            borderRadius: 4,
+                            paddingHorizontal: 4,
+                            paddingVertical: 1,
+                            marginLeft: 4
+                        }}>
+                            <Text style={{ fontSize: 9, color: '#fff', fontWeight: '600' }}>{lang}</Text>
+                        </View>
+                    ))}
+                </View>
+            )}
+
+            {message.message_type === 'voice' ? (
+                <AudioMessage
+                    audioUrl={message.media_url}
+                    duration={message.duration_seconds}
+                    senderName={message.sender?.display_name}
+                    isMe={isMe}
+                />
+            ) : (
+                <Text style={[styles.messageText, isMe && styles.messageTextMe]}>
+                    {message.content}
+                </Text>
+            )}
+        </View>
+    );
+
     return (
         <View style={[styles.messageRow, isMe ? styles.rowMe : styles.rowThem]}>
-            {/* Avatar now shown for everyone, me and them */}
-            <View style={[styles.avatarContainer, isMe && { order: 2, marginLeft: 8, marginRight: 0 }]}>
-                {message.sender?.avatar_url ? (
-                    <Image source={{ uri: message.sender.avatar_url }} style={styles.avatar} />
-                ) : (
-                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                        <Text style={styles.avatarText}>
-                            {message.sender?.display_name?.charAt(0).toUpperCase() || '?'}
-                        </Text>
-                    </View>
-                )}
-            </View>
-
-            <View style={[
-                styles.bubble,
-                message.message_type === 'voice' && styles.bubbleVoice,
-                isMe ? styles.bubbleMe : styles.bubbleThem,
-                isSending && styles.bubbleSending,
-                isMe && { marginRight: 0, order: 1 } // Flex order doesn't work like this in RN usually, handled by rowMe
-            ]}>
-                {!isMe && message.sender && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-                        <Text style={styles.senderName}>{message.sender.display_name}</Text>
-                        {message.sender.fluent_languages && message.sender.fluent_languages.slice(0, 2).map((lang, idx) => (
-                            <View key={idx} style={{
-                                backgroundColor: 'rgba(255,255,255,0.2)',
-                                borderRadius: 4,
-                                paddingHorizontal: 4,
-                                paddingVertical: 1,
-                                marginLeft: 4
-                            }}>
-                                <Text style={{ fontSize: 9, color: '#fff', opacity: 0.9 }}>{lang}</Text>
-                            </View>
-                        ))}
-                    </View>
-                )}
-
-                {/* Show languages for Me too? user said "let the user see their own avatar/ photo when they send a text" and "based on the languages a user has in their profile can u put them on their texts" */}
-                {isMe && message.sender && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2, justifyContent: 'flex-end' }}>
-                        {message.sender.fluent_languages && message.sender.fluent_languages.slice(0, 2).map((lang, idx) => (
-                            <View key={idx} style={{
-                                backgroundColor: 'rgba(255,255,255,0.3)',
-                                borderRadius: 4,
-                                paddingHorizontal: 4,
-                                paddingVertical: 1,
-                                marginLeft: 4
-                            }}>
-                                <Text style={{ fontSize: 9, color: '#fff', fontWeight: '600' }}>{lang}</Text>
-                            </View>
-                        ))}
-                    </View>
-                )}
-
-                {message.message_type === 'voice' ? (
-                    <AudioMessage
-                        audioUrl={message.media_url}
-                        duration={message.duration_seconds}
-                        senderName={message.sender?.display_name}
-                        isMe={isMe}
-                    />
-                ) : (
-                    <Text style={[styles.messageText, isMe && styles.messageTextMe]}>
-                        {message.content}
-                    </Text>
-                )}
-            </View>
+            {/* For sent messages (isMe), show bubble first then avatar on right */}
+            {/* For received messages, show avatar first then bubble */}
+            {isMe ? (
+                <>
+                    {bubbleElement}
+                    {avatarElement}
+                </>
+            ) : (
+                <>
+                    {avatarElement}
+                    {bubbleElement}
+                </>
+            )}
         </View>
     );
 }
 
 export default function ChatScreen() {
     const { user } = useAuth();
+    const { clearNotifications } = useNotifications();
     const router = useRouter();
     const { id: groupId } = useLocalSearchParams();
     const flatListRef = useRef(null);
@@ -159,6 +177,12 @@ export default function ChatScreen() {
     const [typingUsers, setTypingUsers] = useState({});
     const [recordingUsers, setRecordingUsers] = useState({});
     const [userProfile, setUserProfile] = useState(null);
+
+    // Clear notifications when chat opens
+    useEffect(() => {
+        // Just clear all notifications - group-specific doesn't work in Expo Go
+        clearNotifications();
+    }, [groupId]);
 
     useEffect(() => {
         if (user) {
@@ -381,6 +405,24 @@ export default function ChatScreen() {
             console.error('Error loading chat:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const scrollToChallenge = () => {
+        if (!visibleChallenge || !flatListRef.current) return;
+
+        // Find the index of the challenge message
+        const messagesWithDates = addDateSeparators(messages);
+        const challengeIndex = messagesWithDates.findIndex(
+            msg => msg.id === visibleChallenge.id
+        );
+
+        if (challengeIndex >= 0) {
+            flatListRef.current.scrollToIndex({
+                index: challengeIndex,
+                animated: true,
+                viewPosition: 0.5
+            });
         }
     };
 
@@ -642,10 +684,16 @@ export default function ChatScreen() {
             </BlurView>
 
             {visibleChallenge && (
-                <View style={[styles.challengeBanner, { top: insets.top + 65 }]}>
-                    <Text style={styles.challengeHashtag}>#challenge</Text>
-                    <Text style={styles.challengeText}>{visibleChallenge.prompt_text}</Text>
-                </View>
+                <BlurView
+                    intensity={95}
+                    tint="light"
+                    style={[styles.challengeBanner, { top: insets.top + 65 }]}
+                >
+                    <View style={styles.challengeContent}>
+                        <Text style={styles.challengeHashtag}>#challenge</Text>
+                        <Text style={styles.challengeText}>{visibleChallenge.prompt_text}</Text>
+                    </View>
+                </BlurView>
             )}
 
             <KeyboardAvoidingView
@@ -796,33 +844,39 @@ const styles = StyleSheet.create({
     },
     challengeBanner: {
         position: 'absolute',
-        top: 105,
-        left: 16,
-        right: 16,
-        zIndex: 9,
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        padding: 12,
-        borderLeftWidth: 3,
-        borderLeftColor: SOUP_COLORS.blue,
+        left: 12,
+        right: 12,
+        zIndex: 999,
+        borderRadius: 18,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.08)',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 10,
+    },
+    challengeContent: {
+        backgroundColor: 'rgba(255,255,255,0.85)',
+        paddingHorizontal: 18,
+        paddingVertical: 16,
+        minHeight: 70,
     },
     challengeHashtag: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: SOUP_COLORS.blue,
+        fontSize: 11,
+        fontWeight: '800',
+        color: SOUP_COLORS.pink,
         marginBottom: 6,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
     },
     challengeText: {
-        fontSize: 14,
-        lineHeight: 20,
+        fontSize: 15,
+        lineHeight: 21,
         color: '#000',
-        fontWeight: '500',
-        paddingLeft: 12,
+        fontWeight: '600',
+        flexWrap: 'wrap',
     },
     keyboardView: {
         flex: 1,
@@ -859,6 +913,10 @@ const styles = StyleSheet.create({
         marginRight: 8,
         justifyContent: 'flex-end',
         marginBottom: 4,
+    },
+    avatarContainerMe: {
+        marginRight: 0,
+        marginLeft: 8,
     },
     avatar: {
         width: 32,
@@ -897,6 +955,8 @@ const styles = StyleSheet.create({
     bubbleThem: {
         backgroundColor: '#fff',
         borderBottomLeftRadius: 6,
+        borderWidth: 1,
+        borderColor: '#F2F2F7',
     },
     bubbleSending: {
         opacity: 0.7,

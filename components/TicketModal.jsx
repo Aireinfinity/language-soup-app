@@ -1,64 +1,127 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Modal, StyleSheet, TextInput, Pressable, Switch, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
-import { X, Check } from 'lucide-react-native';
+import { Modal, View, Text, TextInput, StyleSheet, Pressable, Switch, Alert, TouchableWithoutFeedback, Keyboard, ScrollView, Platform, KeyboardAvoidingView } from 'react-native';
+import { X } from 'lucide-react-native';
+import { supabase } from '../lib/supabase';
 
 const SOUP_COLORS = {
     blue: '#00adef',
     pink: '#ec008b',
+    green: '#19b091',
     cream: '#FDF5E6',
-    green: '#34C759',
-    red: '#FF3B30',
-    yellow: '#FFCC00',
+    text: '#2d3436',
+    subtext: '#636e72',
+    inputBg: '#f8f9fa',
+    border: '#e9ecef'
 };
 
-const DEFAULT_DESCRIPTION = `**Issue:**
-[Description]
+const STATUSES = [
+    { id: 'new', label: 'Open' },
+    { id: 'fixing', label: 'In Progress' },
+    { id: 'fixed', label: 'Done' }
+];
 
-**Steps to Reproduce:**
-1. 
-2. 
-
-**Expected Behavior:**
-[Details]`;
-
-export default function TicketModal({ visible, onClose, onSubmit, initialData }) {
+export default function TicketModal({ visible, onClose, message, ticketToEdit, onSuccess }) {
     const [title, setTitle] = useState('');
-    const [description, setDescription] = useState(DEFAULT_DESCRIPTION);
-    const [priority, setPriority] = useState('P1'); // P0, P1, P2
-    const [category, setCategory] = useState('bug'); // bug, feature_request
-    const [publicVisible, setPublicVisible] = useState(false);
+    const [description, setDescription] = useState('');
+    const [category, setCategory] = useState('bug');
+    const [priority, setPriority] = useState('P2');
     const [status, setStatus] = useState('new');
+    const [isPublic, setIsPublic] = useState(false);
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         if (visible) {
-            if (initialData) {
-                setTitle(initialData.title || '');
-                setDescription(initialData.content || DEFAULT_DESCRIPTION);
-                setPriority(initialData.priority || 'P1');
-                setCategory(initialData.category || 'bug');
-                setPublicVisible(initialData.public_visible || false);
-                setStatus(initialData.status || 'new');
-            } else {
+            if (ticketToEdit) {
+                // Editing mode
+                setTitle(ticketToEdit.title || '');
+                setDescription(ticketToEdit.content || '');
+                setCategory(ticketToEdit.category || 'bug');
+                setPriority(ticketToEdit.priority || 'P2');
+                setStatus(ticketToEdit.status || 'new');
+                setIsPublic(ticketToEdit.public_visible || false);
+            } else if (message) {
+                // Convert message mode
                 setTitle('');
-                setDescription(DEFAULT_DESCRIPTION);
-                setPriority('P1');
+                setDescription(message.content || '');
                 setCategory('bug');
-                setPublicVisible(false);
+                setPriority('P2');
                 setStatus('new');
+                setIsPublic(false);
+            } else {
+                // Scratch mode
+                setTitle('');
+                setDescription('');
+                setCategory('bug');
+                setPriority('P2');
+                setStatus('new');
+                setIsPublic(false);
             }
         }
-    }, [visible, initialData]);
+    }, [visible, message, ticketToEdit]);
 
-    const handleSubmit = () => {
-        onSubmit({
-            title,
-            content: description,
-            priority,
-            category,
-            public_visible: publicVisible,
-            status
-        });
-        onClose();
+    const PRIORITIES = [
+        { id: 'P0', label: '🔥 Critical', color: '#ff4757' },
+        { id: 'P1', label: '⚠️ High', color: '#ffa502' },
+        { id: 'P2', label: '📝 Normal', color: '#2ed573' }
+    ];
+
+    const handleSave = async () => {
+        if (!title.trim() || !description.trim()) {
+            Alert.alert('Missing Fields', 'Please add a title and description.');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const ticketData = {
+                title: title.trim(),
+                content: description.trim(),
+                category,
+                priority,
+                status,
+                public_visible: isPublic,
+                is_ticket: true
+                // Removed updated_at to prevent crash if column missing
+            };
+
+            let error;
+
+            if (ticketToEdit) {
+                // Update existing
+                const { error: updateError } = await supabase
+                    .from('app_support_messages')
+                    .update(ticketData)
+                    .eq('id', ticketToEdit.id);
+                error = updateError;
+            } else if (message) {
+                // Convert existing message to ticket
+                const { error: updateError } = await supabase
+                    .from('app_support_messages')
+                    .update(ticketData)
+                    .eq('id', message.id);
+                error = updateError;
+            } else {
+                // Create new ticket (from scratch)
+                const { error: insertError } = await supabase
+                    .from('app_support_messages')
+                    .insert({
+                        ...ticketData,
+                        user_id: (await supabase.auth.getUser()).data.user?.id,
+                        from_admin: true
+                    });
+                error = insertError;
+            }
+
+            if (error) throw error;
+
+            if (onSuccess) onSuccess();
+            onClose();
+        } catch (err) {
+            console.error('Error saving ticket:', err);
+            Alert.alert('Error', 'Failed to save ticket');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -74,7 +137,7 @@ export default function TicketModal({ visible, onClose, onSubmit, initialData })
             >
                 <View style={styles.header}>
                     <Text style={styles.headerTitle}>
-                        {initialData ? 'Edit Ticket' : 'New Ticket'}
+                        {ticketToEdit ? 'Edit Ticket' : 'New Ticket'}
                     </Text>
                     <Pressable onPress={onClose} style={styles.closeButton}>
                         <X size={24} color="#000" />
@@ -88,7 +151,7 @@ export default function TicketModal({ visible, onClose, onSubmit, initialData })
                         style={styles.input}
                         value={title}
                         onChangeText={setTitle}
-                        placeholder="Short summary of the issue"
+                        placeholder="Short summary..."
                         placeholderTextColor="#999"
                     />
 
@@ -100,13 +163,34 @@ export default function TicketModal({ visible, onClose, onSubmit, initialData })
                         onChangeText={setDescription}
                         multiline
                         textAlignVertical="top"
-                        placeholder="Detailed description..."
+                        placeholder="Details..."
+                        placeholderTextColor="#999"
                     />
 
-                    {/* Meta Fields Row */}
+                    {/* Categories and Priority */}
                     <View style={styles.row}>
-                        {/* Priority */}
-                        <View style={styles.halfCol}>
+                        <View style={styles.col}>
+                            <Text style={styles.label}>Category</Text>
+                            <View style={styles.pillContainer}>
+                                {['bug', 'feature_request'].map(c => (
+                                    <Pressable
+                                        key={c}
+                                        style={[
+                                            styles.pill,
+                                            category === c && { backgroundColor: SOUP_COLORS.blue }
+                                        ]}
+                                        onPress={() => setCategory(c)}
+                                    >
+                                        <Text style={[
+                                            styles.pillText,
+                                            category === c && styles.pillTextActive
+                                        ]}>{c === 'bug' ? 'Bug' : 'Feature'}</Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+                        </View>
+
+                        <View style={styles.col}>
                             <Text style={styles.label}>Priority</Text>
                             <View style={styles.pillContainer}>
                                 {['P0', 'P1', 'P2'].map(p => (
@@ -126,60 +210,38 @@ export default function TicketModal({ visible, onClose, onSubmit, initialData })
                                 ))}
                             </View>
                         </View>
-
-                        {/* Category */}
-                        <View style={styles.halfCol}>
-                            <Text style={styles.label}>Category</Text>
-                            <View style={styles.pillContainer}>
-                                {['bug', 'feature_request'].map(c => (
-                                    <Pressable
-                                        key={c}
-                                        style={[
-                                            styles.pill,
-                                            category === c && styles.pillActiveBlue
-                                        ]}
-                                        onPress={() => setCategory(c)}
-                                    >
-                                        <Text style={[
-                                            styles.pillText,
-                                            category === c && styles.pillTextActive
-                                        ]}>{c === 'feature_request' ? 'Req' : 'Bug'}</Text>
-                                    </Pressable>
-                                ))}
-                            </View>
-                        </View>
                     </View>
 
                     {/* Status */}
                     <Text style={styles.label}>Status</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statusRow}>
-                        {['new', 'investigating', 'fixing', 'fixed'].map(s => (
+                    <View style={styles.statusRow}>
+                        {STATUSES.map(s => (
                             <Pressable
-                                key={s}
+                                key={s.id}
                                 style={[
                                     styles.pill,
-                                    status === s && styles.pillActiveBlue,
+                                    status === s.id && { backgroundColor: SOUP_COLORS.blue },
                                     { marginRight: 8 }
                                 ]}
-                                onPress={() => setStatus(s)}
+                                onPress={() => setStatus(s.id)}
                             >
                                 <Text style={[
                                     styles.pillText,
-                                    status === s && styles.pillTextActive
-                                ]}>{s.charAt(0).toUpperCase() + s.slice(1)}</Text>
+                                    status === s.id && styles.pillTextActive
+                                ]}>{s.label}</Text>
                             </Pressable>
                         ))}
-                    </ScrollView>
+                    </View>
 
-                    {/* Public Visibility */}
+                    {/* Public Toggle */}
                     <View style={styles.switchRow}>
                         <View>
                             <Text style={styles.switchLabel}>Public Roadmap</Text>
-                            <Text style={styles.switchSub}>Show in "Bugs we're working on"</Text>
+                            <Text style={styles.switchSub}>Show this ticket to all users</Text>
                         </View>
                         <Switch
-                            value={publicVisible}
-                            onValueChange={setPublicVisible}
+                            value={isPublic}
+                            onValueChange={setIsPublic}
                             trackColor={{ false: '#767577', true: SOUP_COLORS.green }}
                         />
                     </View>
@@ -188,8 +250,14 @@ export default function TicketModal({ visible, onClose, onSubmit, initialData })
                 </ScrollView>
 
                 <View style={styles.footer}>
-                    <Pressable style={styles.submitButton} onPress={handleSubmit}>
-                        <Text style={styles.submitText}>Save Ticket</Text>
+                    <Pressable
+                        style={[styles.submitButton, loading && { opacity: 0.7 }]}
+                        onPress={handleSave}
+                        disabled={loading}
+                    >
+                        <Text style={styles.submitText}>
+                            {loading ? 'Saving...' : 'Save Ticket'}
+                        </Text>
                     </Pressable>
                 </View>
             </KeyboardAvoidingView>
@@ -199,8 +267,8 @@ export default function TicketModal({ visible, onClose, onSubmit, initialData })
 
 function getPriorityColor(p) {
     switch (p) {
-        case 'P0': return SOUP_COLORS.red;
-        case 'P1': return SOUP_COLORS.yellow;
+        case 'P0': return SOUP_COLORS.pink;
+        case 'P1': return SOUP_COLORS.blue;
         case 'P2': return SOUP_COLORS.green;
         default: return '#ccc';
     }
@@ -223,6 +291,9 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '700',
     },
+    closeButton: {
+        padding: 4,
+    },
     content: {
         padding: 20,
     },
@@ -240,13 +311,13 @@ const styles = StyleSheet.create({
         fontSize: 16,
     },
     textArea: {
-        height: 150,
+        height: 120,
     },
     row: {
         flexDirection: 'row',
         gap: 16,
     },
-    halfCol: {
+    col: {
         flex: 1,
     },
     pillContainer: {
@@ -257,14 +328,11 @@ const styles = StyleSheet.create({
     },
     pill: {
         flex: 1,
-        paddingVertical: 6,
-        paddingHorizontal: 10,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
         borderRadius: 6,
         alignItems: 'center',
         justifyContent: 'center',
-    },
-    pillActiveBlue: {
-        backgroundColor: SOUP_COLORS.blue,
     },
     pillText: {
         fontSize: 13,
@@ -276,7 +344,7 @@ const styles = StyleSheet.create({
     },
     statusRow: {
         flexDirection: 'row',
-        marginBottom: 8,
+        flexWrap: 'wrap',
     },
     switchRow: {
         flexDirection: 'row',
@@ -299,6 +367,7 @@ const styles = StyleSheet.create({
         padding: 16,
         borderTopWidth: 1,
         borderTopColor: '#f0f0f0',
+        backgroundColor: '#fff',
     },
     submitButton: {
         backgroundColor: '#000',

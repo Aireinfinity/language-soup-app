@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, RefreshControl, Text, Image, Platform, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,6 +25,8 @@ export default function HomeScreen() {
     const [showRequestModal, setShowRequestModal] = useState(false);
     const [isAdmin, setIsAdmin] = useState(false);
     const [isCommunityManager, setIsCommunityManager] = useState(false);
+    const [unreadSupportCount, setUnreadSupportCount] = useState(0);
+    const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
 
     useFocusEffect(
         useCallback(() => {
@@ -35,6 +37,31 @@ export default function HomeScreen() {
         }, [user])
     );
 
+    // Realtime updates for Admin Badges
+    useEffect(() => {
+        if (!isAdmin) return;
+        console.log('Setting up admin realtime subscription');
+
+        const channel = supabase
+            .channel('admin-badge-updates')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'app_support_messages' }, (payload) => {
+                console.log('Realtime support message update:', payload);
+                fetchAdminStats();
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'app_language_requests' }, (payload) => {
+                console.log('Realtime language request update:', payload);
+                fetchAdminStats();
+            })
+            .subscribe((status) => {
+                console.log('Subscription status:', status);
+            });
+
+        return () => {
+            console.log('Removing admin realtime subscription');
+            supabase.removeChannel(channel);
+        };
+    }, [isAdmin]);
+
     const checkUserRole = async () => {
         try {
             const { data } = await supabase
@@ -42,10 +69,49 @@ export default function HomeScreen() {
                 .select('role')
                 .eq('id', user.id)
                 .single();
-            setIsAdmin(data?.role === 'admin');
+            const isAdminRole = data?.role === 'admin';
+            setIsAdmin(isAdminRole);
             setIsCommunityManager(data?.role === 'community_manager');
+
+            if (isAdminRole) {
+                fetchAdminStats();
+            }
         } catch (error) {
             console.error('Error checking user role:', error);
+        }
+    };
+
+    const fetchAdminStats = async () => {
+        try {
+            // Count unread support threads
+            const { data: supportMessages } = await supabase
+                .from('app_support_messages')
+                .select('user_id, from_admin')
+                .order('created_at', { ascending: false });
+
+            const unreadThreads = new Set();
+            const checkedUsers = new Set();
+
+            supportMessages?.forEach(msg => {
+                if (!checkedUsers.has(msg.user_id)) {
+                    checkedUsers.add(msg.user_id);
+                    if (!msg.from_admin) {
+                        unreadThreads.add(msg.user_id);
+                    }
+                }
+            });
+            console.log('Final Unread Threads:', unreadThreads.size);
+            setUnreadSupportCount(unreadThreads.size);
+
+            // Count pending language requests
+            const { count: pendingRequests } = await supabase
+                .from('app_language_requests')
+                .select('*', { count: 'exact', head: true })
+                .eq('status', 'pending');
+            setPendingRequestsCount(pendingRequests || 0);
+
+        } catch (error) {
+            console.error('Error fetching admin stats:', error);
         }
     };
 
@@ -230,7 +296,6 @@ export default function HomeScreen() {
                     />
                     <View style={styles.headerTextContainer}>
                         <ThemedText style={styles.title}>your soup</ThemedText>
-                        <Text style={styles.subtitle}>language practice, served daily</Text>
                     </View>
                 </View>
                 <Pressable
@@ -319,8 +384,8 @@ export default function HomeScreen() {
                 onSubmit={handleLanguageRequest}
             />
 
-            {/* Floating Request Group Button (left side) */}
-            {groups.length > 0 && (
+            {/* Floating Request Group Button (left side) - Hide for admins */}
+            {groups.length > 0 && !isAdmin && (
                 <Pressable
                     style={styles.floatingRequestBtn}
                     onPress={() => setShowRequestModal(true)}
@@ -514,6 +579,22 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: Colors.textLight,
         fontStyle: 'italic',
+    },
+    cardBadge: {
+        position: 'absolute',
+        top: -8,
+        right: -8,
+        backgroundColor: SOUP_COLORS.red,
+        borderRadius: 10,
+        height: 20,
+        minWidth: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 6,
+        borderWidth: 2,
+        borderColor: '#fff',
+        zIndex: 999, // Force on top
+        elevation: 10,
     },
     unreadBadge: {
         backgroundColor: Colors.primary,

@@ -1,0 +1,6 @@
+# We want to ignore everything that git ignores...
+.gitignore
+
+# ...EXCEPT we WANT to upload these credential files to EAS for the build
+!GoogleService-Info.plist
+!google-services.json

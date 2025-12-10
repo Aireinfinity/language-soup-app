@@ -3,6 +3,7 @@ import { View, StyleSheet, FlatList, ActivityIndicator, Text, Pressable, SafeAre
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import SpeakerCard from '../components/SpeakerCard';
 
 const SOUP_COLORS = {
@@ -18,6 +19,7 @@ const AVAILABLE_LANGUAGES = ['All', 'French', 'Spanish', 'Japanese', 'German', '
 
 export default function NativeSpeakersScreen() {
     const router = useRouter();
+    const { user } = useAuth();
     const params = useLocalSearchParams();
     const preselectedLanguage = params.language || 'All';
 
@@ -25,9 +27,26 @@ export default function NativeSpeakersScreen() {
     const [filteredSpeakers, setFilteredSpeakers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedLanguage, setSelectedLanguage] = useState(preselectedLanguage);
+    const [isAdmin, setIsAdmin] = useState(false);
 
     useEffect(() => {
         loadSpeakers();
+
+        // Subscribe to real-time changes
+        const channel = supabase
+            .channel('native-speakers-changes')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'app_native_speakers' },
+                () => {
+                    loadSpeakers();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     useEffect(() => {
@@ -64,6 +83,22 @@ export default function NativeSpeakersScreen() {
         }
     };
 
+    const deleteSpeaker = async (speakerId) => {
+        try {
+            const { error } = await supabase
+                .from('app_native_speakers')
+                .delete()
+                .eq('id', speakerId);
+
+            if (error) throw error;
+
+            // Refresh list
+            loadSpeakers();
+        } catch (error) {
+            console.error('Error deleting speaker:', error);
+        }
+    };
+
     const renderLanguageFilter = () => (
         <View style={styles.filterContainer}>
             <FlatList
@@ -92,7 +127,13 @@ export default function NativeSpeakersScreen() {
         </View>
     );
 
-    const renderSpeaker = ({ item }) => <SpeakerCard speaker={item} />;
+    const renderSpeaker = ({ item }) => (
+        <SpeakerCard
+            speaker={item}
+            isAdmin={isAdmin}
+            onDelete={() => deleteSpeaker(item.id)}
+        />
+    );
 
     if (loading) {
         return (

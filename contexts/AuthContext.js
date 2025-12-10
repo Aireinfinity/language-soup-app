@@ -15,6 +15,7 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [session, setSession] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [bootScreenShown, setBootScreenShown] = useState(false);
     const router = useRouter();
     const segments = useSegments();
     const navigationState = useRootNavigationState();
@@ -99,14 +100,15 @@ export const AuthProvider = ({ children }) => {
         } else if (user) {
             // User is authenticated
 
-            // If on login or boot screen, check profile and redirect
-            if (currentRoute === 'login' || currentRoute === 'index' || !currentRoute) {
-                checkProfileAndRedirect(user, true, false);
+            // Only check profile and redirect from login or when no route (initial load)
+            // Don't redirect if already on boot screen (index) to prevent loops
+            if (currentRoute === 'login' || (!currentRoute && !bootScreenShown)) {
+                checkProfileAndRedirect(user, true, false, currentRoute);
             }
         }
     }, [user, loading, segments]);
 
-    const checkProfileAndRedirect = async (currentUser, inAuthGroup, inOnboarding) => {
+    const checkProfileAndRedirect = async (currentUser, inAuthGroup, inOnboarding, currentRoute) => {
         try {
             const { data, error } = await supabase
                 .from('app_users')
@@ -122,9 +124,17 @@ export const AuthProvider = ({ children }) => {
                     router.replace('/onboarding');
                 }
             } else {
-                // If profile exists, show boot screen every time (tap to continue)
+                // If profile exists, show boot screen once, then go to tabs
                 if (inAuthGroup || inOnboarding) {
-                    router.replace('/');
+                    if (!bootScreenShown) {
+                        setBootScreenShown(true);
+                        // Only navigate to boot screen if not already there
+                        if (currentRoute !== 'index') {
+                            router.replace('/');
+                        }
+                    } else {
+                        router.replace('/(tabs)');
+                    }
                 }
             }
         } catch (error) {
@@ -238,6 +248,7 @@ export const AuthProvider = ({ children }) => {
             user,
             session,
             loading,
+            setBootScreenShown,
             signInWithMagicLink,
             verifyOtp,
             signInWithGuest,

@@ -17,12 +17,15 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.aireinfinity.languagesoup",
       "buildNumber": "1",
+      "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "This app needs access to your microphone to record voice memos for language practice.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
+      "package": "com.aireinfinity.languagesoup",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -33,7 +36,15 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "@react-native-firebase/app",
+      [
+        "@react-native-firebase/crashlytics",
+        {
+          "crashlytics_auto_collection_enabled": true,
+          "crashlytics_debug_enabled": false
+        }
+      ]
     ],
     "platforms": [
       "ios"

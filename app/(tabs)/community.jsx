@@ -3,8 +3,7 @@ import { View, Text, FlatList, StyleSheet, Image, Pressable, ActivityIndicator, 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Megaphone, MessageCircle, Users, ChevronRight } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
-import { useRouter } from 'expo-router';
-
+import { useRouter, useFocusEffect } from 'expo-router';
 // Brand Colors
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -25,11 +24,23 @@ export default function CommunityScreen() {
     const [memberCount, setMemberCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [expandedAnnouncements, setExpandedAnnouncements] = useState({});
-
     const [knownIssues, setKnownIssues] = useState([]);
 
+    useFocusEffect(
+        React.useCallback(() => {
+            loadData();
+        }, [])
+    );
+
     useEffect(() => {
-        loadData();
+        // Realtime updates for announcements and tickets
+        const channel = supabase
+            .channel('community-updates')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'app_community_announcements' }, loadData)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'app_support_messages' }, loadData)
+            .subscribe();
+
+        return () => supabase.removeChannel(channel);
     }, []);
 
     const loadData = async () => {
@@ -48,9 +59,9 @@ export default function CommunityScreen() {
                 .from('app_support_messages')
                 .select('id, title, priority, category, status')
                 .eq('public_visible', true)
-                .neq('status', 'fixed')
+                // Showing all statuses including fixed to show progress
                 .order('created_at', { ascending: false })
-                .limit(10); // Limit to avoid clutter? Or fetch all? User said "put based on tickets". Let's show 10.
+                .limit(10);
 
             // Actually, let's show all open public issues but maybe limit if too many.
             setKnownIssues(issuesData || []);

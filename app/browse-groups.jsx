@@ -67,10 +67,7 @@ export default function BrowseGroups() {
             // Update local state
             setMyGroupIds([...myGroupIds, groupId]);
 
-            // Update group member count
-            await supabase.rpc('increment_group_member_count', { group_id: groupId });
-
-            // Refresh groups
+            // Refresh groups (trigger will update member_count automatically)
             await loadGroups();
         } catch (error) {
             console.error('Error joining group:', error);
@@ -98,10 +95,7 @@ export default function BrowseGroups() {
             // Update local state
             setMyGroupIds(myGroupIds.filter(id => id !== groupId));
 
-            // Decrement group member count
-            await supabase.rpc('decrement_group_member_count', { group_id: groupId });
-
-            // Refresh groups
+            // Refresh groups (trigger will update member_count automatically)
             await loadGroups();
         } catch (error) {
             console.error('Error leaving group:', error);

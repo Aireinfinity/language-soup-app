@@ -135,12 +135,41 @@ export function NotificationProvider({ children }) {
         });
     };
 
+    const clearNotifications = async () => {
+        try {
+            // Dismiss all notifications
+            await Notifications.dismissAllNotificationsAsync();
+            // Reset badge count
+            await Notifications.setBadgeCountAsync(0);
+        } catch (error) {
+            console.log('Error clearing notifications:', error);
+        }
+    };
+
+    const clearGroupNotifications = async (groupId) => {
+        // Get all delivered notifications
+        const deliveredNotifications = await Notifications.getPresentedNotificationsAsync();
+
+        // Filter and dismiss only notifications for this group
+        for (const notification of deliveredNotifications) {
+            if (notification.request.content.data?.groupId === groupId) {
+                await Notifications.dismissNotificationAsync(notification.request.identifier);
+            }
+        }
+
+        // Update badge count
+        const remaining = await Notifications.getPresentedNotificationsAsync();
+        await Notifications.setBadgeCountAsync(remaining.length);
+    };
+
     return (
         <NotificationContext.Provider
             value={{
                 expoPushToken,
                 notification,
                 sendLocalNotification,
+                clearNotifications,
+                clearGroupNotifications,
             }}
         >
             {children}

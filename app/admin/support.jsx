@@ -24,11 +24,9 @@ const PRIORITY_COLORS = {
 };
 
 const STATUS_LABELS = {
-    new: 'New',
-    investigating: 'Investigating',
-    fixing: 'Fixing',
-    fixed: 'Resolved',
-    wontfix: 'Wont Fix'
+    new: 'Open',
+    fixing: 'In Progress',
+    fixed: 'Done'
 };
 
 export default function AdminSupportThreads() {
@@ -75,7 +73,7 @@ export default function AdminSupportThreads() {
                     status,
                     category,
                     title,
-                    app_users!app_support_messages_user_id_fkey (
+                    app_users (
                         id,
                         display_name,
                         avatar_url
@@ -155,51 +153,89 @@ export default function AdminSupportThreads() {
     };
 
     const getInbox = () => {
-        switch (activeFilter) {
-            case 'urgent': return threads.filter(t => t.priority === 'P0');
-            case 'bugs': return threads.filter(t => t.priority === 'P1');
-            case 'requests': return threads.filter(t => t.category === 'feature_request');
-            case 'resolved': return threads.filter(t => t.status === 'fixed');
-            default: return threads;
+        // Simple filter: All vs Unread
+        if (activeFilter === 'unread') {
+            // Logic to filter unread only if we have that flag, otherwise show all
+            return threads.filter(t => t.status === 'new' && !t.from_admin);
         }
+        return threads;
     };
 
     const displayedThreads = activeMainTab === 'tickets' ? getTickets() : getInbox();
 
-    const handleCreateTicket = async (ticketData) => {
+    const [editingTicket, setEditingTicket] = useState(null);
+
+    // ...
+
+    const handleSaveTicket = async (ticketData) => {
         try {
             if (!user) return;
-            const { error } = await supabase.from('app_support_messages').insert({
-                user_id: user.id,
-                content: ticketData.content,
-                title: ticketData.title,
-                priority: ticketData.priority,
-                category: ticketData.category,
-                status: ticketData.status,
-                public_visible: ticketData.public_visible,
-                from_admin: true,
-                message_type: 'text'
-            });
-            if (error) throw error;
+
+            if (editingTicket) {
+                // Update existing ticket
+                const { error } = await supabase
+                    .from('app_support_messages')
+                    .update({
+                        title: ticketData.title,
+                        priority: ticketData.priority,
+                        category: ticketData.category,
+                        status: ticketData.status,
+                        public_visible: ticketData.public_visible,
+                        content: ticketData.content // Allow updating content/description too
+                    })
+                    .eq('id', editingTicket.id);
+
+                if (error) throw error;
+            } else {
+                // Create new ticket
+                const { error } = await supabase.from('app_support_messages').insert({
+                    user_id: user.id,
+                    content: ticketData.content,
+                    title: ticketData.title,
+                    priority: ticketData.priority,
+                    category: ticketData.category,
+                    status: ticketData.status,
+                    public_visible: ticketData.public_visible,
+                    from_admin: true,
+                    message_type: 'text',
+                    is_ticket: true
+                });
+                if (error) throw error;
+            }
+
+            // Refresh and close
             loadThreads();
+            setCreateModalVisible(false);
+            setEditingTicket(null);
         } catch (error) {
-            console.error('Error creating ticket:', error);
-            alert('Failed to create ticket');
+            console.error('Error saving ticket:', error);
+            alert('Failed to save ticket');
+        }
+    };
+
+    const handleTicketPress = (item) => {
+        if (activeMainTab === 'tickets') {
+            setEditingTicket(item);
+            setCreateModalVisible(true);
+        } else {
+            router.push(`/admin/support-thread/${item.userId}`);
         }
     };
 
     const renderThread = ({ item }) => (
         <Pressable
             style={styles.threadItem}
-            onPress={() => router.push(`/admin/support-thread/${item.userId}`)}
+            onPress={() => handleTicketPress(item)}
         >
             <View style={styles.avatar}>
+                {/* ... keep existing avatar code ... */}
                 <Text style={styles.avatarText}>
                     {item.userName.charAt(0).toUpperCase()}
                 </Text>
             </View>
 
             <View style={styles.threadInfo}>
+                {/* ... keep existing thread info code ... */}
                 <View style={styles.threadHeader}>
                     <View style={styles.nameRow}>
                         <Text style={styles.userName}>{item.userName}</Text>
@@ -227,7 +263,7 @@ export default function AdminSupportThreads() {
                     </Text>
                     {item.status && (
                         <View style={styles.statusBadge}>
-                            <Text style={styles.statusText}>{STATUS_LABELS[item.status]}</Text>
+                            <Text style={styles.statusText}>{STATUS_LABELS[item.status] || item.status}</Text>
                         </View>
                     )}
                 </View>
@@ -307,53 +343,11 @@ export default function AdminSupportThreads() {
                         </Pressable>
 
                         <Pressable
-                            style={[styles.filterTab, activeFilter === 'urgent' && styles.filterTabActive]}
-                            onPress={() => setActiveFilter('urgent')}
+                            style={[styles.filterTab, activeFilter === 'unread' && styles.filterTabActive]}
+                            onPress={() => setActiveFilter('unread')}
                         >
-                            <Text style={[styles.filterTabText, activeFilter === 'urgent' && styles.filterTabTextActive]}>
-                                🔴 Urgent
-                            </Text>
-                            {stats.urgent > 0 && (
-                                <View style={styles.filterBadge}>
-                                    <Text style={styles.filterBadgeText}>{stats.urgent}</Text>
-                                </View>
-                            )}
-                        </Pressable>
-
-                        <Pressable
-                            style={[styles.filterTab, activeFilter === 'bugs' && styles.filterTabActive]}
-                            onPress={() => setActiveFilter('bugs')}
-                        >
-                            <Text style={[styles.filterTabText, activeFilter === 'bugs' && styles.filterTabTextActive]}>
-                                🟡 Bugs
-                            </Text>
-                            {stats.bugs > 0 && (
-                                <View style={styles.filterBadge}>
-                                    <Text style={styles.filterBadgeText}>{stats.bugs}</Text>
-                                </View>
-                            )}
-                        </Pressable>
-
-                        <Pressable
-                            style={[styles.filterTab, activeFilter === 'requests' && styles.filterTabActive]}
-                            onPress={() => setActiveFilter('requests')}
-                        >
-                            <Text style={[styles.filterTabText, activeFilter === 'requests' && styles.filterTabTextActive]}>
-                                🟢 Requests
-                            </Text>
-                            {stats.requests > 0 && (
-                                <View style={styles.filterBadge}>
-                                    <Text style={styles.filterBadgeText}>{stats.requests}</Text>
-                                </View>
-                            )}
-                        </Pressable>
-
-                        <Pressable
-                            style={[styles.filterTab, activeFilter === 'resolved' && styles.filterTabActive]}
-                            onPress={() => setActiveFilter('resolved')}
-                        >
-                            <Text style={[styles.filterTabText, activeFilter === 'resolved' && styles.filterTabTextActive]}>
-                                ✅ Resolved
+                            <Text style={[styles.filterTabText, activeFilter === 'unread' && styles.filterTabTextActive]}>
+                                🔔 Unread
                             </Text>
                         </Pressable>
                     </ScrollView>
@@ -382,8 +376,16 @@ export default function AdminSupportThreads() {
 
             <TicketModal
                 visible={createModalVisible}
-                onClose={() => setCreateModalVisible(false)}
-                onSubmit={handleCreateTicket}
+                onClose={() => {
+                    setCreateModalVisible(false);
+                    setEditingTicket(null);
+                }}
+                onSuccess={() => {
+                    loadThreads(); // Refresh list after save
+                    setCreateModalVisible(false);
+                    setEditingTicket(null);
+                }}
+                ticketToEdit={editingTicket}
             />
         </SafeAreaView>
     );

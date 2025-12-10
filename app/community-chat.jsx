@@ -62,74 +62,90 @@ function MessageBubble({ message, isMe }) {
         return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
     };
 
+    const avatarElement = (
+        <View style={[styles.avatarContainer, isMe && styles.avatarContainerMe]}>
+            {message.user?.avatar_url ? (
+                <Image source={{ uri: message.user.avatar_url }} style={styles.avatar} />
+            ) : (
+                <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                    <Text style={styles.avatarText}>
+                        {message.user?.display_name?.charAt(0).toUpperCase() || '?'}
+                    </Text>
+                </View>
+            )}
+        </View>
+    );
+
+    const bubbleElement = (
+        <View style={[
+            styles.bubble,
+            message.message_type === 'voice' && styles.bubbleVoice,
+            isMe ? styles.bubbleMe : styles.bubbleThem,
+        ]}>
+            {!isMe && message.user && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                    <Text style={styles.senderName}>{message.user.display_name}</Text>
+                    {message.user.fluent_languages && message.user.fluent_languages.slice(0, 2).map((lang, idx) => (
+                        <View key={idx} style={{
+                            backgroundColor: 'rgba(255,255,255,0.2)',
+                            borderRadius: 4,
+                            paddingHorizontal: 4,
+                            paddingVertical: 1,
+                            marginLeft: 4
+                        }}>
+                            <Text style={{ fontSize: 9, color: '#fff', opacity: 0.9 }}>{lang}</Text>
+                        </View>
+                    ))}
+                </View>
+            )}
+
+            {/* Show languages for Me too */}
+            {isMe && message.user && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2, justifyContent: 'flex-end' }}>
+                    {message.user.fluent_languages && message.user.fluent_languages.slice(0, 2).map((lang, idx) => (
+                        <View key={idx} style={{
+                            backgroundColor: 'rgba(255,255,255,0.3)',
+                            borderRadius: 4,
+                            paddingHorizontal: 4,
+                            paddingVertical: 1,
+                            marginLeft: 4
+                        }}>
+                            <Text style={{ fontSize: 9, color: '#fff', fontWeight: '600' }}>{lang}</Text>
+                        </View>
+                    ))}
+                </View>
+            )}
+
+            {message.message_type === 'voice' ? (
+                <AudioMessage
+                    audioUrl={message.media_url}
+                    duration={message.duration_seconds}
+                    senderName={message.user?.display_name}
+                    isMe={isMe}
+                />
+            ) : (
+                <Text style={[styles.messageText, isMe && styles.messageTextMe]}>
+                    {message.content}
+                </Text>
+            )}
+        </View>
+    );
+
     return (
         <View style={[styles.messageRow, isMe ? styles.rowMe : styles.rowThem]}>
-            {/* Show avatar for everyone */}
-            <View style={[styles.avatarContainer, isMe && { order: 2, marginLeft: 8, marginRight: 0 }]}>
-                {message.user?.avatar_url ? (
-                    <Image source={{ uri: message.user.avatar_url }} style={styles.avatar} />
-                ) : (
-                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                        <Text style={styles.avatarText}>
-                            {message.user?.display_name?.charAt(0).toUpperCase() || '?'}
-                        </Text>
-                    </View>
-                )}
-            </View>
-
-            <View style={[
-                styles.bubble,
-                message.message_type === 'voice' && styles.bubbleVoice,
-                isMe ? styles.bubbleMe : styles.bubbleThem,
-                isMe && { marginRight: 0, order: 1 }
-            ]}>
-                {!isMe && message.user && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-                        <Text style={styles.senderName}>{message.user.display_name}</Text>
-                        {message.user.fluent_languages && message.user.fluent_languages.slice(0, 2).map((lang, idx) => (
-                            <View key={idx} style={{
-                                backgroundColor: 'rgba(255,255,255,0.2)',
-                                borderRadius: 4,
-                                paddingHorizontal: 4,
-                                paddingVertical: 1,
-                                marginLeft: 4
-                            }}>
-                                <Text style={{ fontSize: 9, color: '#fff', opacity: 0.9 }}>{lang}</Text>
-                            </View>
-                        ))}
-                    </View>
-                )}
-
-                {/* Show languages for Me too */}
-                {isMe && message.user && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2, justifyContent: 'flex-end' }}>
-                        {message.user.fluent_languages && message.user.fluent_languages.slice(0, 2).map((lang, idx) => (
-                            <View key={idx} style={{
-                                backgroundColor: 'rgba(255,255,255,0.3)',
-                                borderRadius: 4,
-                                paddingHorizontal: 4,
-                                paddingVertical: 1,
-                                marginLeft: 4
-                            }}>
-                                <Text style={{ fontSize: 9, color: '#fff', fontWeight: '600' }}>{lang}</Text>
-                            </View>
-                        ))}
-                    </View>
-                )}
-
-                {message.message_type === 'voice' ? (
-                    <AudioMessage
-                        audioUrl={message.media_url}
-                        duration={message.duration_seconds}
-                        senderName={message.user?.display_name}
-                        isMe={isMe}
-                    />
-                ) : (
-                    <Text style={[styles.messageText, isMe && styles.messageTextMe]}>
-                        {message.content}
-                    </Text>
-                )}
-            </View>
+            {/* For sent messages (isMe), show bubble first then avatar on right */}
+            {/* For received messages, show avatar first then bubble */}
+            {isMe ? (
+                <>
+                    {bubbleElement}
+                    {avatarElement}
+                </>
+            ) : (
+                <>
+                    {avatarElement}
+                    {bubbleElement}
+                </>
+            )}
         </View>
     );
 }
@@ -537,14 +553,14 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         zIndex: 100,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: 'rgba(0,0,0,0.1)',
+        borderBottomWidth: 1,
+        borderBottomColor: '#F2F2F7',
     },
     headerContent: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 8,
-        paddingVertical: 10,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
     },
     backButton: {
         padding: 4,
@@ -554,12 +570,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     headerTitle: {
-        fontSize: 17,
-        fontWeight: '600',
+        fontSize: 18,
+        fontWeight: '700',
         color: '#000',
     },
     headerSubtitle: {
-        fontSize: 12,
+        fontSize: 13,
         color: '#8E8E93',
         marginTop: 1,
     },
@@ -671,6 +687,12 @@ const styles = StyleSheet.create({
     },
     avatarContainer: {
         marginRight: 8,
+        justifyContent: 'flex-end',
+        marginBottom: 4,
+    },
+    avatarContainerMe: {
+        marginRight: 0,
+        marginLeft: 8,
     },
     avatar: {
         width: 32,
@@ -691,31 +713,38 @@ const styles = StyleSheet.create({
     // Bubbles
     bubble: {
         maxWidth: '75%',
-        padding: 12,
-        borderRadius: 18,
+        padding: 14,
+        borderRadius: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
     },
     bubbleMe: {
         backgroundColor: SOUP_COLORS.blue,
-        borderBottomRightRadius: 4,
+        borderBottomRightRadius: 6,
     },
     bubbleThem: {
         backgroundColor: '#fff',
-        borderBottomLeftRadius: 4,
+        borderBottomLeftRadius: 6,
+        borderWidth: 1,
+        borderColor: '#F2F2F7',
     },
     bubbleVoice: {
-        paddingVertical: 8,
-        paddingHorizontal: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
     },
     senderName: {
-        fontSize: 12,
-        fontWeight: '600',
+        fontSize: 13,
+        fontWeight: '700',
         color: SOUP_COLORS.pink,
-        marginBottom: 4,
+        marginBottom: 5,
     },
     messageText: {
         fontSize: 16,
         color: '#000',
-        lineHeight: 21,
+        lineHeight: 22,
     },
     messageTextMe: {
         color: '#fff',
@@ -725,37 +754,51 @@ const styles = StyleSheet.create({
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'flex-end',
-        paddingHorizontal: 12,
-        paddingTop: 10,
+        paddingHorizontal: 16,
+        paddingTop: 12,
         backgroundColor: '#fff',
-        borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: 'rgba(0,0,0,0.1)',
+        borderTopWidth: 1,
+        borderTopColor: '#F2F2F7',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 3,
     },
     input: {
         flex: 1,
-        backgroundColor: '#F2F2F7',
-        borderRadius: 20,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
+        backgroundColor: '#F8F9FA',
+        borderRadius: 22,
+        paddingHorizontal: 18,
+        paddingVertical: 11,
         fontSize: 16,
         maxHeight: 100,
-        marginRight: 8,
+        marginRight: 10,
+        borderWidth: 1,
+        borderColor: '#E5E5EA',
     },
     sendButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         backgroundColor: SOUP_COLORS.blue,
         justifyContent: 'center',
         alignItems: 'center',
+        shadowColor: SOUP_COLORS.blue,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 3,
     },
     micButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: `${SOUP_COLORS.blue}20`,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F8F9FA',
         justifyContent: 'center',
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#E5E5EA',
     },
 
     // Recording

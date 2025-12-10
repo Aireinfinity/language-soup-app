@@ -23,6 +23,7 @@ export default function AdminDashboard() {
         totalUsers: 0,
         activeUsers7d: 0,
         voiceMemosThisWeek: 0,
+        unreadSupport: 0,
         groupStats: []
     });
 
@@ -32,12 +33,13 @@ export default function AdminDashboard() {
 
     const loadStats = async () => {
         try {
+            // ... (keep existing stats queries) ...
             // Total users
             const { count: totalUsers } = await supabase
                 .from('app_users')
                 .select('*', { count: 'exact', head: true });
 
-            // Active users (last 7 days) - users who sent messages
+            // Active users (last 7 days)
             const sevenDaysAgo = new Date();
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -45,10 +47,9 @@ export default function AdminDashboard() {
                 .from('app_messages')
                 .select('sender_id')
                 .gte('created_at', sevenDaysAgo.toISOString());
-
             const uniqueActiveUsers = new Set(activeUserIds?.map(m => m.sender_id) || []);
 
-            // Voice memos this week
+            // Voice messages stats
             const { count: voiceMemos } = await supabase
                 .from('app_messages')
                 .select('*', { count: 'exact', head: true })
@@ -61,10 +62,38 @@ export default function AdminDashboard() {
                 .select('id, name, member_count')
                 .order('member_count', { ascending: false });
 
+            // Unread Support Threads
+            // Logic: Count unique users where the LAST message is NOT from admin (needs reply)
+            const { data: supportMessages } = await supabase
+                .from('app_support_messages')
+                .select('user_id, from_admin, created_at')
+                .order('created_at', { ascending: false }); // Newest first
+
+            const unreadThreads = new Set();
+            const checkedUsers = new Set();
+
+            supportMessages?.forEach(msg => {
+                if (!checkedUsers.has(msg.user_id)) {
+                    // Check the very first message encountered for this user (which is the newest)
+                    checkedUsers.add(msg.user_id);
+                    if (!msg.from_admin) {
+                        unreadThreads.add(msg.user_id);
+                    }
+                }
+            });
+
+            // Pending Language Requests
+            const { count: pendingRequests } = await supabase
+                .from('app_language_requests')
+                .select('*', { count: 'exact', head: true })
+                .eq('status', 'pending');
+
             setStats({
                 totalUsers: totalUsers || 0,
                 activeUsers7d: uniqueActiveUsers.size,
                 voiceMemosThisWeek: voiceMemos || 0,
+                unreadSupport: unreadThreads.size,
+                pendingRequests: pendingRequests || 0,
                 groupStats: groups || []
             });
 
@@ -87,7 +116,7 @@ export default function AdminDashboard() {
         </View>
     );
 
-    const MenuItem = ({ icon: Icon, label, onPress, color = SOUP_COLORS.blue }) => (
+    const MenuItem = ({ icon: Icon, label, onPress, color = SOUP_COLORS.blue, badge }) => (
         <Pressable
             style={({ pressed }) => [
                 styles.menuItem,
@@ -97,6 +126,11 @@ export default function AdminDashboard() {
         >
             <View style={[styles.menuIcon, { backgroundColor: `${color}20` }]}>
                 <Icon size={22} color={color} />
+                {badge > 0 && (
+                    <View style={styles.menuBadge}>
+                        <Text style={styles.menuBadgeText}>{badge}</Text>
+                    </View>
+                )}
             </View>
             <Text style={styles.menuLabel}>{label}</Text>
         </Pressable>
@@ -126,46 +160,30 @@ export default function AdminDashboard() {
                     <Text style={styles.sectionTitle}>⚡ Quick Actions</Text>
                     <View style={styles.menuGrid}>
                         <MenuItem
-                            icon={Plus}
-                            label="Create Challenge"
-                            onPress={() => router.push('/admin/create-challenge')}
-                            color={SOUP_COLORS.blue}
-                        />
-                        <MenuItem
-                            icon={UserPlus}
-                            label="Create Group"
-                            onPress={() => router.push('/admin/create-group')}
-                            color={SOUP_COLORS.pink}
-                        />
-                        <MenuItem
-                            icon={Calendar}
-                            label="Send Challenge"
-                            onPress={() => router.push('/admin/send-challenge')}
+                            icon={TrendingUp}
+                            label="Manage Challenges"
                             color={SOUP_COLORS.yellow}
+                            onPress={() => router.push('/admin/create-challenge')}
                         />
                         <MenuItem
                             icon={Users}
-                            label="Language Requests"
-                            onPress={() => router.push('/admin/language-requests')}
+                            label="Manage Groups"
                             color={SOUP_COLORS.green}
+                            onPress={() => router.push('/admin/manage-groups')}
                         />
                         <MenuItem
-                            icon={MessageSquare}
-                            label="Support Threads"
-                            onPress={() => router.push('/admin/support')}
+                            icon={UserPlus}
+                            label="Community Managers"
                             color={SOUP_COLORS.pink}
+                            onPress={() => router.push('/admin/manage-community-managers')}
                         />
                         <MenuItem
                             icon={Bell}
-                            label="Announcements"
-                            onPress={() => router.push('/admin/announcements')}
-                            color={SOUP_COLORS.yellow}
-                        />
-                        <MenuItem
-                            icon={Award}
-                            label="Community Managers"
-                            onPress={() => router.push('/admin/manage-community-managers')}
-                            color={SOUP_COLORS.green}
+                            label="Language Requests"
+                            color="#FF7675"
+                            onPress={() => router.push('/admin/language-requests')}
+                            badge={stats.pendingRequests}
+                            badgeColor={SOUP_COLORS.red}
                         />
                     </View>
                 </View>
@@ -331,5 +349,22 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: '#000',
         textAlign: 'center',
+    },
+    menuBadge: {
+        position: 'absolute',
+        top: -4,
+        right: -4,
+        backgroundColor: SOUP_COLORS.pink,
+        borderRadius: 10,
+        minWidth: 20,
+        height: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 5,
+    },
+    menuBadgeText: {
+        color: '#fff',
+        fontSize: 11,
+        fontWeight: '700',
     },
 });

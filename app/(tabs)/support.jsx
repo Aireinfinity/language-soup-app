@@ -104,9 +104,22 @@ export default function SupportScreen() {
 
                 if (joinError) throw joinError;
 
-                // 4. Post initial Welcome Message
+                // 4. Create initial challenge for support group
+                const { data: challenge, error: challengeError } = await supabase
+                    .from('app_challenges')
+                    .insert({
+                        group_id: targetGroupId,
+                        prompt_text: 'How can we help you today?'
+                    })
+                    .select()
+                    .single();
+
+                if (challengeError) throw challengeError;
+
+                // 5. Post initial Welcome Message
                 await supabase.from('app_messages').insert({
                     group_id: targetGroupId,
+                    challenge_id: challenge.id,
                     sender_id: user.id,
                     message_type: 'system',
                     content: 'Welcome to your private support channel! 🥣 An admin will be with you shortly.'

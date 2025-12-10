@@ -4,11 +4,13 @@ import { useRouter } from 'expo-router';
 import { ThemedText } from '../components/ThemedText';
 import { Colors } from '../constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../contexts/AuthContext';
 
 const { height } = Dimensions.get('window');
 
 export default function BootScreen() {
     const router = useRouter();
+    const { user, setBootScreenShown } = useAuth();
     const insets = useSafeAreaInsets();
     const [ready, setReady] = useState(false);
 
@@ -18,6 +20,8 @@ export default function BootScreen() {
     }, []);
 
     const handleSkip = () => {
+        // Mark boot screen as shown and navigate to tabs
+        setBootScreenShown(true);
         router.replace('/(tabs)');
     };
 

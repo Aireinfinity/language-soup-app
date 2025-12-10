@@ -60,7 +60,8 @@ export default function CreateChallenge() {
                 .from('app_challenges')
                 .insert({
                     prompt_text: combinedPrompt,
-                    group_id: formData.groupId
+                    group_id: formData.groupId,
+                    created_by: user.id
                 });
 
             if (error) throw error;

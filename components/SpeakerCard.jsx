@@ -178,6 +178,10 @@ const styles = StyleSheet.create({
     emailButton: {
         backgroundColor: SOUP_COLORS.blue,
     },
+    deleteButton: {
+        backgroundColor: SOUP_COLORS.pink,
+        flex: 1,
+    },
     buttonText: {
         color: '#fff',
         fontSize: 14,

@@ -52,7 +52,7 @@ export default function LanguageRequests() {
         try {
             const { error } = await supabase
                 .from('app_language_requests')
-                .update({ status: newStatus, updated_at: new Date().toISOString() })
+                .update({ status: newStatus })
                 .eq('id', requestId);
 
             if (error) throw error;

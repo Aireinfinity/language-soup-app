@@ -359,34 +359,11 @@ export default function AdminSupportThreadScreen() {
                 {/* Quick Actions */}
                 <View style={styles.quickActions}>
                     <Pressable
-                        style={[styles.actionBtn, { backgroundColor: SOUP_COLORS.red }]}
-                        onPress={() => updateThreadStatus('P0', 'investigating')}
-                    >
-                        <Text style={styles.actionBtnText}>Urgent</Text>
-                    </Pressable>
-                    <Pressable
-                        style={[styles.actionBtn, { backgroundColor: SOUP_COLORS.yellow }]}
-                        onPress={() => updateThreadStatus('P1', 'investigating', 'bug')}
-                    >
-                        <Text style={styles.actionBtnText}>Bug</Text>
-                    </Pressable>
-                    <Pressable
-                        style={[styles.actionBtn, { backgroundColor: SOUP_COLORS.green }]}
-                        onPress={() => updateThreadStatus('P2', 'new', 'feature_request')}
-                    >
-                        <Text style={styles.actionBtnText}>Request</Text>
-                    </Pressable>
-                    <Pressable
-                        style={[styles.actionBtn, { backgroundColor: '#2ecc71' }]} // Distinct green
-                        onPress={() => updateThreadStatus(null, 'fixed')}
-                    >
-                        <Text style={styles.actionBtnText}>Resolve</Text>
-                    </Pressable>
-                    <Pressable
-                        style={[styles.actionBtn, { backgroundColor: '#636e72', marginLeft: 8 }]}
+                        style={styles.createTicketButton}
                         onPress={() => setModalVisible(true)}
                     >
-                        <Edit3 size={14} color="#fff" />
+                        <Edit3 size={16} color="#fff" style={{ marginRight: 6 }} />
+                        <Text style={styles.createTicketText}>Create Ticket</Text>
                     </Pressable>
                 </View>
 
@@ -516,4 +493,19 @@ const styles = StyleSheet.create({
     cancelButton: { padding: 8 },
     waveformContainer: { flex: 1 },
     sendVoiceButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: SOUP_COLORS.pink, justifyContent: 'center', alignItems: 'center' },
+    createTicketButton: {
+        backgroundColor: '#000',
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 20,
+        flex: 1,
+        justifyContent: 'center',
+    },
+    createTicketText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: '600',
+    },
 });

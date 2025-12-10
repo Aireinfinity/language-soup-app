@@ -259,24 +259,31 @@ export default function SupportChatScreen() {
     }
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
-            <View style={styles.header}>
-                <Pressable onPress={() => router.back()} style={styles.backButton}>
-                    <ChevronLeft size={28} color={SOUP_COLORS.blue} />
-                </Pressable>
-                <View>
-                    <Text style={styles.headerTitle}>Get Help</Text>
-                    <View style={styles.statusBadge}>
-                        <View style={styles.statusDot} />
-                        <Text style={styles.statusText}>Usually responds in a few hours</Text>
+        <View style={styles.container}>
+            <View style={[styles.header, { paddingTop: insets.top }]}>
+                <View style={styles.headerContent}>
+                    <Pressable onPress={() => router.back()} style={styles.backButton}>
+                        <ChevronLeft size={28} color="#000" />
+                    </Pressable>
+                    <View style={styles.headerInfo}>
+                        <Text style={styles.headerTitle}>Support</Text>
+                        <View style={styles.statusBadge}>
+                            <View style={styles.statusDot} />
+                            <Text style={styles.statusText}>Usually replies in a few hours</Text>
+                        </View>
                     </View>
+                    <View style={{ width: 28 }} />
                 </View>
             </View>
 
             <View style={styles.noticeBar}>
-                <Text style={styles.noticeText}>
-                    hey! i'm noah, i check messages 3x daily (morning, afternoon, evening). usually respond within a few hours 🍜
-                </Text>
+                <Text style={styles.noticeEmoji}>👋</Text>
+                <View style={styles.noticeContent}>
+                    <Text style={styles.noticeTitle}>Hey! I'm Noah</Text>
+                    <Text style={styles.noticeText}>
+                        I check messages 3x daily and usually respond within a few hours
+                    </Text>
+                </View>
             </View>
 
             <KeyboardAvoidingView
@@ -346,7 +353,7 @@ export default function SupportChatScreen() {
                     )}
                 </View>
             </KeyboardAvoidingView>
-        </SafeAreaView>
+        </View>
     );
 }
 
@@ -366,19 +373,20 @@ const styles = StyleSheet.create({
 
     // Header
     header: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 100,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: 'rgba(0,0,0,0.1)',
+        backgroundColor: '#fff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#F2F2F7',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 2,
     },
     headerContent: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 8,
-        paddingVertical: 10,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
     },
     backButton: {
         padding: 4,
@@ -388,7 +396,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     headerTitle: {
-        fontSize: 17,
+        fontSize: 18,
         fontWeight: '700',
         color: '#000',
         textAlign: 'center',
@@ -397,32 +405,46 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        marginTop: 2,
+        marginTop: 3,
     },
     statusDot: {
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        backgroundColor: SOUP_COLORS.green, // Assuming green exists or hardcode #34C759
-        marginRight: 4,
+        width: 7,
+        height: 7,
+        borderRadius: 4,
+        backgroundColor: '#34C759',
+        marginRight: 5,
     },
     statusText: {
-        fontSize: 11,
-        color: '#636e72',
+        fontSize: 12,
+        color: '#8E8E93',
         fontWeight: '500',
     },
     noticeBar: {
-        backgroundColor: '#fff',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: 'rgba(0,0,0,0.05)',
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F8F9FA',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#E5E5EA',
+        gap: 12,
+    },
+    noticeEmoji: {
+        fontSize: 32,
+    },
+    noticeContent: {
+        flex: 1,
+    },
+    noticeTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#000',
+        marginBottom: 2,
     },
     noticeText: {
         fontSize: 13,
         color: '#636e72',
         lineHeight: 18,
-        textAlign: 'center',
     },
     headerSubtitle: {
         fontSize: 12,
@@ -499,7 +521,7 @@ const styles = StyleSheet.create({
         borderRadius: 16,
     },
     avatarPlaceholder: {
-        backgroundColor: SOUP_COLORS.pink,
+        backgroundColor: SOUP_COLORS.blue,
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -512,31 +534,38 @@ const styles = StyleSheet.create({
     // Bubbles
     bubble: {
         maxWidth: '75%',
-        padding: 12,
-        borderRadius: 18,
+        padding: 14,
+        borderRadius: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
     },
     bubbleMe: {
         backgroundColor: SOUP_COLORS.blue,
-        borderBottomRightRadius: 4,
+        borderBottomRightRadius: 6,
     },
     bubbleThem: {
         backgroundColor: '#fff',
-        borderBottomLeftRadius: 4,
+        borderBottomLeftRadius: 6,
+        borderWidth: 1,
+        borderColor: '#F2F2F7',
     },
     bubbleVoice: {
-        paddingVertical: 8,
-        paddingHorizontal: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
     },
     senderName: {
-        fontSize: 12,
-        fontWeight: '600',
+        fontSize: 13,
+        fontWeight: '700',
         color: SOUP_COLORS.pink,
-        marginBottom: 4,
+        marginBottom: 5,
     },
     messageText: {
         fontSize: 16,
         color: '#000',
-        lineHeight: 21,
+        lineHeight: 22,
     },
     messageTextMe: {
         color: '#fff',
@@ -546,37 +575,51 @@ const styles = StyleSheet.create({
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'flex-end',
-        paddingHorizontal: 12,
-        paddingTop: 10,
+        paddingHorizontal: 16,
+        paddingTop: 12,
         backgroundColor: '#fff',
-        borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: 'rgba(0,0,0,0.1)',
+        borderTopWidth: 1,
+        borderTopColor: '#F2F2F7',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 3,
     },
     input: {
         flex: 1,
-        backgroundColor: '#F2F2F7',
-        borderRadius: 20,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
+        backgroundColor: '#F8F9FA',
+        borderRadius: 22,
+        paddingHorizontal: 18,
+        paddingVertical: 11,
         fontSize: 16,
         maxHeight: 100,
-        marginRight: 8,
+        marginRight: 10,
+        borderWidth: 1,
+        borderColor: '#E5E5EA',
     },
     sendButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
         backgroundColor: SOUP_COLORS.blue,
         justifyContent: 'center',
         alignItems: 'center',
+        shadowColor: SOUP_COLORS.blue,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 3,
     },
     micButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: `${SOUP_COLORS.blue}20`,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#F8F9FA',
         justifyContent: 'center',
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#E5E5EA',
     },
 
     // Recording

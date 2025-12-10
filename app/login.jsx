@@ -68,7 +68,7 @@ export default function LoginScreen() {
     const handleVerifyCode = async () => {
         const cleanCode = otpCode.trim();
         if (!cleanCode || cleanCode.length < 6) {
-            Alert.alert('Invalid Code', 'Please enter the 6-digit code from your email.');
+            Alert.alert('Invalid Code', 'Please enter the verification code from your email.');
             return;
         }
 
@@ -104,7 +104,7 @@ export default function LoginScreen() {
                                     value={otpCode}
                                     onChangeText={setOtpCode}
                                     keyboardType="number-pad"
-                                    maxLength={6}
+                                    maxLength={10}
                                     autoFocus
                                 />
                                 <Pressable

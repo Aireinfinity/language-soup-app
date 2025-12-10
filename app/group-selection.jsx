@@ -56,6 +56,29 @@ export default function GroupSelectionScreen() {
         setSubmitting(true);
 
         try {
+            // First, ensure the user exists in app_users table
+            const { data: existingUser, error: userCheckError } = await supabase
+                .from('app_users')
+                .select('id')
+                .eq('id', user.id)
+                .single();
+
+            if (userCheckError && userCheckError.code === 'PGRST116') {
+                // User doesn't exist, create them
+                const { error: createError } = await supabase
+                    .from('app_users')
+                    .insert({
+                        id: user.id,
+                        display_name: user.user_metadata?.display_name || user.email?.split('@')[0] || 'User',
+                        created_at: new Date().toISOString()
+                    });
+
+                if (createError) {
+                    console.error('Error creating user:', createError);
+                    throw new Error('Failed to create user profile');
+                }
+            }
+
             // Join selected groups
             const memberships = selectedGroups.map(groupId => ({
                 user_id: user.id,
