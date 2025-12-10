@@ -1,5 +1,7 @@
-# We want to ignore everything that git ignores...
-.gitignore
+# Explicitly ignore node_modules and native folders to prevent upload bloat
+node_modules/
+ios/
+android/
 
 # ...EXCEPT we WANT to upload these credential files to EAS for the build
 !GoogleService-Info.plist

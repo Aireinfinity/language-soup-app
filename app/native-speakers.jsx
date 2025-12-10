@@ -153,14 +153,14 @@ export default function NativeSpeakersScreen() {
                     <ArrowLeft size={24} color={SOUP_COLORS.text} />
                 </Pressable>
                 <View style={styles.headerContent}>
-                    <Text style={styles.title}>Want to chat with a native?</Text>
+                    <Text style={styles.title}>Ready for Language Exchange?</Text>
                     <Text style={styles.subtitle}>Practice French with real people 🇫🇷</Text>
                 </View>
             </View>
 
             {/* Add Yourself Button */}
             <Pressable style={styles.addYourselfButton} onPress={() => router.push('/add-native-speaker')}>
-                <Text style={styles.addYourselfText}>+ Add Yourself as a Native Speaker</Text>
+                <Text style={styles.addYourselfText}>+ Sign up for Language Exchange</Text>
             </Pressable>
 
             {/* Speakers List */}

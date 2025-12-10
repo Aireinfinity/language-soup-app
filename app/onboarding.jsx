@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase';
 import { Camera, ArrowRight } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 
 export default function OnboardingScreen() {
     const { user } = useAuth();

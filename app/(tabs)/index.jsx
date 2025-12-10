@@ -181,6 +181,13 @@ export default function HomeScreen() {
                 })
             );
 
+            // Sort by most recent message (newest first)
+            groupsWithDetails.sort((a, b) => {
+                const timeA = a.lastMessage?.time ? new Date(a.lastMessage.time).getTime() : 0;
+                const timeB = b.lastMessage?.time ? new Date(b.lastMessage.time).getTime() : 0;
+                return timeB - timeA; // Descending order (newest first)
+            });
+
             setGroups(groupsWithDetails);
         } catch (error) {
             console.error('Error loading groups:', error);
@@ -237,17 +244,33 @@ export default function HomeScreen() {
     const renderGroup = ({ item }) => (
         <Pressable
             style={styles.groupItem}
-            onPress={() => router.push(`/chat/${item.id}`)}
+            onPress={() => {
+                console.log('Navigating to chat:', item.id);
+                router.push(`/chat/${item.id}`);
+            }}
         >
-            <View style={styles.groupAvatar}>
-                <Text style={styles.groupAvatarText}>
-                    {item.name.charAt(0).toUpperCase()}
-                </Text>
+            {/* Group Avatar with Members Badge */}
+            <View style={styles.groupAvatarWrapper}>
+                <View style={styles.groupAvatar}>
+                    <Text style={styles.groupAvatarText}>
+                        {item.name.charAt(0).toUpperCase()}
+                    </Text>
+                </View>
+                {/* Small group icon overlay */}
+                <View style={styles.groupBadge}>
+                    <Users size={12} color="#fff" />
+                </View>
             </View>
 
             <View style={styles.groupInfo}>
                 <View style={styles.groupHeader}>
-                    <ThemedText style={styles.groupName}>{item.name}</ThemedText>
+                    <View style={styles.groupTitleRow}>
+                        <ThemedText style={styles.groupName}>{item.name}</ThemedText>
+                        <View style={styles.memberBadge}>
+                            <Users size={10} color={Colors.textLight} />
+                            <Text style={styles.memberBadgeText}>{item.memberCount}</Text>
+                        </View>
+                    </View>
                     {item.lastMessage && (
                         <Text style={styles.time}>{formatTime(item.lastMessage.time)}</Text>
                     )}
@@ -256,6 +279,7 @@ export default function HomeScreen() {
                 <View style={styles.groupFooter}>
                     {item.lastMessage ? (
                         <Text style={styles.lastMessage} numberOfLines={1}>
+                            <Text style={styles.senderNameInPreview}>{item.lastMessage.senderName}: </Text>
                             {item.lastMessage.type === 'voice' ? '🎤 Voice message' : item.lastMessage.content}
                         </Text>
                     ) : (
@@ -267,11 +291,6 @@ export default function HomeScreen() {
                             <Text style={styles.unreadText}>{item.unreadCount}</Text>
                         </View>
                     )}
-                </View>
-
-                <View style={styles.groupMeta}>
-                    <Users size={14} color={Colors.textLight} />
-                    <Text style={styles.memberCount}>{item.memberCount} members</Text>
                 </View>
             </View>
         </Pressable>
@@ -532,6 +551,10 @@ const styles = StyleSheet.create({
         borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: 'rgba(0,0,0,0.08)',
     },
+    groupAvatarWrapper: {
+        position: 'relative',
+        marginRight: 12,
+    },
     groupAvatar: {
         width: 56,
         height: 56,
@@ -539,12 +562,24 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.primary,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 12,
     },
     groupAvatarText: {
         color: '#fff',
         fontSize: 24,
         fontWeight: 'bold',
+    },
+    groupBadge: {
+        position: 'absolute',
+        bottom: -2,
+        right: -2,
+        backgroundColor: Colors.secondary,
+        borderRadius: 10,
+        width: 20,
+        height: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: Colors.background,
     },
     groupInfo: {
         flex: 1,
@@ -556,9 +591,29 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 4,
     },
+    groupTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        flex: 1,
+    },
     groupName: {
         fontSize: 16,
         fontWeight: '600',
+    },
+    memberBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 3,
+        backgroundColor: '#f0f0f0',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 10,
+    },
+    memberBadgeText: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: Colors.textLight,
     },
     time: {
         fontSize: 12,
@@ -569,6 +624,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         marginBottom: 4,
+    },
+    senderNameInPreview: {
+        fontWeight: '600',
+        color: Colors.text,
     },
     lastMessage: {
         fontSize: 14,

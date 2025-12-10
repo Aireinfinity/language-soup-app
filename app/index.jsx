@@ -5,24 +5,50 @@ import { ThemedText } from '../components/ThemedText';
 import { Colors } from '../constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
+import Animated, {
+    FadeInUp,
+    FadeIn,
+    useSharedValue,
+    useAnimatedStyle,
+    withRepeat,
+    withTiming,
+    withSequence,
+    Easing
+} from 'react-native-reanimated';
 
 const { height } = Dimensions.get('window');
 
 export default function BootScreen() {
     const router = useRouter();
-    const { user, setBootScreenShown } = useAuth();
+    const { setBootScreenShown } = useAuth();
     const insets = useSafeAreaInsets();
     const [ready, setReady] = useState(false);
 
+    // Button Pulse Animation
+    const scale = useSharedValue(1);
+
     useEffect(() => {
-        // Just a small delay to ensure fonts/layout are ready, then show everything
-        setTimeout(() => setReady(true), 100);
+        // Start pulse after initial load
+        setTimeout(() => {
+            setReady(true);
+            scale.value = withRepeat(
+                withSequence(
+                    withTiming(1.1, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
+                    withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.ease) })
+                ),
+                -1, // Infinite
+                true // Reverse
+            );
+        }, 100);
     }, []);
 
+    const animatedButtonStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: scale.value }]
+    }));
+
     const handleSkip = () => {
-        // Mark boot screen as shown and navigate to tabs
         setBootScreenShown(true);
-        router.replace('/(tabs)');
+        router.replace('/how-it-works');
     };
 
     if (!ready) return <View style={styles.container} />;
@@ -34,44 +60,56 @@ export default function BootScreen() {
             onPress={handleSkip}
         >
             <View style={styles.textBlock}>
-                {/* Title */}
-                <ThemedText style={styles.headword}>language soup</ThemedText>
+                {/* Title - Fast Enry */}
+                <Animated.View entering={FadeInUp.delay(200).springify()}>
+                    <ThemedText style={styles.headword}>language soup</ThemedText>
+                </Animated.View>
 
-                {/* Pronunciation */}
-                <ThemedText style={styles.phonetic}>/ˈlæŋɡwɪdʒ suːp/</ThemedText>
+                {/* Phonetic - Slight Delay */}
+                <Animated.View entering={FadeInUp.delay(600).springify()}>
+                    <ThemedText style={styles.phonetic}>/ˈlæŋɡwɪdʒ suːp/</ThemedText>
+                </Animated.View>
 
                 {/* Verb */}
-                <ThemedText style={styles.partOfSpeech}>verb</ThemedText>
+                <Animated.View entering={FadeInUp.delay(1000).springify()}>
+                    <ThemedText style={styles.partOfSpeech}>verb</ThemedText>
+                </Animated.View>
 
-                {/* Definition */}
-                <View style={styles.definitionBlock}>
+                {/* Definition - The Punchline */}
+                <Animated.View style={styles.definitionBlock} entering={FadeInUp.delay(1500).duration(800)}>
                     <ThemedText style={styles.definitionText}>
                         <ThemedText style={{ fontWeight: 'bold' }}>Definition: </ThemedText>
                         The act of diving headfirst into chaotic, messy language practice...
                         and somehow making something shareable and delicious out of it.
                     </ThemedText>
-                </View>
+                </Animated.View>
 
-                {/* Example */}
-                <View style={{ marginTop: 24 }}>
+                {/* Example - The Lore */}
+                <Animated.View style={{ marginTop: 24 }} entering={FadeInUp.delay(2500).duration(800)}>
                     <ThemedText style={styles.exampleText}>
                         <ThemedText style={styles.exampleLabel}>Example: </ThemedText>
                         "im language souping so hard right now my head hurts 😭"
                     </ThemedText>
-                </View>
+                </Animated.View>
             </View>
 
-            {/* Button */}
+            {/* Button - The Call to Action */}
             <View style={styles.buttonContainer}>
-                <TouchableOpacity
-                    onPress={handleSkip}
-                    style={styles.soupButton}
+                <Animated.View
+                    entering={FadeIn.delay(3500)} // Wait for reading to finish
+                    style={[styles.soupButton, animatedButtonStyle]}
                 >
-                    <View style={styles.buttonContent}>
-                        <ThemedText style={styles.buttonText}>mmm good soup</ThemedText>
-                    </View>
-                </TouchableOpacity>
-                <ThemedText style={styles.tapHint}>tap anywhere to skip</ThemedText>
+                    <TouchableOpacity
+                        onPress={handleSkip}
+                        style={styles.buttonContent}
+                    >
+                        <ThemedText style={styles.buttonText}>mmm good soup 🥣</ThemedText>
+                    </TouchableOpacity>
+                </Animated.View>
+
+                <Animated.View entering={FadeIn.delay(4000)}>
+                    <ThemedText style={styles.tapHint}>tap anywhere to skip</ThemedText>
+                </Animated.View>
             </View>
         </TouchableOpacity>
     );
@@ -148,6 +186,7 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
         elevation: 4,
         backgroundColor: '#19b091', // Teal
+        overflow: 'hidden',
     },
     buttonContent: {
         paddingVertical: 16,

@@ -10,7 +10,7 @@ import { AudioMessage } from '../components/AudioMessage';
 import { LiveAudioWaveform } from '../components/LiveAudioWaveform';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { Colors } from '../constants/Colors';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 
 const SOUP_COLORS = {

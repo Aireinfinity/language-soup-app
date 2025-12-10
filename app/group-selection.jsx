@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert, Text } from 'react-native';
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, Text, Modal, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Check } from 'lucide-react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { ThemedText } from '../components/ThemedText';
 import { Colors } from '../constants/Colors';
 import { supabase } from '../lib/supabase';
@@ -15,6 +16,8 @@ export default function GroupSelectionScreen() {
     const [selectedGroups, setSelectedGroups] = useState([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+    const [showRequestModal, setShowRequestModal] = useState(false);
+    const [requestLanguage, setRequestLanguage] = useState('');
 
     useEffect(() => {
         loadGroups();
@@ -25,7 +28,6 @@ export default function GroupSelectionScreen() {
             const { data, error } = await supabase
                 .from('app_groups')
                 .select('*')
-                .eq('is_active', true)
                 .order('name');
 
             if (error) throw error;
@@ -94,8 +96,8 @@ export default function GroupSelectionScreen() {
 
             if (error) throw error;
 
-            // Navigate to home
-            router.replace('/(tabs)');
+            // Navigate to avatar onboarding
+            router.push('/onboarding/avatar');
         } catch (error) {
             console.error('Error joining groups:', error);
             Alert.alert('Error', 'Failed to join groups. Please try again.');
@@ -104,36 +106,60 @@ export default function GroupSelectionScreen() {
         }
     };
 
-    const handleSkip = () => {
-        router.replace('/(tabs)');
+    const handleRequestLanguage = async () => {
+        if (!requestLanguage.trim()) {
+            Alert.alert('Please enter a language', 'Let us know which language you\'d like to see!');
+            return;
+        }
+
+        try {
+            const { error } = await supabase
+                .from('app_language_requests')
+                .insert({
+                    user_id: user.id,
+                    language_name: requestLanguage.trim(),
+                    status: 'pending'
+                });
+
+            if (error) throw error;
+
+            Alert.alert('Request submitted! 🎉', 'We\'ll review your language request soon');
+            setRequestLanguage('');
+            setShowRequestModal(false);
+        } catch (error) {
+            console.error('Error submitting language request:', error);
+            Alert.alert('Error', 'Failed to submit request. Please try again.');
+        }
     };
 
-    const renderGroup = ({ item }) => {
+    const renderGroup = ({ item, index }) => {
         const isSelected = selectedGroups.includes(item.id);
 
         return (
-            <Pressable
-                style={[styles.groupCard, isSelected && styles.groupCardSelected]}
-                onPress={() => {
-                    toggleGroup(item.id);
-                }}
-            >
-                <View style={styles.groupInfo}>
-                    <ThemedText style={styles.groupName}>{item.name}</ThemedText>
-                    <View style={styles.groupMeta}>
-                        <ThemedText style={styles.metaText}>
-                            {item.language} • {item.level || 'All Levels'}
-                        </ThemedText>
-                        <ThemedText style={styles.metaText}>
-                            {item.member_count || 0} members
-                        </ThemedText>
+            <Animated.View entering={FadeInDown.delay(index * 100).springify()}>
+                <Pressable
+                    style={[styles.groupCard, isSelected && styles.groupCardSelected]}
+                    onPress={() => {
+                        toggleGroup(item.id);
+                    }}
+                >
+                    <View style={styles.groupInfo}>
+                        <ThemedText style={styles.groupName}>{item.name}</ThemedText>
+                        <View style={styles.groupMeta}>
+                            <ThemedText style={styles.metaText}>
+                                {item.language} • {item.level || 'All Levels'}
+                            </ThemedText>
+                            <ThemedText style={styles.metaText}>
+                                {item.member_count || 0} members
+                            </ThemedText>
+                        </View>
                     </View>
-                </View>
 
-                <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
-                    {isSelected && <Check size={20} color="#fff" />}
-                </View>
-            </Pressable>
+                    <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+                        {isSelected && <Check size={20} color="#fff" />}
+                    </View>
+                </Pressable>
+            </Animated.View>
         );
     };
 
@@ -152,19 +178,31 @@ export default function GroupSelectionScreen() {
                 <ThemedText style={styles.subtitle}>pick your languages</ThemedText>
             </View>
 
-            <FlatList
-                data={groups}
-                renderItem={renderGroup}
-                keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.list}
-                ListEmptyComponent={
-                    <View style={styles.emptyState}>
-                        <ThemedText style={styles.emptyText}>
-                            No groups available at the moment
-                        </ThemedText>
-                    </View>
-                }
-            />
+            <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
+                {/* Active Groups */}
+                {groups.filter(g => g.is_active).length > 0 && (
+                    <>
+                        <Text style={styles.sectionHeader}>active groups 🔥</Text>
+                        {groups.filter(g => g.is_active).map((group, index) => (
+                            <Animated.View key={group.id} entering={FadeInDown.delay(index * 50).springify()}>
+                                {renderGroup({ item: group, index })}
+                            </Animated.View>
+                        ))}
+                    </>
+                )}
+
+                {/* Inactive Groups */}
+                {groups.filter(g => !g.is_active).length > 0 && (
+                    <>
+                        <Text style={styles.sectionHeader}>more groups 🌙</Text>
+                        {groups.filter(g => !g.is_active).map((group, index) => (
+                            <Animated.View key={group.id} entering={FadeInDown.delay((groups.filter(g => g.is_active).length + index) * 50).springify()}>
+                                {renderGroup({ item: group, index })}
+                            </Animated.View>
+                        ))}
+                    </>
+                )}
+            </ScrollView>
 
             <View style={styles.footer}>
                 <Pressable
@@ -176,15 +214,59 @@ export default function GroupSelectionScreen() {
                         <ActivityIndicator color="#fff" />
                     ) : (
                         <ThemedText style={styles.buttonText}>
-                            Continue ({selectedGroups.length})
+                            continue ({selectedGroups.length})
                         </ThemedText>
                     )}
                 </Pressable>
 
-                <Pressable onPress={handleSkip} style={styles.skipButton}>
-                    <ThemedText style={styles.skipText}>Skip for now</ThemedText>
+                <Pressable onPress={() => setShowRequestModal(true)} style={styles.requestButton}>
+                    <ThemedText style={styles.requestText}>don't see your language? 🌍</ThemedText>
                 </Pressable>
             </View>
+
+            {/* Language Request Modal */}
+            <Modal
+                visible={showRequestModal}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => setShowRequestModal(false)}
+            >
+                <Pressable
+                    style={styles.modalOverlay}
+                    onPress={() => setShowRequestModal(false)}
+                >
+                    <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+                        <Text style={styles.modalTitle}>request a language 🌍</Text>
+                        <Text style={styles.modalSubtitle}>which language would you like to see?</Text>
+
+                        <TextInput
+                            style={styles.modalInput}
+                            placeholder="e.g. Swahili, Tamil, Tagalog..."
+                            placeholderTextColor="#999"
+                            value={requestLanguage}
+                            onChangeText={setRequestLanguage}
+                            autoFocus
+                        />
+
+                        <View style={styles.modalButtons}>
+                            <Pressable
+                                onPress={() => setShowRequestModal(false)}
+                                style={styles.modalCancelButton}
+                            >
+                                <Text style={styles.modalCancelText}>cancel</Text>
+                            </Pressable>
+
+                            <Pressable
+                                onPress={handleRequestLanguage}
+                                style={[styles.modalSubmitButton, !requestLanguage.trim() && styles.buttonDisabled]}
+                                disabled={!requestLanguage.trim()}
+                            >
+                                <Text style={styles.modalSubmitText}>submit</Text>
+                            </Pressable>
+                        </View>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -213,8 +295,20 @@ const styles = StyleSheet.create({
         color: Colors.textLight,
     },
     list: {
+        flex: 1,
+    },
+    listContent: {
         padding: 16,
-        paddingTop: 0,
+        paddingTop: 8,
+    },
+    sectionHeader: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: Colors.textLight,
+        textTransform: 'lowercase',
+        marginTop: 16,
+        marginBottom: 12,
+        paddingHorizontal: 4,
     },
     groupCard: {
         flexDirection: 'row',
@@ -259,6 +353,79 @@ const styles = StyleSheet.create({
     checkboxSelected: {
         backgroundColor: Colors.primary,
         borderColor: Colors.primary,
+    },
+    requestButton: {
+        paddingVertical: 16,
+        alignItems: 'center',
+    },
+    requestText: {
+        fontSize: 16,
+        color: Colors.secondary,
+        fontWeight: '600',
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        backgroundColor: Colors.background,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        padding: 24,
+        paddingBottom: 48,
+    },
+    modalTitle: {
+        fontSize: 24,
+        fontWeight: '700',
+        color: Colors.text,
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+    modalSubtitle: {
+        fontSize: 15,
+        color: Colors.textLight,
+        marginBottom: 24,
+        textAlign: 'center',
+    },
+    modalInput: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: Colors.secondary,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
+        fontSize: 16,
+        color: Colors.text,
+        marginBottom: 24,
+    },
+    modalButtons: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    modalCancelButton: {
+        flex: 1,
+        paddingVertical: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+        backgroundColor: '#f8f8f8',
+    },
+    modalCancelText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: Colors.text,
+    },
+    modalSubmitButton: {
+        flex: 1,
+        paddingVertical: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+        backgroundColor: Colors.secondary,
+    },
+    modalSubmitText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#fff',
     },
     emptyState: {
         padding: 48,

@@ -1,250 +1,112 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, Image, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Pressable, TextInput, Image, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { FadeInDown, FadeIn, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/Colors';
-import { Mail, ArrowRight, CheckCircle, Users } from 'lucide-react-native';
+import { Sparkles } from 'lucide-react-native';
 
 export default function LoginScreen() {
-    const { signInWithMagicLink, verifyOtp, signInWithGuest, signInWithPassword } = useAuth();
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [usePassword, setUsePassword] = useState(false); // Toggle between OTP and password
+    const { signInWithName } = useAuth();
+    const [name, setName] = useState('');
     const [loading, setLoading] = useState(false);
-    const [magicLinkSent, setMagicLinkSent] = useState(false);
-    const [otpCode, setOtpCode] = useState('');
-    const [verifying, setVerifying] = useState(false);
 
-    const handlePasswordLogin = async () => {
-        if (!email.trim() || !email.includes('@')) {
-            Alert.alert('Invalid Email', 'Please enter a valid email address.');
-            return;
-        }
-        if (!password.trim()) {
-            Alert.alert('Invalid Password', 'Please enter your password.');
+    // Button scale animation
+    const buttonScale = useSharedValue(1);
+
+    const handleSubmit = async () => {
+        if (!name.trim()) {
+            Alert.alert('Hey! 👋', 'We need to know what to call you');
             return;
         }
 
         setLoading(true);
         try {
-            await signInWithPassword(email.trim(), password.trim());
+            await signInWithName(name.trim());
+            // Navigation handled by AuthContext
         } catch (error) {
-            Alert.alert('Error', 'Invalid email or password.');
-            setLoading(false);
-        }
-    };
-
-    const handleGuestLogin = async () => {
-        setLoading(true);
-        try {
-            await signInWithGuest();
-        } catch (error) {
-            Alert.alert('Error', 'Could not sign in as guest. Please try again.');
-            setLoading(false);
-        }
-    };
-
-    const handleSendCode = async () => {
-        if (!email.trim() || !email.includes('@')) {
-            Alert.alert('Invalid Email', 'Please enter a valid email address.');
-            return;
-        }
-
-        setLoading(true);
-        try {
-            await signInWithMagicLink(email.trim());
-            setMagicLinkSent(true);
-        } catch (error) {
-            if (error.message.includes('security purposes')) {
-                Alert.alert('Hold your horses! 🐴', 'Please wait a few seconds before requesting another code.');
-            } else {
-                Alert.alert('Error', error.message || 'Could not send code. Please try again.');
-            }
+            console.error('Login error:', error);
+            Alert.alert('Oops! 😅', 'Something went wrong. Try again?');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleVerifyCode = async () => {
-        const cleanCode = otpCode.trim();
-        if (!cleanCode || cleanCode.length < 6) {
-            Alert.alert('Invalid Code', 'Please enter the verification code from your email.');
-            return;
-        }
+    const animatedButtonStyle = useAnimatedStyle(() => ({
+        transform: [{ scale: buttonScale.value }]
+    }));
 
-        setVerifying(true);
-        try {
-            await verifyOtp(email, cleanCode);
-            // AuthContext will handle redirect
-        } catch (error) {
-            Alert.alert('Error', 'Invalid code. Please try again.');
-            setVerifying(false);
-        }
+    const handlePressIn = () => {
+        buttonScale.value = withSpring(0.95, { damping: 10 });
     };
 
-    // OTP Screen
-    if (magicLinkSent) {
-        return (
-            <SafeAreaView style={styles.container}>
-                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-                    <ScrollView contentContainerStyle={styles.content}>
-                        <View style={styles.successContainer}>
-                            <CheckCircle size={64} color={Colors.primary} />
-                            <Text style={styles.successTitle}>Check your email!</Text>
-                            <Text style={styles.successText}>
-                                We sent a code to {email}.{'\n'}
-                                Enter it below to log in:
-                            </Text>
+    const handlePressOut = () => {
+        buttonScale.value = withSpring(1, { damping: 10 });
+    };
 
-                            <View style={styles.otpContainer}>
-                                <TextInput
-                                    style={styles.otpInput}
-                                    placeholder="123456"
-                                    placeholderTextColor="#999"
-                                    value={otpCode}
-                                    onChangeText={setOtpCode}
-                                    keyboardType="number-pad"
-                                    maxLength={10}
-                                    autoFocus
-                                />
-                                <Pressable
-                                    style={[styles.primaryButton, (!otpCode || otpCode.length < 6) && styles.buttonDisabled]}
-                                    onPress={handleVerifyCode}
-                                    disabled={verifying || !otpCode || otpCode.length < 6}
-                                >
-                                    {verifying ? (
-                                        <ActivityIndicator color="#fff" />
-                                    ) : (
-                                        <Text style={styles.primaryButtonText}>Verify Code</Text>
-                                    )}
-                                </Pressable>
-                            </View>
-
-                            <Pressable
-                                style={styles.secondaryButton}
-                                onPress={() => setMagicLinkSent(false)}
-                            >
-                                <Text style={styles.secondaryButtonText}>Use a different email</Text>
-                            </Pressable>
-                        </View>
-                    </ScrollView>
-                </KeyboardAvoidingView>
-            </SafeAreaView>
-        );
-    }
-
-    // Login Screen
     return (
         <SafeAreaView style={styles.container}>
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={{ flex: 1 }}
+                style={styles.content}
             >
-                <ScrollView contentContainerStyle={styles.scrollContent}>
-                    {/* Logo / Header */}
-                    <View style={styles.header}>
-                        <View style={styles.logoCircle}>
-                            <Image
-                                source={require('../assets/images/logo.png')}
-                                style={styles.logoImage}
-                                resizeMode="contain"
+                {/* Header */}
+                <Animated.View entering={FadeIn.delay(200)} style={styles.header}>
+                    <View style={styles.logoCircle}>
+                        <Image
+                            source={require('../assets/images/logo.png')}
+                            style={styles.logoImage}
+                            resizeMode="contain"
+                        />
+                    </View>
+                    <Text style={styles.title}>Language Soup</Text>
+                    <Text style={styles.subtitle}>Sip, Slurp, Speak.</Text>
+                </Animated.View>
+
+                {/* Form */}
+                <Animated.View entering={FadeInDown.delay(400).springify()} style={styles.form}>
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.label}>what should we call u? 👋</Text>
+                        <View style={styles.inputWrapper}>
+                            <Sparkles size={20} color={Colors.primary} style={styles.inputIcon} />
+                            <TextInput
+                                style={styles.input}
+                                placeholder="noah :))))"
+                                placeholderTextColor="#999"
+                                value={name}
+                                onChangeText={setName}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                onSubmitEditing={handleSubmit}
+                                returnKeyType="go"
                             />
                         </View>
-                        <Text style={styles.title}>Language Soup</Text>
-                        <Text style={styles.subtitle}>Sip, Slurp, Speak.</Text>
+                        <Text style={styles.hint}>emojis and special characters welcome! ✨</Text>
                     </View>
 
-                    {/* Login Form */}
-                    <View style={styles.actions}>
-                        <View style={styles.inputContainer}>
-                            <Text style={styles.label}>Email Address</Text>
-                            <View style={styles.inputWrapper}>
-                                <Mail size={20} color="#999" style={styles.inputIcon} />
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="you@example.com"
-                                    placeholderTextColor="#999"
-                                    value={email}
-                                    onChangeText={setEmail}
-                                    keyboardType="email-address"
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                />
-                            </View>
-                        </View>
-
-                        {usePassword && (
-                            <View style={styles.inputContainer}>
-                                <Text style={styles.label}>Password</Text>
-                                <View style={styles.inputWrapper}>
-                                    <TextInput
-                                        style={styles.input}
-                                        placeholder="Enter your password"
-                                        placeholderTextColor="#999"
-                                        value={password}
-                                        onChangeText={setPassword}
-                                        secureTextEntry
-                                        autoCapitalize="none"
-                                        autoCorrect={false}
-                                    />
-                                </View>
-                            </View>
-                        )}
-
+                    <Animated.View style={animatedButtonStyle}>
                         <Pressable
-                            style={[styles.primaryButton, (!email || loading || (usePassword && !password)) && styles.buttonDisabled]}
-                            onPress={usePassword ? handlePasswordLogin : handleSendCode}
-                            disabled={!email || loading || (usePassword && !password)}
+                            style={[
+                                styles.primaryButton,
+                                !name.trim() && styles.buttonDisabled,
+                            ]}
+                            onPress={handleSubmit}
+                            onPressIn={handlePressIn}
+                            onPressOut={handlePressOut}
+                            disabled={loading || !name.trim()}
                         >
                             {loading ? (
                                 <ActivityIndicator color="#fff" />
                             ) : (
-                                <>
-                                    <Text style={styles.primaryButtonText}>
-                                        {usePassword ? 'Sign In' : 'Send Code'}
-                                    </Text>
-                                    <ArrowRight size={20} color="#fff" />
-                                </>
+                                <Text style={styles.primaryButtonText}>let's go! 🥣</Text>
                             )}
                         </Pressable>
+                    </Animated.View>
 
-                        <Pressable
-                            style={styles.toggleButton}
-                            onPress={() => setUsePassword(!usePassword)}
-                        >
-                            <Text style={styles.toggleButtonText}>
-                                {usePassword ? 'Use email code instead' : 'Admin? Use password'}
-                            </Text>
-                        </Pressable>
-
-                        {!usePassword && (
-                            <Text style={styles.disclaimer}>
-                                We'll send you a 6-digit code to verify your email.
-                            </Text>
-                        )}
-
-                        {/* Divider */}
-                        <View style={styles.divider}>
-                            <View style={styles.dividerLine} />
-                            <Text style={styles.dividerText}>or</Text>
-                            <View style={styles.dividerLine} />
-                        </View>
-
-                        {/* Guest Login */}
-                        <Pressable
-                            style={styles.guestButton}
-                            onPress={handleGuestLogin}
-                            disabled={loading}
-                        >
-                            <Users size={20} color={Colors.primary} />
-                            <Text style={styles.guestButtonText}>Continue as Guest</Text>
-                        </Pressable>
-
-                        <Text style={styles.guestDisclaimer}>
-                            Perfect for testing! No email required.
-                        </Text>
-                    </View>
-                </ScrollView>
+                    <Text style={styles.footer}>
+                        (your account lives on this device)
+                    </Text>
+                </Animated.View>
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
@@ -255,20 +117,14 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: Colors.background,
     },
-    scrollContent: {
-        flexGrow: 1,
-        paddingHorizontal: 24,
-        paddingBottom: 40,
-        justifyContent: 'center',
-    },
     content: {
-        flexGrow: 1,
-        justifyContent: 'center',
+        flex: 1,
         paddingHorizontal: 24,
+        justifyContent: 'center',
     },
     header: {
         alignItems: 'center',
-        marginBottom: 48,
+        marginBottom: 60,
     },
     logoCircle: {
         width: 120,
@@ -289,39 +145,39 @@ const styles = StyleSheet.create({
         height: 80,
     },
     title: {
-        fontSize: 32,
+        fontSize: 36,
         fontWeight: '800',
         color: Colors.text,
         marginBottom: 8,
         textAlign: 'center',
     },
     subtitle: {
-        fontSize: 18,
+        fontSize: 20,
         color: Colors.textLight,
         fontStyle: 'italic',
         textAlign: 'center',
     },
-    actions: {
+    form: {
         width: '100%',
         maxWidth: 400,
         alignSelf: 'center',
     },
     inputContainer: {
-        marginBottom: 20,
+        marginBottom: 24,
     },
     label: {
-        fontSize: 14,
+        fontSize: 18,
         fontWeight: '600',
         color: Colors.text,
-        marginBottom: 8,
+        marginBottom: 12,
     },
     inputWrapper: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#fff',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#E5E5EA',
+        borderRadius: 16,
+        borderWidth: 2,
+        borderColor: Colors.primary,
         paddingHorizontal: 16,
     },
     inputIcon: {
@@ -329,125 +185,42 @@ const styles = StyleSheet.create({
     },
     input: {
         flex: 1,
-        fontSize: 16,
+        fontSize: 18,
         color: Colors.text,
-        paddingVertical: 16,
+        paddingVertical: 18,
+    },
+    hint: {
+        fontSize: 13,
+        color: Colors.textLight,
+        marginTop: 8,
+        fontStyle: 'italic',
+        textAlign: 'center',
     },
     primaryButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
         backgroundColor: Colors.primary,
-        paddingVertical: 16,
-        borderRadius: 12,
-        marginTop: 12,
+        paddingVertical: 18,
+        borderRadius: 16,
+        alignItems: 'center',
+        shadowColor: Colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
     },
     buttonDisabled: {
-        opacity: 0.5,
+        opacity: 0.4,
+        shadowOpacity: 0,
     },
     primaryButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
+        fontSize: 20,
+        fontWeight: '700',
         color: '#fff',
     },
-    toggleButton: {
-        paddingVertical: 12,
-        alignItems: 'center',
-        marginTop: 12,
-    },
-    toggleButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: Colors.primary,
-    },
-    disclaimer: {
+    footer: {
         fontSize: 12,
         color: Colors.textLight,
         textAlign: 'center',
-        marginTop: 16,
-        lineHeight: 18,
-    },
-    secondaryButton: {
-        paddingVertical: 16,
-        alignItems: 'center',
-        marginTop: 16,
-    },
-    secondaryButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: Colors.primary,
-    },
-    successContainer: {
-        alignItems: 'center',
-        paddingTop: 60,
-    },
-    successTitle: {
-        fontSize: 24,
-        fontWeight: '700',
-        color: Colors.text,
         marginTop: 24,
-        marginBottom: 12,
-    },
-    successText: {
-        fontSize: 16,
-        color: Colors.textLight,
-        textAlign: 'center',
-        lineHeight: 24,
-        marginBottom: 32,
-    },
-    otpContainer: {
-        width: '100%',
-        maxWidth: 300,
-    },
-    otpInput: {
-        backgroundColor: '#fff',
-        borderWidth: 1,
-        borderColor: '#E5E5EA',
-        borderRadius: 12,
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-        fontSize: 24,
-        fontWeight: '600',
-        textAlign: 'center',
-        letterSpacing: 8,
-        marginBottom: 24,
-    },
-    divider: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginVertical: 32,
-    },
-    dividerLine: {
-        flex: 1,
-        height: 1,
-        backgroundColor: '#E5E5EA',
-    },
-    dividerText: {
-        paddingHorizontal: 16,
-        fontSize: 14,
-        color: Colors.textLight,
-    },
-    guestButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        backgroundColor: '#fff',
-        paddingVertical: 16,
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: Colors.primary,
-    },
-    guestButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: Colors.primary,
-    },
-    guestDisclaimer: {
-        fontSize: 12,
-        color: Colors.textLight,
-        textAlign: 'center',
-        marginTop: 12,
+        fontStyle: 'italic',
     },
 });

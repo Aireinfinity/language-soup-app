@@ -3,7 +3,7 @@ import { View, StyleSheet, TextInput, Pressable, Image, ActivityIndicator, Alert
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import { Camera, ArrowLeft } from 'lucide-react-native';
 import { ThemedText } from '../components/ThemedText';
 import { Colors } from '../constants/Colors';

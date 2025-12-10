@@ -24,9 +24,13 @@ function RootLayoutNav() {
         <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="login" options={{ gestureEnabled: false }} />
-            <Stack.Screen name="onboarding" />
+            <Stack.Screen name="how-it-works" />
+            <Stack.Screen name="onboarding/avatar" options={{ gestureEnabled: false }} />
+            <Stack.Screen name="onboarding/conversational" options={{ gestureEnabled: false }} />
+            <Stack.Screen name="onboarding/learning" options={{ gestureEnabled: false }} />
+            <Stack.Screen name="onboarding/tagline" options={{ gestureEnabled: false }} />
             <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="group-selection" />
+            <Stack.Screen name="group-selection" options={{ gestureEnabled: false }} />
             <Stack.Screen name="chat/[id]" />
         </Stack>
     );

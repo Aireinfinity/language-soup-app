@@ -10,7 +10,7 @@ import { Colors } from '../constants/Colors';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 
 const SOUP_COLORS = {
@@ -465,7 +465,7 @@ export default function CommunityChatScreen() {
             <KeyboardAvoidingView
                 style={styles.keyboardView}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                keyboardVerticalOffset={0}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
             >
                 {/* Messages */}
                 <FlatList

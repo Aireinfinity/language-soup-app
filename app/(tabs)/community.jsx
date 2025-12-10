@@ -119,6 +119,16 @@ export default function CommunityScreen() {
                 <Users size={12} color={SOUP_COLORS.subtext} />
                 <Text style={styles.memberText}>{item.member_count || 0}</Text>
             </View>
+
+            <View style={{
+                marginTop: 8,
+                backgroundColor: SOUP_COLORS.blue,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 12,
+            }}>
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>Open Chat</Text>
+            </View>
         </Pressable>
     );
 

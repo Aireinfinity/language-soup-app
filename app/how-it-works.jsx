@@ -79,36 +79,57 @@ export default function HowItWorksScreen() {
         const step = STEPS[currentStep];
 
         if (step.animationType === 'recipe') {
-            Animated.spring(anim1, { toValue: 1, friction: 8, useNativeDriver: true }).start();
+            // Bouncy chef entrance
+            Animated.spring(anim1, {
+                toValue: 1,
+                friction: 5,
+                tension: 40,
+                useNativeDriver: true
+            }).start();
         } else if (step.animationType === 'select') {
-            // Just show them all
-            Animated.timing(anim1, { toValue: 1, duration: 800, useNativeDriver: true }).start();
+            // Cascade in with bounce
+            Animated.stagger(50,
+                ALL_LANGS_DISPLAY.map((_, i) =>
+                    Animated.spring(anim1, {
+                        toValue: 1,
+                        friction: 7,
+                        useNativeDriver: true
+                    })
+                )
+            ).start();
         } else if (step.animationType === 'notification') {
-            Animated.stagger(800, [
-                Animated.spring(anim1, { toValue: 1, friction: 6, useNativeDriver: true }),
-                Animated.spring(anim2, { toValue: 1, friction: 6, useNativeDriver: true }),
-                Animated.spring(anim3, { toValue: 1, friction: 6, useNativeDriver: true }),
+            // Bouncy notifications dropping in
+            Animated.stagger(400, [
+                Animated.spring(anim1, { toValue: 1, friction: 5, tension: 40, useNativeDriver: true }),
+                Animated.spring(anim2, { toValue: 1, friction: 5, tension: 40, useNativeDriver: true }),
+                Animated.spring(anim3, { toValue: 1, friction: 5, tension: 40, useNativeDriver: true }),
             ]).start();
         } else if (step.animationType === 'waveform') {
-            // 1. My message (Right, Blue)
-            Animated.timing(anim1, { toValue: 1, duration: 600, easing: Easing.out(Easing.back(1.5)), useNativeDriver: true }).start();
+            // Bouncy microphone button appears
+            Animated.spring(anim1, {
+                toValue: 1,
+                friction: 4,
+                tension: 40,
+                useNativeDriver: true
+            }).start();
 
-            // 2. Others (Left) - Staggered
+            // Voice messages bounce in
             Animated.sequence([
-                Animated.delay(800),
-                Animated.stagger(400, [
+                Animated.delay(600),
+                Animated.stagger(300, [
                     Animated.spring(anim2, { toValue: 1, friction: 6, useNativeDriver: true }),
                     Animated.spring(anim3, { toValue: 1, friction: 6, useNativeDriver: true }),
                 ])
             ]).start();
         } else if (step.animationType === 'permission') {
+            // Continuous bell shake
             Animated.loop(
                 Animated.sequence([
-                    Animated.timing(anim1, { toValue: 1, duration: 100, useNativeDriver: true }),
-                    Animated.timing(anim1, { toValue: -1, duration: 100, useNativeDriver: true }),
-                    Animated.timing(anim1, { toValue: 1, duration: 100, useNativeDriver: true }),
-                    Animated.timing(anim1, { toValue: 0, duration: 100, useNativeDriver: true }),
-                    Animated.delay(1000),
+                    Animated.timing(anim1, { toValue: 1, duration: 80, useNativeDriver: true }),
+                    Animated.timing(anim1, { toValue: -1, duration: 80, useNativeDriver: true }),
+                    Animated.timing(anim1, { toValue: 1, duration: 80, useNativeDriver: true }),
+                    Animated.timing(anim1, { toValue: 0, duration: 80, useNativeDriver: true }),
+                    Animated.delay(1200),
                 ])
             ).start();
         }
@@ -145,35 +166,38 @@ export default function HowItWorksScreen() {
         if (step.animationType === 'recipe') {
             return (
                 <View style={styles.animBox}>
-                    <Animated.Text style={{ fontSize: 100, transform: [{ scale: anim1 }] }}>👩🏽‍🍳</Animated.Text>
+                    <Animated.Text style={{ fontSize: 120, transform: [{ scale: anim1 }] }}>👩🏽‍🍳</Animated.Text>
                 </View>
             );
         } else if (step.animationType === 'select') {
             return (
                 <Animated.View style={[styles.animBox, { opacity: anim1, flexWrap: 'wrap', flexDirection: 'row', width: width - 48, height: 300, alignContent: 'center', justifyContent: 'center' }]}>
                     {ALL_LANGS_DISPLAY.map((lang, i) => (
-                        <ThemedText key={i} style={{
-                            fontSize: Math.random() * 10 + 14,
-                            margin: 4,
+                        <Animated.Text key={i} style={{
+                            fontSize: Math.random() * 12 + 16,
+                            margin: 6,
                             color: [Colors.primary, Colors.accent, Colors.highlight, Colors.text][i % 4],
                             fontWeight: 'bold',
-                            transform: [{ rotate: `${Math.random() * 20 - 10}deg` }]
+                            transform: [
+                                { rotate: `${Math.random() * 30 - 15}deg` },
+                                { scale: anim1 }
+                            ]
                         }}>
                             {lang}
-                        </ThemedText>
+                        </Animated.Text>
                     ))}
                 </Animated.View>
             );
         } else if (step.animationType === 'notification') {
             return (
                 <View style={styles.animBox}>
-                    <Animated.View style={[styles.notification, { opacity: anim1, transform: [{ translateY: anim1.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }] }]}>
+                    <Animated.View style={[styles.notification, { opacity: anim1, transform: [{ translateY: anim1.interpolate({ inputRange: [0, 1], outputRange: [-40, 0] }) }, { scale: anim1 }] }]}>
                         <ThemedText style={styles.notifText}>🔔 new challenge just dropped</ThemedText>
                     </Animated.View>
-                    <Animated.View style={[styles.notification, { opacity: anim2, transform: [{ translateY: anim2.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }] }]}>
+                    <Animated.View style={[styles.notification, { opacity: anim2, transform: [{ translateY: anim2.interpolate({ inputRange: [0, 1], outputRange: [-40, 0] }) }, { scale: anim2 }] }]}>
                         <ThemedText style={styles.notifText}>🥣 time to stir your soup</ThemedText>
                     </Animated.View>
-                    <Animated.View style={[styles.notification, { opacity: anim3, transform: [{ translateY: anim3.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }] }]}>
+                    <Animated.View style={[styles.notification, { opacity: anim3, transform: [{ translateY: anim3.interpolate({ inputRange: [0, 1], outputRange: [-40, 0] }) }, { scale: anim3 }] }]}>
                         <ThemedText style={styles.notifText}>🔥 new language soup</ThemedText>
                     </Animated.View>
                 </View>
@@ -181,61 +205,71 @@ export default function HowItWorksScreen() {
         } else if (step.animationType === 'waveform') {
             return (
                 <View style={[styles.animBox, { width: 280 }]}>
-                    {/* My Message (Right, Blue) */}
+                    {/* Big Microphone Button - Center stage */}
                     <Animated.View
                         style={[
-                            styles.bubble,
-                            styles.bubbleRight,
+                            styles.bigMicButton,
                             {
-                                backgroundColor: Colors.primary,
                                 opacity: anim1,
-                                transform: [{ translateX: anim1.interpolate({ inputRange: [0, 1], outputRange: [50, 0] }) }]
+                                transform: [{ scale: anim1 }]
                             }
                         ]}
                     >
-                        <View style={[styles.waveform, { width: 80 }]} />
-                        <ThemedText style={{ fontSize: 24 }}>🎙️</ThemedText>
+                        <Animated.Text style={{ fontSize: 64 }}>🎙️</Animated.Text>
                     </Animated.View>
 
-                    {/* Others (Left) */}
-                    <Animated.View
+                    <Animated.Text
                         style={[
-                            styles.bubble,
-                            styles.bubbleLeft,
+                            styles.micInstruction,
                             {
-                                backgroundColor: Colors.accent,
-                                marginTop: 16,
-                                opacity: anim2,
-                                transform: [{ translateX: anim2.interpolate({ inputRange: [0, 1], outputRange: [-50, 0] }) }]
+                                opacity: anim1,
+                                transform: [{ translateY: anim1.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }]
                             }
                         ]}
                     >
-                        <ThemedText style={{ fontSize: 20 }}>🎙️</ThemedText>
-                        <View style={[styles.waveform, { width: 60 }]} />
-                    </Animated.View>
+                        tap & hold to record
+                    </Animated.Text>
 
-                    <Animated.View
-                        style={[
-                            styles.bubble,
-                            styles.bubbleLeft,
-                            {
-                                backgroundColor: Colors.highlight,
-                                marginTop: 8,
-                                opacity: anim3,
-                                transform: [{ translateX: anim3.interpolate({ inputRange: [0, 1], outputRange: [-50, 0] }) }]
-                            }
-                        ]}
-                    >
-                        <ThemedText style={{ fontSize: 20 }}>🎙️</ThemedText>
-                        <View style={[styles.waveform, { width: 50 }]} />
-                    </Animated.View>
+                    {/* Voice bubbles sliding in from sides */}
+                    <View style={{ marginTop: 32, width: '100%', gap: 12 }}>
+                        <Animated.View
+                            style={[
+                                styles.voiceBubble,
+                                {
+                                    backgroundColor: Colors.accent,
+                                    opacity: anim2,
+                                    transform: [{ translateX: anim2.interpolate({ inputRange: [0, 1], outputRange: [-100, 0] }) }]
+                                }
+                            ]}
+                        >
+                            <Animated.Text style={{ fontSize: 20 }}>🎙️</Animated.Text>
+                            <View style={styles.waveformBar} />
+                            <Animated.Text style={styles.duration}>0:05</Animated.Text>
+                        </Animated.View>
+
+                        <Animated.View
+                            style={[
+                                styles.voiceBubble,
+                                {
+                                    backgroundColor: Colors.highlight,
+                                    alignSelf: 'flex-end',
+                                    opacity: anim3,
+                                    transform: [{ translateX: anim3.interpolate({ inputRange: [0, 1], outputRange: [100, 0] }) }]
+                                }
+                            ]}
+                        >
+                            <Animated.Text style={{ fontSize: 20 }}>🎙️</Animated.Text>
+                            <View style={styles.waveformBar} />
+                            <Animated.Text style={styles.duration}>0:03</Animated.Text>
+                        </Animated.View>
+                    </View>
                 </View>
             );
         } else if (step.animationType === 'permission') {
             return (
                 <View style={styles.animBox}>
-                    <Animated.View style={{ transform: [{ rotate: anim1.interpolate({ inputRange: [-1, 1], outputRange: ['-15deg', '15deg'] }) }] }}>
-                        <Bell size={80} color={Colors.primary} />
+                    <Animated.View style={{ transform: [{ rotate: anim1.interpolate({ inputRange: [-1, 1], outputRange: ['-20deg', '20deg'] }) }] }}>
+                        <Bell size={100} color={Colors.primary} />
                     </Animated.View>
                 </View>
             );
@@ -416,5 +450,69 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.6)',
         borderRadius: 2,
         marginHorizontal: 8,
+    },
+    micButton: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: Colors.primary,
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        alignSelf: 'center',
+        shadowColor: Colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
+    },
+    micLabel: {
+        fontSize: 11,
+        color: '#fff',
+        marginTop: 4,
+        fontWeight: '600',
+    },
+    bubbleTime: {
+        fontSize: 10,
+        color: 'rgba(255,255,255,0.8)',
+        marginLeft: 4,
+    },
+    bigMicButton: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        backgroundColor: Colors.primary,
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: Colors.primary,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    micInstruction: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: Colors.text,
+        marginTop: 16,
+        textAlign: 'center',
+    },
+    voiceBubble: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderRadius: 20,
+        gap: 8,
+        width: '75%',
+    },
+    waveformBar: {
+        flex: 1,
+        height: 4,
+        backgroundColor: 'rgba(255,255,255,0.6)',
+        borderRadius: 2,
+    },
+    duration: {
+        fontSize: 11,
+        color: 'rgba(255,255,255,0.9)',
+        fontWeight: '600',
     },
 });

@@ -15,6 +15,7 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [session, setSession] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [profileChecked, setProfileChecked] = useState(false);
     const [bootScreenShown, setBootScreenShown] = useState(false);
     const router = useRouter();
     const segments = useSegments();
@@ -32,19 +33,21 @@ export const AuthProvider = ({ children }) => {
             setSession(session);
             setUser(session?.user ?? null);
             setLoading(false);
+            // Reset profile check on logout or user change
+            if (!session?.user) {
+                setProfileChecked(false);
+                setBootScreenShown(false);
+            }
         });
 
         return () => subscription.unsubscribe();
     }, []);
 
+    // ... (setSessionFromUrl remains same)
+
     const setSessionFromUrl = async (url) => {
         if (!url) return;
-
         try {
-            // Parse Supabase URL (hash or query params)
-            // Format: ...#access_token=...&refresh_token=...
-            // Or: ...?access_token=...&refresh_token=...
-
             const getParam = (name) => {
                 const regex = new RegExp(`[#?&]${name}=([^&]*)`);
                 const results = regex.exec(url);
@@ -67,6 +70,8 @@ export const AuthProvider = ({ children }) => {
     };
 
     // Protected Route Logic
+    // ... (Link listener remains same)
+
     useEffect(() => {
         // Handle deep links for OAuth login (if browser redirects automatically)
         const handleDeepLink = (event) => {
@@ -75,7 +80,6 @@ export const AuthProvider = ({ children }) => {
 
         const subscription = Linking.addEventListener('url', handleDeepLink);
 
-        // Check for initial URL if app was opened via link
         Linking.getInitialURL().then((url) => {
             if (url) setSessionFromUrl(url);
         });
@@ -91,8 +95,8 @@ export const AuthProvider = ({ children }) => {
         if (!navigationState?.key) return; // Wait for navigation to be ready
 
         const currentRoute = segments[0];
-        const publicRoutes = ['index', 'how-it-works', 'login', 'onboarding']; // onboarding needs to be accessible to create profile
-        const isPublicRoute = publicRoutes.includes(currentRoute) || !currentRoute; // !currentRoute handles root path '/'
+        const publicRoutes = ['index', 'how-it-works', 'login', 'onboarding'];
+        const isPublicRoute = publicRoutes.includes(currentRoute) || !currentRoute;
 
         if (!user && !isPublicRoute) {
             // Redirect to login if not authenticated and trying to access protected route
@@ -100,15 +104,47 @@ export const AuthProvider = ({ children }) => {
         } else if (user) {
             // User is authenticated
 
+            // Check cache first to avoid loops
+            if (profileChecked) return;
+
             // Only check profile and redirect from login or when no route (initial load)
-            // Don't redirect if already on boot screen (index) to prevent loops
             if (currentRoute === 'login' || (!currentRoute && !bootScreenShown)) {
                 checkProfileAndRedirect(user, true, false, currentRoute);
             }
         }
-    }, [user, loading, segments]);
+    }, [user, loading, segments, profileChecked]);
 
     const checkProfileAndRedirect = async (currentUser, inAuthGroup, inOnboarding, currentRoute) => {
+        // For anonymous users (our new flow), check if they have groups
+        if (currentUser.is_anonymous) {
+            try {
+                // Check if user has joined any groups
+                const { data: groups, error } = await supabase
+                    .from('app_group_members')
+                    .select('group_id')
+                    .eq('user_id', currentUser.id)
+                    .limit(1);
+
+                if (error) throw error;
+
+                setProfileChecked(true);
+
+                if (!groups || groups.length === 0) {
+                    // No groups - send to group selection
+                    router.replace('/group-selection');
+                } else {
+                    // Has groups - go to home
+                    router.replace('/(tabs)');
+                }
+            } catch (error) {
+                console.error('Error checking groups:', error);
+                // Default to group selection on error
+                router.replace('/group-selection');
+            }
+            return;
+        }
+
+        // Legacy: For non-anonymous users (email/password), use old logic
         try {
             const { data, error } = await supabase
                 .from('app_users')
@@ -124,6 +160,7 @@ export const AuthProvider = ({ children }) => {
                     router.replace('/onboarding');
                 }
             } else {
+                setProfileChecked(true);
                 // If profile exists, show boot screen once, then go to tabs
                 if (inAuthGroup || inOnboarding) {
                     if (!bootScreenShown) {
@@ -145,7 +182,6 @@ export const AuthProvider = ({ children }) => {
 
     // GOOGLE AUTH - Commented out until Apple Developer account is approved
     // Uncomment when ready to use with TestFlight/Production builds
-    /*
     const signInWithGoogle = async () => {
         try {
             const redirectUrl = Linking.createURL('login-callback', { scheme: 'languagesoup' });
@@ -182,7 +218,51 @@ export const AuthProvider = ({ children }) => {
             throw error;
         }
     };
-    */
+
+    // USERNAME AUTH (Proxy Email)
+    const signUpWithUsername = async (username, password) => {
+        try {
+            const cleanUsername = username.toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (cleanUsername.length < 3) throw new Error('Username must be at least 3 characters');
+
+            const email = `${cleanUsername}@languagesoup.app`;
+
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password,
+                options: {
+                    data: {
+                        display_name: username,
+                        is_username_auth: true
+                    }
+                }
+            });
+
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('Username signup error:', error);
+            throw error;
+        }
+    };
+
+    const signInWithUsername = async (username, password) => {
+        try {
+            const cleanUsername = username.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const email = `${cleanUsername}@languagesoup.app`;
+
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            });
+
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            console.error('Username login error:', error);
+            throw error;
+        }
+    };
 
     // EMAIL AUTH - Active for Expo Go testing
     const signInWithMagicLink = async (email) => {
@@ -209,6 +289,37 @@ export const AuthProvider = ({ children }) => {
             return data;
         } catch (error) {
             console.error('OTP verification error:', error);
+            throw error;
+        }
+    };
+
+    const signInWithName = async (displayName) => {
+        try {
+            // Sign in anonymously (device-based auth)
+            const { data, error } = await supabase.auth.signInAnonymously();
+            if (error) throw error;
+
+            // Create user profile with display name
+            if (data.user) {
+                const { error: profileError } = await supabase
+                    .from('app_users')
+                    .upsert({
+                        id: data.user.id,
+                        display_name: displayName,
+                        avatar_url: `https://api.dicebear.com/7.x/avataaars/png?seed=${data.user.id}`,
+                        status_text: 'Hey there! I am using Language Soup',
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                    });
+
+                if (profileError) {
+                    console.warn('Profile creation error:', profileError);
+                }
+            }
+
+            return data;
+        } catch (error) {
+            console.error('Name login failed:', error);
             throw error;
         }
     };
@@ -248,12 +359,16 @@ export const AuthProvider = ({ children }) => {
             user,
             session,
             loading,
+            profileChecked,
             setBootScreenShown,
+            signInWithName,
+            signUpWithUsername,
+            signInWithUsername,
             signInWithMagicLink,
             verifyOtp,
             signInWithGuest,
             signInWithPassword,
-            // signInWithGoogle, // Commented out - uncomment when using TestFlight
+            signInWithGoogle,
             signOut
         }}>
             {!loading && children}

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator, TextInput, Alert, Text, Switch, Modal, Dimensions, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import { Camera, Edit2, LogOut, MapPin, Globe, Award, Share2, Sparkles, Flag, Clock, Crown, X, Download } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../lib/supabase';
@@ -49,6 +49,7 @@ export default function ProfileScreen() {
     const [uploading, setUploading] = useState(false);
     const [showWrappedModal, setShowWrappedModal] = useState(false);
     const [showLevelsInfo, setShowLevelsInfo] = useState(false);
+    const [newSoupFlavor, setNewSoupFlavor] = useState('');
     const wrappedRef = useRef();
 
     useEffect(() => {
@@ -72,6 +73,20 @@ export default function ProfileScreen() {
                 setNewTimezone(userData.timezone || '');
                 setNewLanguages(userData.fluent_languages || []);
                 setNewLearning(userData.learning_languages || []);
+                setNewSoupFlavor(userData.soup_flavor || '');
+            } else {
+                // FALLBACK FOR GUEST / MISSING PROFILE
+                const guestUser = {
+                    display_name: 'Guest Souper',
+                    bio: 'Just looking around! 👀',
+                    origin: 'Unknown',
+                    location: 'Earth',
+                    fluent_languages: [],
+                    learning_languages: [],
+                    avatar_url: null,
+                    role: 'guest'
+                };
+                setUser(guestUser);
             }
 
             const { data: groupData } = await supabase
@@ -155,7 +170,8 @@ export default function ProfileScreen() {
             bio: (newBio || '').trim(),
             timezone: (newTimezone || '').trim(),
             fluent_languages: newLanguages || [],
-            learning_languages: newLearning || []
+            learning_languages: newLearning || [],
+            soup_flavor: (newSoupFlavor || '').trim()
         };
 
         // Update local user object immediately so UI reflects changes
@@ -785,7 +801,40 @@ export default function ProfileScreen() {
                                             </Text>
                                         </Pressable>
                                     </View>
-                                ) : null}
+                                ) : (
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.languageChips}>
+                                        {availableTimezones.map(tz => (
+                                            <Pressable
+                                                key={tz}
+                                                style={styles.languageChip}
+                                                onPress={() => setNewTimezone(tz)}
+                                            >
+                                                <Text style={styles.languageChipText}>{tz}</Text>
+                                            </Pressable>
+                                        ))}
+                                    </ScrollView>
+                                )}
+
+                                {/* SOUP FLAVOR SECTION */}
+                                <Text style={styles.modalLabel}>Soup Flavor 🍲</Text>
+                                <Text style={styles.modalSubLabel}>What's your learning vibe?</Text>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.flavorScroll}>
+                                    {['Spicy 🌶️', 'Salty 🧂', 'Chunky 🥔', 'Smooth 🥣', 'Chaotic 🌪️', 'Zesty 🍋', 'Bland 🍞'].map(flavor => (
+                                        <Pressable
+                                            key={flavor}
+                                            style={[
+                                                styles.flavorChip,
+                                                newSoupFlavor === flavor && styles.flavorChipSelected
+                                            ]}
+                                            onPress={() => setNewSoupFlavor(flavor)}
+                                        >
+                                            <Text style={[
+                                                styles.flavorChipText,
+                                                newSoupFlavor === flavor && styles.flavorChipTextSelected
+                                            ]}>{flavor}</Text>
+                                        </Pressable>
+                                    ))}
+                                </ScrollView>
 
                                 <TextInput
                                     style={[styles.modalInput, { marginBottom: 12 }]}
