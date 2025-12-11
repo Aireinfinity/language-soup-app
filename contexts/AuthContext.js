@@ -107,8 +107,11 @@ export const AuthProvider = ({ children }) => {
             // Check cache first to avoid loops
             if (profileChecked) return;
 
-            // Only check profile and redirect from login or when no route (initial load)
-            if (currentRoute === 'login' || (!currentRoute && !bootScreenShown)) {
+            // Skip auto-redirect if user is in onboarding flow
+            const inOnboardingFlow = currentRoute?.includes('onboarding') || currentRoute?.includes('login');
+
+            // Only check profile and redirect from initial load, NOT from login/onboarding screens
+            if (!currentRoute && !bootScreenShown && !inOnboardingFlow) {
                 checkProfileAndRedirect(user, true, false, currentRoute);
             }
         }
@@ -129,16 +132,16 @@ export const AuthProvider = ({ children }) => {
 
                 setProfileChecked(true);
 
-                if (!groups || groups.length === 0) {
-                    // No groups - send to group selection
-                    router.replace('/group-selection');
-                } else {
-                    // Has groups - go to home
+                // DIRECT NAVIGATION (Skip Boot Screen here)
+                // If user has groups -> Home. If new -> Group Selection.
+                if (groups && groups.length > 0) {
                     router.replace('/(tabs)');
+                } else {
+                    router.replace('/group-selection');
                 }
+
             } catch (error) {
                 console.error('Error checking groups:', error);
-                // Default to group selection on error
                 router.replace('/group-selection');
             }
             return;
@@ -301,11 +304,38 @@ export const AuthProvider = ({ children }) => {
 
             // Create user profile with display name
             if (data.user) {
+                const targetName = displayName.trim();
+                // STRICT check for Founder Daddy
+                const isAdmin = targetName === 'Noah :)';
+
+                // 1. Check if this username already exists (to handle re-linking)
+                const { data: existingUser } = await supabase
+                    .from('app_users')
+                    .select('id')
+                    .eq('display_name', targetName)
+                    .single();
+
+                if (existingUser && isAdmin) {
+                    // RE-LINKING LOGIC:
+                    // If 'Noah :)' exists, we assume it's YOU trying to get back in.
+                    // We need to update the OLD record to point to your NEW anonymous ID.
+                    // Note: This requires RLS policies to allow updating "other" users or service role usage.
+                    // Since we are client-side, we might hit RLS issues unless we are careful.
+                    // HACK: For now, we unfortunately can't swap IDs easily without backend logic.
+                    // ALTERNATIVE: We delete the old row first so the new upsert works.
+                    await supabase
+                        .from('app_users')
+                        .delete()
+                        .eq('display_name', targetName);
+                }
+
                 const { error: profileError } = await supabase
                     .from('app_users')
                     .upsert({
                         id: data.user.id,
-                        display_name: displayName,
+                        display_name: targetName,
+                        is_admin: isAdmin,
+                        is_community_manager: isAdmin,
                         avatar_url: `https://api.dicebear.com/7.x/avataaars/png?seed=${data.user.id}`,
                         status_text: 'Hey there! I am using Language Soup',
                         created_at: new Date().toISOString(),

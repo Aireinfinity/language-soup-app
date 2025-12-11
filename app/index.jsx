@@ -2,9 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '../components/ThemedText';
+import SoupBowlAnimation from '../components/SoupBowlAnimation';
 import { Colors } from '../constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 import Animated, {
     FadeInUp,
     FadeIn,
@@ -20,7 +22,7 @@ const { height } = Dimensions.get('window');
 
 export default function BootScreen() {
     const router = useRouter();
-    const { setBootScreenShown } = useAuth();
+    const { setBootScreenShown, user } = useAuth();
     const insets = useSafeAreaInsets();
     const [ready, setReady] = useState(false);
 
@@ -40,15 +42,55 @@ export default function BootScreen() {
                 true // Reverse
             );
         }, 100);
-    }, []);
+
+        // FAST PASS: If user is already logged in (e.g. redirected from Login), auto-advance
+        if (user) {
+            console.log('User found, auto-advancing boot screen...');
+            const timer = setTimeout(() => {
+                handleSkip();
+            }, 1500); // 1.5s delay to enjoy the soup
+            return () => clearTimeout(timer);
+        }
+    }, [user]);
 
     const animatedButtonStyle = useAnimatedStyle(() => ({
         transform: [{ scale: scale.value }]
     }));
 
-    const handleSkip = () => {
+    const handleSkip = async () => {
         setBootScreenShown(true);
-        router.replace('/how-it-works');
+
+        // Check if user has a real profile in app_users (not just an auth session)
+        if (!user) {
+            router.replace('/how-it-works');
+        } else {
+            // User has auth session, but do they have an app_users profile?
+            const { data: userProfile } = await supabase
+                .from('app_users')
+                .select('id')
+                .eq('id', user.id)
+                .single();
+
+            if (!userProfile) {
+                // Auth session exists but no profile = ghost user
+                // Send to onboarding
+                router.replace('/how-it-works');
+                return;
+            }
+
+            // Check if user has joined groups
+            const { data: groups } = await supabase
+                .from('app_group_members')
+                .select('group_id')
+                .eq('user_id', user.id)
+                .limit(1);
+
+            if (groups && groups.length > 0) {
+                router.replace('/(tabs)');
+            } else {
+                router.replace('/group-selection'); // New users go here
+            }
+        }
     };
 
     if (!ready) return <View style={styles.container} />;
@@ -70,17 +112,16 @@ export default function BootScreen() {
                     <ThemedText style={styles.phonetic}>/ˈlæŋɡwɪdʒ suːp/</ThemedText>
                 </Animated.View>
 
-                {/* Verb */}
+                {/* Noun */}
                 <Animated.View entering={FadeInUp.delay(1000).springify()}>
-                    <ThemedText style={styles.partOfSpeech}>verb</ThemedText>
+                    <ThemedText style={styles.partOfSpeech}>noun</ThemedText>
                 </Animated.View>
 
                 {/* Definition - The Punchline */}
                 <Animated.View style={styles.definitionBlock} entering={FadeInUp.delay(1500).duration(800)}>
                     <ThemedText style={styles.definitionText}>
                         <ThemedText style={{ fontWeight: 'bold' }}>Definition: </ThemedText>
-                        The act of diving headfirst into chaotic, messy language practice...
-                        and somehow making something shareable and delicious out of it.
+                        that thing that happens in your head when u mix up multiple languages
                     </ThemedText>
                 </Animated.View>
 
@@ -88,27 +129,16 @@ export default function BootScreen() {
                 <Animated.View style={{ marginTop: 24 }} entering={FadeInUp.delay(2500).duration(800)}>
                     <ThemedText style={styles.exampleText}>
                         <ThemedText style={styles.exampleLabel}>Example: </ThemedText>
-                        "im language souping so hard right now my head hurts 😭"
+                        "my head feels like language soup right now 😭"
                     </ThemedText>
                 </Animated.View>
             </View>
 
             {/* Button - The Call to Action */}
             <View style={styles.buttonContainer}>
-                <Animated.View
-                    entering={FadeIn.delay(3500)} // Wait for reading to finish
-                    style={[styles.soupButton, animatedButtonStyle]}
-                >
-                    <TouchableOpacity
-                        onPress={handleSkip}
-                        style={styles.buttonContent}
-                    >
-                        <ThemedText style={styles.buttonText}>mmm good soup 🥣</ThemedText>
-                    </TouchableOpacity>
-                </Animated.View>
-
+                <SoupBowlAnimation onPress={handleSkip} />
                 <Animated.View entering={FadeIn.delay(4000)}>
-                    <ThemedText style={styles.tapHint}>tap anywhere to skip</ThemedText>
+                    <ThemedText style={styles.tapHint}>tap to continue</ThemedText>
                 </Animated.View>
             </View>
         </TouchableOpacity>
@@ -177,28 +207,6 @@ const styles = StyleSheet.create({
         right: 0,
         alignItems: 'center',
         zIndex: 1,
-    },
-    soupButton: {
-        borderRadius: 30,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
-        backgroundColor: '#19b091', // Teal
-        overflow: 'hidden',
-    },
-    buttonContent: {
-        paddingVertical: 16,
-        paddingHorizontal: 32,
-        backgroundColor: 'transparent',
-        borderRadius: 30,
-    },
-    buttonText: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#ffffff',
-        letterSpacing: 1,
     },
     tapHint: {
         fontSize: 14,

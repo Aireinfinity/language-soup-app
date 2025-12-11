@@ -2,13 +2,18 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, RefreshControl, Text, Image, Platform, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemedText } from '../../components/ThemedText';
 import { Colors } from '../../constants/Colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { MessageCircle, Users, Sparkles, Plus, Globe } from 'lucide-react-native';
+import { MessageCircle, Users, Sparkles, Plus, Globe, ChevronRight } from 'lucide-react-native';
 import LanguageRequestModal from '../../components/LanguageRequestModal';
 import { FloatingSupportButton } from '../../components/FloatingSupportButton';
+import { haptics } from '../../utils/haptics';
+import AdminLoginModal from '../../components/AdminLoginModal';
+import HomeTutorial from '../../components/HomeTutorial';
+import FounderWelcomeModal from '../../components/FounderWelcomeModal';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -27,15 +32,47 @@ export default function HomeScreen() {
     const [isCommunityManager, setIsCommunityManager] = useState(false);
     const [unreadSupportCount, setUnreadSupportCount] = useState(0);
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
+    const [showAdminModal, setShowAdminModal] = useState(false);
+    const [adminModeEnabled, setAdminModeEnabled] = useState(false);
+    const [showTutorial, setShowTutorial] = useState(false);
+    const [showFounderWelcome, setShowFounderWelcome] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
             if (user) {
+                checkAdminStatus();
                 loadGroups();
-                checkUserRole();
             }
         }, [user])
     );
+
+    useEffect(() => {
+        checkTutorialStatus();
+    }, []);
+
+    const checkTutorialStatus = async () => {
+        try {
+            const hasSeen = await AsyncStorage.getItem('has_seen_home_tutorial_v1');
+            console.log('Tutorial check:', hasSeen);
+            if (hasSeen !== 'true') {
+                // Short delay to let the screen load
+                setTimeout(() => {
+                    setShowTutorial(true);
+                }, 1500);
+            }
+        } catch (error) {
+            console.error('Error checking tutorial status:', error);
+        }
+    };
+
+    const handleTutorialClose = async () => {
+        setShowTutorial(false);
+        try {
+            await AsyncStorage.setItem('has_seen_home_tutorial_v1', 'true');
+        } catch (error) {
+            console.error('Error saving tutorial status:', error);
+        }
+    };
 
     // Realtime updates for Admin Badges
     useEffect(() => {
@@ -62,22 +99,46 @@ export default function HomeScreen() {
         };
     }, [isAdmin]);
 
-    const checkUserRole = async () => {
+    const checkAdminStatus = async () => {
+        if (!user) return;
+
         try {
+            // 1. Get current status
             const { data } = await supabase
                 .from('app_users')
-                .select('role')
+                .select('display_name, is_admin, is_community_manager')
                 .eq('id', user.id)
                 .single();
-            const isAdminRole = data?.role === 'admin';
-            setIsAdmin(isAdminRole);
-            setIsCommunityManager(data?.role === 'community_manager');
 
-            if (isAdminRole) {
-                fetchAdminStats();
+            // 2. AUTO-PROMOTE NOAH :)
+            if (data?.display_name === 'Noah :)' && !data.is_admin) {
+                console.log('👑 Auto-promoting Founder Daddy...');
+                const { error: updateError } = await supabase
+                    .from('app_users')
+                    .update({
+                        is_admin: true,
+                        is_community_manager: true
+                    })
+                    .eq('id', user.id);
+
+                if (!updateError) {
+                    setIsAdmin(true);
+                    setIsCommunityManager(true);
+                    fetchAdminStats();
+                    return;
+                }
+            }
+
+            console.log('Admin check:', data);
+            if (data) {
+                setIsAdmin(data.is_admin || false);
+                setIsCommunityManager(data.is_community_manager || false);
+                if (data.is_admin) {
+                    fetchAdminStats();
+                }
             }
         } catch (error) {
-            console.error('Error checking user role:', error);
+            console.error('Error checking admin status:', error);
         }
     };
 
@@ -245,6 +306,7 @@ export default function HomeScreen() {
         <Pressable
             style={styles.groupItem}
             onPress={() => {
+                haptics.light();
                 console.log('Navigating to chat:', item.id);
                 router.push(`/chat/${item.id}`);
             }}
@@ -292,6 +354,11 @@ export default function HomeScreen() {
                         </View>
                     )}
                 </View>
+            </View>
+
+            {/* CTA Arrow */}
+            <View style={styles.arrowContainer}>
+                <ChevronRight size={20} color="#CFD8DC" />
             </View>
         </Pressable>
     );
@@ -422,6 +489,44 @@ export default function HomeScreen() {
                     onPress={() => router.push('/support-chat')}
                 />
             )}
+
+            {/* Admin Toggle Button (bottom right corner) */}
+            <Pressable
+                style={styles.adminToggleButton}
+                onPress={() => {
+                    if (adminModeEnabled) {
+                        setAdminModeEnabled(false);
+                        setIsAdmin(false);
+                    } else {
+                        setShowAdminModal(true);
+                    }
+                }}
+            >
+                <Text style={styles.adminToggleText}>
+                    {adminModeEnabled ? '👤' : '🔐'}
+                </Text>
+            </Pressable>
+
+            {/* Admin Password Modal */}
+            <AdminLoginModal
+                visible={showAdminModal}
+                onClose={() => setShowAdminModal(false)}
+                onSuccess={() => {
+                    setAdminModeEnabled(true);
+                    setIsAdmin(true);
+                    setShowFounderWelcome(true); // TRIGGER THE EGO BOOST
+                }}
+            />
+
+            <FounderWelcomeModal
+                visible={showFounderWelcome}
+                onClose={() => {
+                    setShowFounderWelcome(false);
+                    router.push('/(tabs)/profile'); // Navigate to profile after enjoying the praise
+                }}
+            />
+
+            <HomeTutorial visible={showTutorial} onClose={handleTutorialClose} />
         </SafeAreaView>
     );
 }
@@ -547,9 +652,21 @@ const styles = StyleSheet.create({
     },
     groupItem: {
         flexDirection: 'row',
-        padding: 16,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: 'rgba(0,0,0,0.08)',
+        alignItems: 'center',
+        padding: 20,
+        backgroundColor: '#fff',
+        marginHorizontal: 16,
+        marginBottom: 16,
+        borderRadius: 24,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.08,
+        shadowRadius: 16,
+        elevation: 6,
+    },
+    arrowContainer: {
+        paddingLeft: 4,
+        justifyContent: 'center',
     },
     groupAvatarWrapper: {
         position: 'relative',
@@ -584,6 +701,7 @@ const styles = StyleSheet.create({
     groupInfo: {
         flex: 1,
         justifyContent: 'center',
+        paddingRight: 8, // Add breathing room from arrow
     },
     groupHeader: {
         flexDirection: 'row',
@@ -596,6 +714,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 8,
         flex: 1,
+        marginRight: 4, // Ensure title doesn't hit time
     },
     groupName: {
         fontSize: 16,
@@ -662,8 +781,8 @@ const styles = StyleSheet.create({
         height: 20,
         justifyContent: 'center',
         alignItems: 'center',
-        paddingHorizontal: 6,
-        marginLeft: 8,
+        paddingVertical: 4,
+        marginLeft: 4,
     },
     unreadText: {
         color: '#fff',

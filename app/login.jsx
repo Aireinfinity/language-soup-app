@@ -1,18 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, Image, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TextInput, Pressable, StyleSheet, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, { FadeInDown, FadeIn, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import { useRouter } from 'expo-router';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/Colors';
-import { Sparkles } from 'lucide-react-native';
 
 export default function LoginScreen() {
+    const router = useRouter();
     const { signInWithName } = useAuth();
     const [name, setName] = useState('');
     const [loading, setLoading] = useState(false);
-
-    // Button scale animation
-    const buttonScale = useSharedValue(1);
 
     const handleSubmit = async () => {
         if (!name.trim()) {
@@ -20,10 +18,28 @@ export default function LoginScreen() {
             return;
         }
 
+        // Quick check if name is already taken
+        try {
+            const { data: existingUser } = await supabase
+                .from('app_users')
+                .select('id')
+                .eq('display_name', name.trim())
+                .maybeSingle();
+
+            // Allow "Noah :)" to proceed (account re-claiming)
+            if (existingUser && name.trim() !== 'Noah :)') {
+                Alert.alert('Name Taken 😬', 'That name is already in use. Try another!');
+                return;
+            }
+        } catch (err) {
+            console.warn('Name check failed, proceeding anyway:', err);
+        }
+
         setLoading(true);
         try {
             await signInWithName(name.trim());
-            // Navigation handled by AuthContext
+            // Navigate to profile creation onboarding
+            router.replace('/onboarding/conversational');
         } catch (error) {
             console.error('Login error:', error);
             Alert.alert('Oops! 😅', 'Something went wrong. Try again?');
@@ -32,26 +48,14 @@ export default function LoginScreen() {
         }
     };
 
-    const animatedButtonStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: buttonScale.value }]
-    }));
-
-    const handlePressIn = () => {
-        buttonScale.value = withSpring(0.95, { damping: 10 });
-    };
-
-    const handlePressOut = () => {
-        buttonScale.value = withSpring(1, { damping: 10 });
-    };
-
     return (
         <SafeAreaView style={styles.container}>
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={styles.content}
             >
-                {/* Header */}
-                <Animated.View entering={FadeIn.delay(200)} style={styles.header}>
+                {/* Logo */}
+                <View style={styles.logoContainer}>
                     <View style={styles.logoCircle}>
                         <Image
                             source={require('../assets/images/logo.png')}
@@ -59,54 +63,41 @@ export default function LoginScreen() {
                             resizeMode="contain"
                         />
                     </View>
-                    <Text style={styles.title}>Language Soup</Text>
-                    <Text style={styles.subtitle}>Sip, Slurp, Speak.</Text>
-                </Animated.View>
+                    <Text style={styles.title}>language soup</Text>
+                    <Text style={styles.subtitle}>what should we call you?</Text>
+                </View>
 
-                {/* Form */}
-                <Animated.View entering={FadeInDown.delay(400).springify()} style={styles.form}>
-                    <View style={styles.inputContainer}>
-                        <Text style={styles.label}>what should we call u? 👋</Text>
-                        <View style={styles.inputWrapper}>
-                            <Sparkles size={20} color={Colors.primary} style={styles.inputIcon} />
-                            <TextInput
-                                style={styles.input}
-                                placeholder="noah :))))"
-                                placeholderTextColor="#999"
-                                value={name}
-                                onChangeText={setName}
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                                onSubmitEditing={handleSubmit}
-                                returnKeyType="go"
-                            />
-                        </View>
-                        <Text style={styles.hint}>emojis and special characters welcome! ✨</Text>
-                    </View>
+                {/* Name Input */}
+                <View style={styles.inputContainer}>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="your name"
+                        placeholderTextColor={Colors.textLight}
+                        value={name}
+                        onChangeText={setName}
+                        autoCapitalize="words"
+                        autoCorrect={false}
+                        returnKeyType="done"
+                        onSubmitEditing={handleSubmit}
+                    />
+                </View>
 
-                    <Animated.View style={animatedButtonStyle}>
-                        <Pressable
-                            style={[
-                                styles.primaryButton,
-                                !name.trim() && styles.buttonDisabled,
-                            ]}
-                            onPress={handleSubmit}
-                            onPressIn={handlePressIn}
-                            onPressOut={handlePressOut}
-                            disabled={loading || !name.trim()}
-                        >
-                            {loading ? (
-                                <ActivityIndicator color="#fff" />
-                            ) : (
-                                <Text style={styles.primaryButtonText}>let's go! 🥣</Text>
-                            )}
-                        </Pressable>
-                    </Animated.View>
+                {/* Continue Button */}
+                <Pressable
+                    style={[styles.button, loading && styles.buttonDisabled]}
+                    onPress={handleSubmit}
+                    disabled={loading}
+                >
+                    {loading ? (
+                        <ActivityIndicator color="#fff" />
+                    ) : (
+                        <Text style={styles.buttonText}>continue</Text>
+                    )}
+                </Pressable>
 
-                    <Text style={styles.footer}>
-                        (your account lives on this device)
-                    </Text>
-                </Animated.View>
+                <Text style={styles.disclaimer}>
+                    choose wisely—you can't change it later ✨
+                </Text>
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
@@ -115,14 +106,14 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: Colors.background,
+        backgroundColor: Colors.bg,
     },
     content: {
         flex: 1,
-        paddingHorizontal: 24,
+        paddingHorizontal: 32,
         justifyContent: 'center',
     },
-    header: {
+    logoContainer: {
         alignItems: 'center',
         marginBottom: 60,
     },
@@ -135,92 +126,57 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 24,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
+        shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
-        shadowRadius: 16,
-        elevation: 8,
+        shadowRadius: 8,
+        elevation: 4,
     },
     logoImage: {
         width: 80,
         height: 80,
     },
     title: {
-        fontSize: 36,
-        fontWeight: '800',
+        fontSize: 32,
+        fontWeight: '700',
         color: Colors.text,
         marginBottom: 8,
-        textAlign: 'center',
     },
     subtitle: {
-        fontSize: 20,
+        fontSize: 16,
         color: Colors.textLight,
         fontStyle: 'italic',
-        textAlign: 'center',
-    },
-    form: {
-        width: '100%',
-        maxWidth: 400,
-        alignSelf: 'center',
     },
     inputContainer: {
         marginBottom: 24,
     },
-    label: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: Colors.text,
-        marginBottom: 12,
-    },
-    inputWrapper: {
-        flexDirection: 'row',
-        alignItems: 'center',
+    input: {
         backgroundColor: '#fff',
-        borderRadius: 16,
+        borderRadius: 12,
+        padding: 16,
+        fontSize: 18,
+        color: Colors.text,
         borderWidth: 2,
         borderColor: Colors.primary,
-        paddingHorizontal: 16,
     },
-    inputIcon: {
-        marginRight: 12,
-    },
-    input: {
-        flex: 1,
-        fontSize: 18,
-        color: Colors.text,
-        paddingVertical: 18,
-    },
-    hint: {
-        fontSize: 13,
-        color: Colors.textLight,
-        marginTop: 8,
-        fontStyle: 'italic',
-        textAlign: 'center',
-    },
-    primaryButton: {
+    button: {
         backgroundColor: Colors.primary,
-        paddingVertical: 18,
-        borderRadius: 16,
+        borderRadius: 12,
+        padding: 16,
         alignItems: 'center',
-        shadowColor: Colors.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 6,
     },
     buttonDisabled: {
-        opacity: 0.4,
-        shadowOpacity: 0,
+        opacity: 0.6,
     },
-    primaryButtonText: {
-        fontSize: 20,
-        fontWeight: '700',
+    buttonText: {
+        fontSize: 18,
+        fontWeight: '600',
         color: '#fff',
     },
-    footer: {
+    disclaimer: {
         fontSize: 12,
         color: Colors.textLight,
         textAlign: 'center',
-        marginTop: 24,
+        marginTop: 16,
         fontStyle: 'italic',
     },
 });

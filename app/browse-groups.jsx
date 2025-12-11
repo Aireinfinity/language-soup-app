@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Users, Plus, LogOut } from 'lucide-react-native';
+import { ArrowLeft, Users, Plus, LogOut } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'expo-router';
@@ -41,6 +41,7 @@ export default function BrowseGroups() {
             const { data, error } = await supabase
                 .from('app_groups')
                 .select('*')
+                .eq('is_visible', true)
                 .order('member_count', { ascending: false });
 
             if (error) throw error;
@@ -136,7 +137,7 @@ export default function BrowseGroups() {
                                 style={[styles.button, styles.viewButton]}
                                 onPress={() => router.push(`/chat/${item.id}`)}
                             >
-                                <Text style={styles.viewButtonText}>View</Text>
+                                <Text style={styles.viewButtonText}>peek 👀</Text>
                             </Pressable>
                             <Pressable
                                 style={[styles.button, styles.leaveButton]}
@@ -177,8 +178,13 @@ export default function BrowseGroups() {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>Browse Groups</Text>
-                <Text style={styles.headerSubtitle}>Find your perfect language community</Text>
+                <Pressable onPress={() => router.back()} style={styles.backButton}>
+                    <ArrowLeft size={24} color="#000" />
+                </Pressable>
+                <View>
+                    <Text style={styles.headerTitle}>Browse Groups</Text>
+                    <Text style={styles.headerSubtitle}>Find your perfect language community</Text>
+                </View>
             </View>
 
             <FlatList
@@ -210,6 +216,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingTop: 10,
         paddingBottom: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
     },
     headerTitle: {
         fontSize: 28,
@@ -220,6 +229,9 @@ const styles = StyleSheet.create({
     headerSubtitle: {
         fontSize: 14,
         color: SOUP_COLORS.subtext,
+    },
+    backButton: {
+        padding: 4,
     },
     list: {
         padding: 16,

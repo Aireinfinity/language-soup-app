@@ -83,6 +83,58 @@ export default function SendChallengeScreen() {
 
             if (error) throw error;
 
+            // --- SEND PUSH NOTIFICATIONS ---
+            console.log('Sending push notifications...');
+
+            // 1. Get all members of the group
+            const { data: members } = await supabase
+                .from('app_group_members')
+                .select('user_id')
+                .eq('group_id', selectedGroup);
+
+            if (members?.length > 0) {
+                // 2. Get tokens for these members (excluding self)
+                const userIds = members.map(m => m.user_id).filter(id => id !== user.id);
+
+                if (userIds.length > 0) {
+                    const { data: tokens } = await supabase
+                        .from('app_push_tokens')
+                        .select('expo_push_token')
+                        .in('user_id', userIds);
+
+                    if (tokens?.length > 0) {
+                        // Find group name
+                        const targetGroup = groups.find(g => g.id === selectedGroup);
+                        const targetGroupName = targetGroup ? targetGroup.name : 'your group';
+
+                        // 3. Send via Expo API
+                        const pushMessages = tokens.map(t => ({
+                            to: t.expo_push_token,
+                            sound: 'default',
+                            title: '🥣 Soup\'s On!',
+                            body: `New Challenge in ${targetGroupName}: ${englishVersion.substring(0, 50)}...`,
+                            data: {
+                                type: 'challenge',
+                                groupId: selectedGroup,
+                                challengeId: challenge.id
+                            },
+                        }));
+
+                        await fetch('https://exp.host/--/api/v2/push/send', {
+                            method: 'POST',
+                            headers: {
+                                'Accept': 'application/json',
+                                'Accept-encoding': 'gzip, deflate',
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify(pushMessages),
+                        });
+                        console.log(`Pushed to ${tokens.length} devices!`);
+                    }
+                }
+            }
+            // -------------------------------
+
             Alert.alert('Success!', 'Challenge sent to the group', [
                 { text: 'OK', onPress: () => router.back() }
             ]);

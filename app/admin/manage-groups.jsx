@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Plus, Trash2, Users } from 'lucide-react-native';
+import { ArrowLeft, Plus, Trash2, Users, Eye, EyeOff } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -44,6 +44,25 @@ export default function ManageGroups() {
             Alert.alert('Error', 'Failed to load groups');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const toggleGroupVisibility = async (groupId, currentVisibility) => {
+        try {
+            const { error } = await supabase
+                .from('app_groups')
+                .update({ is_visible: !currentVisibility })
+                .eq('id', groupId);
+
+            if (error) throw error;
+
+            // Optimistic update
+            setGroups(groups.map(g =>
+                g.id === groupId ? { ...g, is_visible: !currentVisibility } : g
+            ));
+        } catch (error) {
+            console.error('Error updating visibility:', error);
+            Alert.alert('Error', 'Failed to update visibility');
         }
     };
 
@@ -182,18 +201,37 @@ export default function ManageGroups() {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>All Groups ({groups.length})</Text>
                     {groups.map((group) => (
-                        <View key={group.id} style={styles.groupCard}>
+                        <View key={group.id} style={[styles.groupCard, !group.is_visible && styles.groupCardHidden]}>
                             <View style={styles.groupHeader}>
                                 <View style={styles.groupInfo}>
-                                    <Text style={styles.groupName}>{group.name}</Text>
+                                    <View style={styles.nameRow}>
+                                        <Text style={styles.groupName}>{group.name}</Text>
+                                        {!group.is_visible && (
+                                            <View style={styles.hiddenBadge}>
+                                                <Text style={styles.hiddenBadgeText}>HIDDEN</Text>
+                                            </View>
+                                        )}
+                                    </View>
                                     <Text style={styles.groupLanguage}>{group.language}</Text>
                                 </View>
-                                <Pressable
-                                    style={styles.deleteButton}
-                                    onPress={() => handleDeleteGroup(group.id, group.name)}
-                                >
-                                    <Trash2 size={20} color={SOUP_COLORS.red} />
-                                </Pressable>
+                                <View style={styles.actions}>
+                                    <Pressable
+                                        style={styles.actionButton}
+                                        onPress={() => toggleGroupVisibility(group.id, group.is_visible)}
+                                    >
+                                        {group.is_visible ? (
+                                            <Eye size={20} color={SOUP_COLORS.blue} />
+                                        ) : (
+                                            <EyeOff size={20} color={SOUP_COLORS.subtext} />
+                                        )}
+                                    </Pressable>
+                                    <Pressable
+                                        style={styles.actionButton}
+                                        onPress={() => handleDeleteGroup(group.id, group.name)}
+                                    >
+                                        <Trash2 size={20} color={SOUP_COLORS.red} />
+                                    </Pressable>
+                                </View>
                             </View>
                             {group.description && (
                                 <Text style={styles.groupDescription}>{group.description}</Text>
@@ -387,5 +425,37 @@ const styles = StyleSheet.create({
     },
     deleteButton: {
         padding: 4,
+    },
+    groupCardHidden: {
+        opacity: 0.7,
+        backgroundColor: '#f5f5f5',
+    },
+    nameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 4,
+    },
+    hiddenBadge: {
+        backgroundColor: '#eee',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+        borderWidth: 1,
+        borderColor: '#ddd',
+    },
+    hiddenBadgeText: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        color: '#666',
+    },
+    actions: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    actionButton: {
+        padding: 8,
+        backgroundColor: 'rgba(0,0,0,0.03)',
+        borderRadius: 8,
     },
 });

@@ -21,17 +21,27 @@ function RootLayoutNav() {
     }, [loading]);
 
     return (
-        <Stack screenOptions={{ headerShown: false }}>
+        <Stack screenOptions={{
+            headerShown: false,
+            gestureEnabled: true,
+            animation: 'default',
+        }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="login" options={{ gestureEnabled: false }} />
             <Stack.Screen name="how-it-works" />
-            <Stack.Screen name="onboarding/avatar" options={{ gestureEnabled: false }} />
-            <Stack.Screen name="onboarding/conversational" options={{ gestureEnabled: false }} />
-            <Stack.Screen name="onboarding/learning" options={{ gestureEnabled: false }} />
-            <Stack.Screen name="onboarding/tagline" options={{ gestureEnabled: false }} />
+            <Stack.Screen name="profile-creation" />
+            <Stack.Screen name="group-selection" />
+            <Stack.Screen name="browse-groups" />
+            <Stack.Screen name="group-info" />
+            <Stack.Screen name="native-speakers" />
+            <Stack.Screen name="add-native-speaker" />
+            <Stack.Screen name="status-page" />
+            <Stack.Screen name="login-callback" />
             <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="group-selection" options={{ gestureEnabled: false }} />
-            <Stack.Screen name="chat/[id]" />
+            <Stack.Screen name="onboarding/avatar" />
+            <Stack.Screen name="onboarding/conversational" />
+            <Stack.Screen name="onboarding/learning" />
+            <Stack.Screen name="onboarding/tagline" />
         </Stack>
     );
 }

@@ -45,7 +45,8 @@
         }
       ],
       "expo-asset",
-      "expo-audio"
+      "expo-audio",
+      "expo-apple-authentication"
     ],
     "platforms": [
       "ios"

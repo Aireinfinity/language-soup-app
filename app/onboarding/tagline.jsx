@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -16,16 +16,6 @@ const EXAMPLE_TAGLINES = [
     'slay slay slay',
     'always late to challenges',
     'polyglot in training',
-    'language soup enthusiast',
-    'professional yapper',
-    'chaotic multilingual',
-    'fluent in emojis',
-    'perpetual beginner',
-    'accent collector',
-    'perpetually mispronouncing things',
-    'conversational but shy',
-    'here for the vibes',
-    'trying my best',
 ];
 
 export default function TaglineScreen() {
@@ -41,11 +31,11 @@ export default function TaglineScreen() {
         try {
             await supabase
                 .from('app_users')
-                .update({ bio: tagline.trim() })
+                .update({ status_text: tagline.trim() })
                 .eq('id', user.id);
 
-            // Navigate to home
-            router.replace('/(tabs)');
+            // Navigate to avatar setup
+            router.push('/onboarding/avatar');
         } catch (error) {
             console.error('Error saving tagline:', error);
             Alert.alert('Error', 'Failed to save tagline');
@@ -55,7 +45,7 @@ export default function TaglineScreen() {
     };
 
     const handleSkip = () => {
-        router.replace('/(tabs)');
+        router.push('/onboarding/avatar');
     };
 
     return (
@@ -64,33 +54,35 @@ export default function TaglineScreen() {
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={styles.content}
             >
-                <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.form}>
-                    <Text style={styles.title}>give yourself a tagline ✨</Text>
-                    <Text style={styles.subtitle}>make it fun, make it you</Text>
+                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                    <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.form}>
+                        <Text style={styles.title}>give yourself a tagline ✨</Text>
+                        <Text style={styles.subtitle}>make it fun, make it you</Text>
 
-                    <TextInput
-                        style={styles.input}
-                        placeholder="language soup enthusiast"
-                        placeholderTextColor="#999"
-                        value={tagline}
-                        onChangeText={setTagline}
-                        maxLength={50}
-                        autoFocus
-                    />
+                        <TextInput
+                            style={styles.input}
+                            placeholder="language soup enthusiast"
+                            placeholderTextColor="#999"
+                            value={tagline}
+                            onChangeText={setTagline}
+                            maxLength={50}
+                            autoFocus
+                        />
 
-                    <Text style={styles.examplesTitle}>need inspiration?</Text>
-                    <View style={styles.examples}>
-                        {EXAMPLE_TAGLINES.map(example => (
-                            <Pressable
-                                key={example}
-                                style={styles.exampleChip}
-                                onPress={() => setTagline(example)}
-                            >
-                                <Text style={styles.exampleText}>{example}</Text>
-                            </Pressable>
-                        ))}
-                    </View>
-                </Animated.View>
+                        <Text style={styles.examplesTitle}>need inspiration?</Text>
+                        <View style={styles.examples}>
+                            {EXAMPLE_TAGLINES.map(example => (
+                                <Pressable
+                                    key={example}
+                                    style={styles.exampleChip}
+                                    onPress={() => setTagline(example)}
+                                >
+                                    <Text style={styles.exampleText}>{example}</Text>
+                                </Pressable>
+                            ))}
+                        </View>
+                    </Animated.View>
+                </ScrollView>
 
                 <View style={styles.footer}>
                     <Pressable
@@ -101,7 +93,7 @@ export default function TaglineScreen() {
                         {saving ? (
                             <ActivityIndicator color="#fff" />
                         ) : (
-                            <Text style={styles.buttonText}>finish! 🎉</Text>
+                            <Text style={styles.buttonText}>continue</Text>
                         )}
                     </Pressable>
 
@@ -121,11 +113,14 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
+    },
+    scrollContent: {
+        flexGrow: 1,
         justifyContent: 'center',
+        paddingVertical: 20,
     },
     form: {
-        flex: 1,
-        justifyContent: 'center',
+        width: '100%',
         paddingHorizontal: 24,
     },
     title: {
@@ -180,6 +175,7 @@ const styles = StyleSheet.create({
     },
     footer: {
         padding: 24,
+        backgroundColor: Colors.background, // Ensure footer has background over scroll content
     },
     button: {
         backgroundColor: Colors.primary,

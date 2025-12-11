@@ -28,6 +28,7 @@ export default function GroupSelectionScreen() {
             const { data, error } = await supabase
                 .from('app_groups')
                 .select('*')
+                .eq('is_visible', true)
                 .order('name');
 
             if (error) throw error;
@@ -96,8 +97,8 @@ export default function GroupSelectionScreen() {
 
             if (error) throw error;
 
-            // Navigate to avatar onboarding
-            router.push('/onboarding/avatar');
+            // Navigate to conversational onboarding
+            router.push('/(tabs)');
         } catch (error) {
             console.error('Error joining groups:', error);
             Alert.alert('Error', 'Failed to join groups. Please try again.');

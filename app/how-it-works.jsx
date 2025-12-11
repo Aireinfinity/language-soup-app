@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, TouchableOpacity, Animated, Easing, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
+import * as Notifications from 'expo-notifications';
 import { ThemedText } from '../components/ThemedText';
 import { Colors } from '../constants/Colors';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -135,9 +136,18 @@ export default function HowItWorksScreen() {
         }
     };
 
-    const handlePress = (evt) => {
+    const handlePress = async (evt) => {
         const locationX = evt.nativeEvent.locationX;
         if (locationX > width / 2) {
+            // Permission check
+            if (STEPS[currentStep].isPermission) {
+                try {
+                    await Notifications.requestPermissionsAsync();
+                } catch (error) {
+                    console.log('Error requesting notifications:', error);
+                }
+            }
+
             if (currentStep < STEPS.length - 1) {
                 setCurrentStep(prev => prev + 1);
             } else {
@@ -227,7 +237,7 @@ export default function HowItWorksScreen() {
                             }
                         ]}
                     >
-                        tap & hold to record
+                        Tap to record
                     </Animated.Text>
 
                     {/* Voice bubbles sliding in from sides */}
@@ -251,7 +261,7 @@ export default function HowItWorksScreen() {
                             style={[
                                 styles.voiceBubble,
                                 {
-                                    backgroundColor: Colors.highlight,
+                                    backgroundColor: Colors.secondary,
                                     alignSelf: 'flex-end',
                                     opacity: anim3,
                                     transform: [{ translateX: anim3.interpolate({ inputRange: [0, 1], outputRange: [100, 0] }) }]

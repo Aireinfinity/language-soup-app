@@ -1,39 +1,9 @@
 import { Tabs } from 'expo-router';
 import { Globe, User } from 'lucide-react-native';
 import { Colors } from '../../constants/Colors';
-import { View, Text } from 'react-native';
-import { useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import TutorialOverlay from '../../components/TutorialOverlay';
+import { View, Image } from 'react-native';
 
 export default function TabLayout() {
-    const [showTutorial, setShowTutorial] = useState(false);
-
-    useEffect(() => {
-        checkTutorial();
-    }, []);
-
-    const checkTutorial = async () => {
-        try {
-            const hasSeenTutorial = await AsyncStorage.getItem('hasSeenTutorial');
-            if (!hasSeenTutorial) {
-                // Small delay to let tabs render
-                setTimeout(() => setShowTutorial(true), 500);
-            }
-        } catch (e) {
-            console.error('Tutorial check error:', e);
-        }
-    };
-
-    const handleTutorialComplete = async () => {
-        try {
-            await AsyncStorage.setItem('hasSeenTutorial', 'true');
-            setShowTutorial(false);
-        } catch (e) {
-            console.error('Tutorial save error:', e);
-        }
-    };
-
     return (
         <View style={{ flex: 1 }}>
             <Tabs
@@ -79,7 +49,35 @@ export default function TabLayout() {
                     name="index"
                     options={{
                         title: 'Your Soup',
-                        tabBarIcon: ({ color }) => <Text style={{ fontSize: 24 }}>🍜</Text>,
+                        tabBarLabel: () => null, // Hide label for the floating button look
+                        tabBarIcon: ({ focused }) => (
+                            <View style={{
+                                width: 60,
+                                height: 60,
+                                borderRadius: 30,
+                                backgroundColor: '#fff',
+                                justifyContent: 'center',
+                                alignItems: 'center',
+                                marginBottom: 30,
+                                shadowColor: focused ? "#ec008b" : "#000", // Pink shadow when active
+                                shadowOffset: {
+                                    width: 0,
+                                    height: 4,
+                                },
+                                shadowOpacity: 0.3,
+                                shadowRadius: 4.65,
+                                elevation: 8,
+                                borderWidth: focused ? 3 : 0,
+                                borderColor: '#ec008b', // Pink ring
+                                transform: [{ scale: focused ? 1.1 : 1 }] // Slight pop
+                            }}>
+                                <Image
+                                    source={require('../../assets/images/logo.png')}
+                                    style={{ width: 40, height: 40, opacity: focused ? 1 : 0.9 }}
+                                    resizeMode="contain"
+                                />
+                            </View>
+                        ),
                     }}
                 />
                 <Tabs.Screen
@@ -96,8 +94,6 @@ export default function TabLayout() {
                     }}
                 />
             </Tabs>
-
-            {showTutorial && <TutorialOverlay onComplete={handleTutorialComplete} />}
         </View>
     );
 }

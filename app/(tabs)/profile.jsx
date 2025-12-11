@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator, TextInput, Alert, Text, Switch, Modal, Dimensions, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
-import { Camera, Edit2, LogOut, MapPin, Globe, Award, Share2, Sparkles, Flag, Clock, Crown, X, Download } from 'lucide-react-native';
+import * as FileSystem from 'expo-file-system/legacy';
+import { Camera, Edit2, LogOut, MapPin, Globe, Award, Share2, Sparkles, Flag, Clock, Crown, X, Download, ArrowRight, MessageCircle } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -26,6 +26,17 @@ const SOUP_COLORS = {
     cardBg: '#FFFFFF',
 };
 
+const EXAMPLE_TAGLINES = [
+    'founder daddy',
+    'scared to send voice memos',
+    'rambler',
+    'lurker',
+    'community momager',
+    'slay slay slay',
+    'always late to challenges',
+    'polyglot in training',
+];
+
 export default function ProfileScreen() {
     const { user: authUser, signOut } = useAuth();
     const router = useRouter();
@@ -37,7 +48,7 @@ export default function ProfileScreen() {
 
     // Editable States
     const [newName, setNewName] = useState('');
-    const [newBio, setNewBio] = useState('');
+    const [newTagline, setNewTagline] = useState('');
     const [newTimezone, setNewTimezone] = useState('');
     const [newLanguages, setNewLanguages] = useState([]);
     const [newLearning, setNewLearning] = useState([]);
@@ -48,8 +59,9 @@ export default function ProfileScreen() {
     const [timezoneSearch, setTimezoneSearch] = useState('');
     const [uploading, setUploading] = useState(false);
     const [showWrappedModal, setShowWrappedModal] = useState(false);
-    const [showLevelsInfo, setShowLevelsInfo] = useState(false);
     const [newSoupFlavor, setNewSoupFlavor] = useState('');
+    const [statsTab, setStatsTab] = useState('input'); // 'input' | 'output'
+    const [showLevelsInfo, setShowLevelsInfo] = useState(false);
     const wrappedRef = useRef();
 
     useEffect(() => {
@@ -69,11 +81,10 @@ export default function ProfileScreen() {
             if (userData) {
                 setUser(userData);
                 setNewName(userData.display_name);
-                setNewBio(userData.bio || '');
+                setNewTagline(userData.status_text || '');
                 setNewTimezone(userData.timezone || '');
                 setNewLanguages(userData.fluent_languages || []);
                 setNewLearning(userData.learning_languages || []);
-                setNewSoupFlavor(userData.soup_flavor || '');
             } else {
                 // FALLBACK FOR GUEST / MISSING PROFILE
                 const guestUser = {
@@ -167,11 +178,10 @@ export default function ProfileScreen() {
         // Optimistic update - update local state immediately
         const updates = {
             display_name: (newName || '').trim(),
-            bio: (newBio || '').trim(),
+            status_text: (newTagline || '').trim(),
             timezone: (newTimezone || '').trim(),
             fluent_languages: newLanguages || [],
-            learning_languages: newLearning || [],
-            soup_flavor: (newSoupFlavor || '').trim()
+            learning_languages: newLearning || []
         };
 
         // Update local user object immediately so UI reflects changes
@@ -224,13 +234,17 @@ export default function ProfileScreen() {
             const { error: uploadError } = await supabase.storage.from('avatars')
                 .upload(filePath, decode(base64), { contentType: 'image/jpeg', upsert: true });
 
-            if (uploadError) throw uploadError;
+            if (uploadError) {
+                console.error('Storage upload error:', uploadError);
+                throw uploadError;
+            }
 
             const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
             await supabase.from('app_users').update({ avatar_url: publicUrl }).eq('id', authUser.id);
             setUser(prev => ({ ...prev, avatar_url: publicUrl }));
         } catch (error) {
-            Alert.alert('Error', 'Failed to upload avatar');
+            console.error('Avatar upload failed:', error);
+            Alert.alert('Error', `Failed to upload avatar: ${error.message || 'Unknown error'}`);
         } finally {
             setUploading(false);
         }
@@ -279,22 +293,7 @@ export default function ProfileScreen() {
                         </Pressable>
                     </View>
 
-                    {/* Flags / Origin - Hardcoded for demo/user input needed */}
-                    <View style={styles.pillRow}>
-                        {user.origin ? (
-                            <View style={styles.pill}>
-                                <Text style={styles.pillText}>From {user.origin} 🌏</Text>
-                            </View>
-                        ) : null}
-                        {user.location ? (
-                            <View style={[styles.pill, styles.pillBlue]}>
-                                <MapPin size={10} color="#fff" />
-                                <Text style={[styles.pillText, { color: '#fff' }]}>{user.location}</Text>
-                            </View>
-                        ) : null}
-                    </View>
-
-                    {user.bio ? <Text style={styles.bio}>"{user.bio}"</Text> : null}
+                    {user.status_text ? <Text style={styles.bio}>"{user.status_text}"</Text> : null}
 
                     {/* Conversational Languages */}
                     {user.fluent_languages && user.fluent_languages.length > 0 && (
@@ -312,7 +311,7 @@ export default function ProfileScreen() {
 
                     {/* Learning Languages */}
                     {user.learning_languages && user.learning_languages.length > 0 && (
-                        <View style={[styles.langRow, { marginTop: 8 }]}>
+                        <View style={[styles.langRow, { marginTop: 12 }]}>
                             <Text style={styles.labelSmall}>Cooking up:</Text>
                             <View style={styles.langChips}>
                                 {user.learning_languages.map((lang, i) => (
@@ -391,6 +390,50 @@ export default function ProfileScreen() {
             return { level: 6, name: 'Polyglot 🌍', nextGoal: 300, prevGoal: 300, color: '#9C27B0', maxed: true };
         };
 
+        const InputIcon = () => <Text style={{ fontSize: 14 }}>🧠</Text>;
+        const OutputIcon = () => <Text style={{ fontSize: 14 }}>🗣️</Text>;
+
+        const renderMetricItem = (lang, levelInfo, type) => {
+            const isInput = type === 'input';
+            const progressPercent = levelInfo.maxed ? 100 :
+                (((isInput ? (lang.seconds * 2 / 3600) : (lang.seconds / 60)) - levelInfo.prevGoal) / (levelInfo.nextGoal - levelInfo.prevGoal)) * 100;
+
+            const clampedProgress = Math.min(Math.max(progressPercent, 5), 100);
+            const barColor = isInput ? SOUP_COLORS.blue : SOUP_COLORS.pink;
+            const emoji = isInput ? '🧠' : '🗣️';
+
+            return (
+                <View key={`${type}-${lang.language}`} style={styles.statItemCard}>
+                    <View style={styles.statHeaderRow}>
+                        <View>
+                            <Text style={styles.statLangName}>{lang.language}</Text>
+                            <Text style={styles.statLevelName}>{levelInfo.name}</Text>
+                        </View>
+                        <View style={[styles.statLevelBadge, { backgroundColor: barColor }]}>
+                            <Text style={styles.statLevelText}>Lv.{levelInfo.level}</Text>
+                        </View>
+                    </View>
+
+                    {/* Cute Progress Bar with Traveling Emoji */}
+                    <View style={styles.cuteBarContainer}>
+                        <View style={[styles.cuteBarFill, { width: `${clampedProgress}%`, backgroundColor: barColor }]}>
+                            <View style={styles.travelingEmojiContainer}>
+                                <Text style={styles.travelingEmoji}>{emoji}</Text>
+                            </View>
+                        </View>
+                    </View>
+
+                    <Text style={styles.statFooterText}>
+                        {isInput
+                            ? `${(lang.seconds * 2 / 3600).toFixed(1)} hours listened`
+                            : `${Math.floor(lang.seconds / 60)} mins spoken`
+                        }
+                        {levelInfo.maxed ? ' (Maxed!)' : ` / ${levelInfo.nextGoal} to next level`}
+                    </Text>
+                </View>
+            );
+        };
+
         return (
             <View style={styles.statsSection}>
                 <View style={styles.bigStatCard}>
@@ -400,156 +443,109 @@ export default function ProfileScreen() {
                     </Text>
                 </View>
 
-                {/* COMPREHENSIBLE Section Header with Info Button */}
-                <View style={styles.sectionHeaderRow}>
-                    <View>
-                        <Text style={styles.sectionTitle}>Comprehensible 🧠</Text>
-                        <Text style={styles.sectionSubtitle}>Track your language input & output progress</Text>
+                {/* COMPREHENSIBLE Card */}
+                <View style={styles.comprehensibleCard}>
+                    <View style={styles.sectionHeaderRow}>
+                        <View style={{ flex: 1 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                <Text style={styles.sectionTitle}>Comprehensible 📖</Text>
+                                <Pressable
+                                    style={styles.infoButton}
+                                    onPress={() => setShowLevelsInfo(true)}
+                                >
+                                    <Text style={styles.infoButtonText}>?</Text>
+                                </Pressable>
+                            </View>
+                            <Text style={styles.sectionSubtitle}>Real progress, no streaks.</Text>
+                        </View>
                     </View>
-                    <Pressable
-                        style={styles.infoButton}
-                        onPress={() => setShowLevelsInfo(true)}
-                    >
-                        <Text style={styles.infoButtonText}>?</Text>
-                    </Pressable>
+
+                    {/* TABS */}
+                    <View style={styles.statsTabs}>
+                        <Pressable
+                            style={[styles.statsTab, statsTab === 'input' && styles.statsTabActive]}
+                            onPress={() => setStatsTab('input')}
+                        >
+                            <Text style={[styles.statsTabText, statsTab === 'input' && styles.statsTabTextActive]}>
+                                In the Brain 🧠
+                            </Text>
+                        </Pressable>
+                        <Pressable
+                            style={[styles.statsTab, statsTab === 'output' && styles.statsTabActive]}
+                            onPress={() => setStatsTab('output')}
+                        >
+                            <Text style={[styles.statsTabText, statsTab === 'output' && styles.statsTabTextActive]}>
+                                Out the Mouth 🗣️
+                            </Text>
+                        </Pressable>
+                    </View>
+
+                    {/* CONTENT */}
+                    <View style={styles.statsContent}>
+                        {statsTab === 'input' ? (
+                            inputData.length === 0 ? (
+                                <View style={styles.emptyStateContainer}>
+                                    <Text style={styles.emptyEmoji}>👂</Text>
+                                    <Text style={styles.emptyText}>Feed your brain! Listen to some memos.</Text>
+                                </View>
+                            ) : (
+                                inputData.map((lang, idx) => {
+                                    // Recalculate solely for render pass
+                                    const listeningSeconds = (lang.seconds || 0) * 2;
+                                    const hours = listeningSeconds / 3600;
+                                    const levelInfo = getInputLevel(hours);
+                                    return renderMetricItem(lang, levelInfo, 'input');
+                                })
+                            )
+                        ) : (
+                            outputData.length === 0 ? (
+                                <View style={styles.emptyStateContainer}>
+                                    <Text style={styles.emptyEmoji}>😶</Text>
+                                    <Text style={styles.emptyText}>Cat got your tongue? Start yapping!</Text>
+                                </View>
+                            ) : (
+                                outputData.map((lang, idx) => {
+                                    const minutes = Math.floor((lang.seconds || 0) / 60);
+                                    const levelInfo = getOutputLevel(minutes);
+                                    return renderMetricItem(lang, levelInfo, 'output');
+                                })
+                            )
+                        )}
+                    </View>
                 </View>
-
-                {/* INPUT - Listening time (FIRST) */}
-                <Text style={styles.subSectionTitle}>Input 👂</Text>
-
-                {inputData.length === 0 ? (
-                    <Text style={styles.emptyText}>No listening data yet. Listen to voice memos!</Text>
-                ) : (
-                    inputData.map((lang, idx) => {
-                        // Estimate listening as ~2x speaking
-                        const listeningSeconds = (lang.seconds || 0) * 2;
-                        const hours = listeningSeconds / 3600; // Convert to hours
-                        const levelInfo = getInputLevel(hours);
-                        const progressInLevel = levelInfo.maxed ? 100 :
-                            ((hours - levelInfo.prevGoal) / (levelInfo.nextGoal - levelInfo.prevGoal)) * 100;
-
-                        return (
-                            <View key={`input-${idx}`} style={styles.metricRow}>
-                                <View style={styles.metricHeader}>
-                                    <Text style={styles.metricLang}>{lang.language}</Text>
-                                    <Text style={[styles.levelBadge, { backgroundColor: levelInfo.color }]}>
-                                        Lv.{levelInfo.level}
-                                    </Text>
-                                </View>
-                                <Text style={styles.levelName}>{levelInfo.name}</Text>
-                                <View style={styles.metricBarBg}>
-                                    <View style={[styles.metricBarFill, { backgroundColor: levelInfo.color, width: `${Math.max(progressInLevel, 3)}%` }]} />
-                                </View>
-                                <Text style={styles.progressText}>
-                                    {hours.toFixed(1)} / {levelInfo.nextGoal} hrs
-                                </Text>
-                            </View>
-                        );
-                    })
-                )}
-
-                {/* OUTPUT - Speaking time (SECOND) */}
-                <Text style={[styles.subSectionTitle, { marginTop: 16 }]}>Output 🎤</Text>
-
-                {outputData.length === 0 ? (
-                    <Text style={styles.emptyText}>No speaking data yet. Start chatting!</Text>
-                ) : (
-                    outputData.map((lang, idx) => {
-                        const minutes = Math.floor((lang.seconds || 0) / 60);
-                        const levelInfo = getOutputLevel(minutes);
-                        const progressInLevel = levelInfo.maxed ? 100 :
-                            ((minutes - levelInfo.prevGoal) / (levelInfo.nextGoal - levelInfo.prevGoal)) * 100;
-
-                        return (
-                            <View key={`output-${idx}`} style={styles.metricRow}>
-                                <View style={styles.metricHeader}>
-                                    <Text style={styles.metricLang}>{lang.language}</Text>
-                                    <Text style={[styles.levelBadge, { backgroundColor: levelInfo.color }]}>
-                                        Lv.{levelInfo.level}
-                                    </Text>
-                                </View>
-                                <Text style={styles.levelName}>{levelInfo.name}</Text>
-                                <View style={styles.metricBarBg}>
-                                    <View style={[styles.metricBarFill, { backgroundColor: levelInfo.color, width: `${Math.max(progressInLevel, 3)}%` }]} />
-                                </View>
-                                <Text style={styles.progressText}>
-                                    {minutes} / {levelInfo.nextGoal} min
-                                </Text>
-                            </View>
-                        );
-                    })
-                )}
             </View>
         );
     };
 
     const renderWrapped = () => {
-        const totalMinutes = Math.floor((stats?.total_speaking_seconds || 0) / 60);
-        const monthlyMinutes = Math.floor((stats?.monthly_speaking_seconds || 0) / 60);
-        const voiceMemoCount = Math.floor((stats?.total_speaking_seconds || 0) / 20); // ~20 sec average
-
         return (
             <Pressable onPress={() => setShowWrappedModal(true)}>
                 <View style={styles.wrappedContainer}>
                     <LinearGradient
-                        colors={['#1a1a2e', '#16213e', '#0f3460']} // Deep space gradient
+                        colors={[SOUP_COLORS.blue, '#9C27B0']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
-                        style={styles.wrappedCard}
+                        style={styles.wrappedBanner}
                     >
-                        {/* Decorative elements */}
-                        <View style={styles.wrappedGlow} />
+                        {/* Decorative glow */}
+                        <View style={[styles.wrappedGlow, { top: -20, right: -20, width: 80, height: 80, backgroundColor: 'rgba(255,255,255,0.2)' }]} />
 
-                        <Text style={styles.wrappedTitle}>Your 2025 Wrapped 🍜</Text>
-                        <Text style={styles.wrappedSubtitle}>Language Soup Year in Review</Text>
-
-                        {/* Big Hero Stat */}
-                        <View style={styles.heroStat}>
-                            <Text style={styles.heroNumber}>{totalMinutes}</Text>
-                            <Text style={styles.heroLabel}>minutes of speaking practice</Text>
-                        </View>
-
-                        <View style={styles.trackList}>
-                            {/* Track 1: Top Language */}
-                            <View style={styles.trackRow}>
-                                <View style={[styles.trackIcon, { backgroundColor: SOUP_COLORS.pink }]}>
-                                    <Text style={styles.trackEmoji}>🗣️</Text>
-                                </View>
-                                <View style={styles.trackInfo}>
-                                    <Text style={styles.trackTitle}>Top Language</Text>
-                                    <Text style={styles.trackSubtitle}>{stats?.monthly_top_language || 'Start practicing!'}</Text>
-                                </View>
-                                <Text style={styles.trackStat}>{Math.floor((stats?.monthly_top_language_seconds || 0) / 60)}m</Text>
+                        <View style={styles.wrappedBannerContent}>
+                            <View style={styles.wrappedIcon}>
+                                <Text style={{ fontSize: 24 }}>🥣</Text>
                             </View>
-
-                            {/* Track 2: Voice Memos */}
-                            <View style={styles.trackRow}>
-                                <View style={[styles.trackIcon, { backgroundColor: SOUP_COLORS.blue }]}>
-                                    <Text style={styles.trackEmoji}>🎙️</Text>
+                            <View>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                                    <View style={styles.newBadge}>
+                                        <Text style={styles.newBadgeText}>NEW</Text>
+                                    </View>
+                                    <Text style={styles.wrappedTitleSmall}>Your 2025 Wrapped</Text>
                                 </View>
-                                <View style={styles.trackInfo}>
-                                    <Text style={styles.trackTitle}>Voice Memos Sent</Text>
-                                    <Text style={styles.trackSubtitle}>Keep that streak going!</Text>
-                                </View>
-                                <Text style={styles.trackStat}>{voiceMemoCount}</Text>
-                            </View>
-
-                            {/* Track 3: Consistency */}
-                            <View style={styles.trackRow}>
-                                <View style={[styles.trackIcon, { backgroundColor: SOUP_COLORS.green }]}>
-                                    <Text style={styles.trackEmoji}>⚡</Text>
-                                </View>
-                                <View style={styles.trackInfo}>
-                                    <Text style={styles.trackTitle}>Vibe Check</Text>
-                                    <Text style={styles.trackSubtitle}>Consistency Level</Text>
-                                </View>
-                                <Text style={styles.trackStat}>{stats?.consistency_label || 'New'}</Text>
+                                <Text style={styles.wrappedSubtitleSmall}>Tap to see your soup stats! ✨</Text>
                             </View>
                         </View>
-
-                        <View style={styles.wrappedFooter}>
-                            <Text style={styles.wrappedBranding}>LANGUAGE SOUP WRAPPED '25 ✨</Text>
-                            <Share2 color="rgba(255,255,255,0.6)" size={16} />
+                        <View style={styles.wrappedArrow}>
+                            <ArrowRight color="#fff" size={24} />
                         </View>
                     </LinearGradient>
                 </View>
@@ -635,7 +631,7 @@ export default function ProfileScreen() {
 
                             {/* User's name */}
                             <Text style={styles.wrappedUserName}>{user?.display_name || 'Souper Star'}</Text>
-                            <Text style={styles.wrappedTagline}>Your year of slurping languages</Text>
+                            <Text style={styles.wrappedTagline}>{user?.status_text || 'Your year of slurping languages'}</Text>
 
                             {/* Big Hero Stat */}
                             <View style={styles.fullHeroStat}>
@@ -712,33 +708,18 @@ export default function ProfileScreen() {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                {/* Sign Out - Top Left */}
-                <Pressable onPress={handleSignOut} style={styles.signOutBtn}>
-                    <LogOut size={20} color={SOUP_COLORS.pink} />
-                </Pressable>
-
-                {/* Admin Buttons - Top Right */}
-                <View style={styles.headerRight}>
-                    {user?.role === 'community_manager' && (
-                        <Pressable
-                            onPress={() => router.push('/admin/community-dashboard')}
-                            style={styles.managerBtn}
-                        >
-                            <Award size={16} color={SOUP_COLORS.green} />
-                            <Text style={styles.managerBtnText}>Community Manager</Text>
-                        </Pressable>
-                    )}
-                </View>
+                <View />
             </View>
 
             <ScrollView
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
             >
+                {/* Content */}
+
                 {renderIdentity()}
                 {renderStats()}
                 {renderWrapped()}
-                <View style={{ height: 400 }} />
             </ScrollView>
             {renderWrappedModal()}
 
@@ -777,19 +758,31 @@ export default function ProfileScreen() {
                                     placeholderTextColor="#999"
                                 />
 
-                                <Text style={styles.modalLabel}>Bio</Text>
+                                <Text style={styles.modalLabel}>Tagline ✨</Text>
                                 <TextInput
-                                    style={[styles.modalInput, styles.modalTextArea]}
-                                    value={newBio}
-                                    onChangeText={setNewBio}
-                                    placeholder="Short bio..."
+                                    style={styles.modalInput}
+                                    value={newTagline}
+                                    onChangeText={setNewTagline}
+                                    placeholder="your tagline..."
                                     placeholderTextColor="#999"
-                                    multiline
-                                    numberOfLines={3}
+                                    maxLength={50}
                                 />
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.flavorScroll}>
+                                    {EXAMPLE_TAGLINES.map(tag => (
+                                        <Pressable
+                                            key={tag}
+                                            style={[styles.flavorChip, newTagline === tag && styles.flavorChipSelected]}
+                                            onPress={() => setNewTagline(tag)}
+                                        >
+                                            <Text style={[styles.flavorChipText, newTagline === tag && styles.flavorChipTextSelected]}>
+                                                {tag}
+                                            </Text>
+                                        </Pressable>
+                                    ))}
+                                </ScrollView>
 
-                                <Text style={styles.modalLabel}>Timezone</Text>
-                                {/* Selected Timezone always visible */}
+                                <Text style={styles.modalLabel}>Timezone 🌎</Text>
+                                {/* Selected Timezone */}
                                 {newTimezone ? (
                                     <View style={[styles.languageChips, { marginBottom: 8 }]}>
                                         <Pressable
@@ -801,79 +794,40 @@ export default function ProfileScreen() {
                                             </Text>
                                         </Pressable>
                                     </View>
-                                ) : (
-                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.languageChips}>
-                                        {availableTimezones.map(tz => (
-                                            <Pressable
-                                                key={tz}
-                                                style={styles.languageChip}
-                                                onPress={() => setNewTimezone(tz)}
-                                            >
-                                                <Text style={styles.languageChipText}>{tz}</Text>
-                                            </Pressable>
-                                        ))}
-                                    </ScrollView>
-                                )}
-
-                                {/* SOUP FLAVOR SECTION */}
-                                <Text style={styles.modalLabel}>Soup Flavor 🍲</Text>
-                                <Text style={styles.modalSubLabel}>What's your learning vibe?</Text>
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.flavorScroll}>
-                                    {['Spicy 🌶️', 'Salty 🧂', 'Chunky 🥔', 'Smooth 🥣', 'Chaotic 🌪️', 'Zesty 🍋', 'Bland 🍞'].map(flavor => (
-                                        <Pressable
-                                            key={flavor}
-                                            style={[
-                                                styles.flavorChip,
-                                                newSoupFlavor === flavor && styles.flavorChipSelected
-                                            ]}
-                                            onPress={() => setNewSoupFlavor(flavor)}
-                                        >
-                                            <Text style={[
-                                                styles.flavorChipText,
-                                                newSoupFlavor === flavor && styles.flavorChipTextSelected
-                                            ]}>{flavor}</Text>
-                                        </Pressable>
-                                    ))}
-                                </ScrollView>
+                                ) : null}
 
                                 <TextInput
                                     style={[styles.modalInput, { marginBottom: 12 }]}
                                     value={timezoneSearch}
                                     onChangeText={setTimezoneSearch}
-                                    placeholder="Start typing timezone..."
+                                    placeholder="Search timezone..."
                                     placeholderTextColor="#999"
                                 />
                                 <View style={styles.languageChips}>
                                     {(() => {
-                                        // Only show search results if user is typing
                                         if (!timezoneSearch) return null;
-
                                         const filtered = availableTimezones.filter(tz =>
                                             tz.toLowerCase().includes(timezoneSearch.toLowerCase())
                                         );
-
-                                        const toShow = filtered.slice(0, 20);
-
                                         return (
                                             <>
-                                                {toShow.map(tz => (
+                                                {filtered.slice(0, 10).map(tz => (
                                                     <Pressable
                                                         key={tz}
                                                         style={styles.languageChip}
                                                         onPress={() => {
                                                             setNewTimezone(tz);
-                                                            setTimezoneSearch(''); // Clear search after select
+                                                            setTimezoneSearch('');
                                                         }}
                                                     >
-                                                        <Text style={styles.languageChipText}>
-                                                            {tz}
-                                                        </Text>
+                                                        <Text style={styles.languageChipText}>{tz}</Text>
                                                     </Pressable>
                                                 ))}
                                             </>
                                         );
                                     })()}
                                 </View>
+
 
                                 <Text style={styles.modalLabel}>Conversational Languages</Text>
                                 {/* Selected Languages always visible */}
@@ -1133,6 +1087,7 @@ const styles = StyleSheet.create({
         borderTopRightRadius: 24,
         paddingTop: 20,
         marginTop: -10,
+        paddingBottom: 150,
     },
     // IDENTITY
     identitySection: {
@@ -1222,8 +1177,8 @@ const styles = StyleSheet.create({
         marginHorizontal: 20,
     },
     langRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
+        flexDirection: 'column', // Changed to column to allow wrapping children properly
+        alignItems: 'flex-start',
         gap: 8,
     },
     labelSmall: {
@@ -1233,6 +1188,7 @@ const styles = StyleSheet.create({
     },
     langChips: {
         flexDirection: 'row',
+        flexWrap: 'wrap', // Allow chips to wrap to next line
         gap: 6,
     },
     chip: {
@@ -1278,11 +1234,17 @@ const styles = StyleSheet.create({
         fontWeight: '900',
         color: SOUP_COLORS.blue,
     },
+    sectionHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        paddingRight: 10,
+        marginBottom: 8,
+    },
     sectionTitle: {
-        fontSize: 18,
+        fontSize: 20,
         fontWeight: '800',
         color: SOUP_COLORS.text,
-        marginBottom: 4,
+        marginBottom: 2,
         marginLeft: 4,
     },
     sectionSubtitle: {
@@ -1290,6 +1252,23 @@ const styles = StyleSheet.create({
         color: SOUP_COLORS.subtext,
         marginBottom: 16,
         marginLeft: 4,
+        maxWidth: '95%',
+        lineHeight: 18,
+    },
+    infoButton: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: '#f0f0f0',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#e0e0e0',
+    },
+    infoButtonText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: SOUP_COLORS.subtext,
     },
     subSectionTitle: {
         fontSize: 15,
@@ -1391,11 +1370,67 @@ const styles = StyleSheet.create({
         backgroundColor: SOUP_COLORS.green,
         borderRadius: 6,
     },
-    // WRAPPED - Spotify Style
+    // WRAPPED - Button Banner Style
     wrappedContainer: {
-        marginTop: 10,
+        marginTop: 24,
         marginBottom: 40,
+        marginHorizontal: 4,
     },
+    wrappedBanner: {
+        borderRadius: 24,
+        padding: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        shadowColor: SOUP_COLORS.blue,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 16,
+        elevation: 8,
+    },
+    newBadge: {
+        backgroundColor: '#fff',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 6,
+    },
+    newBadgeText: {
+        color: SOUP_COLORS.blue,
+        fontSize: 10,
+        fontWeight: '900',
+    },
+    wrappedArrow: {
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    wrappedBannerContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    wrappedIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    wrappedTitleSmall: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: '#fff',
+    },
+    wrappedSubtitleSmall: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.7)',
+        fontWeight: '500',
+    },
+    // Old styles kept for modal
     wrappedCard: {
         borderRadius: 24,
         padding: 24,
@@ -1815,6 +1850,41 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         color: SOUP_COLORS.blue,
     },
+    // ADMIN PROFILE ADDITIONS
+    adminProfileSection: {
+        marginBottom: 24,
+        marginTop: 10,
+    },
+    adminSectionTitle: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: SOUP_COLORS.text,
+        marginBottom: 12,
+        textAlign: 'center',
+    },
+    adminCardRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    adminCardSmall: {
+        flex: 1,
+        padding: 16,
+        borderRadius: 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    adminCardSmallTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#fff',
+        textAlign: 'center',
+    },
     modalScroll: {
         flex: 1,
     },
@@ -1835,6 +1905,39 @@ const styles = StyleSheet.create({
         fontSize: 16,
         borderWidth: 1,
         borderColor: 'rgba(0,0,0,0.1)',
+    },
+    flavorScroll: {
+        marginTop: 8,
+        marginBottom: 16,
+        flexGrow: 0,
+    },
+    flavorChip: {
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 20,
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: '#f0f0f0',
+        marginRight: 8,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
+    },
+    flavorChipSelected: {
+        backgroundColor: SOUP_COLORS.pink,
+        borderColor: SOUP_COLORS.pink,
+        transform: [{ scale: 1.02 }],
+    },
+    flavorChipText: {
+        fontSize: 13,
+        color: SOUP_COLORS.text,
+        fontWeight: '500',
+    },
+    flavorChipTextSelected: {
+        color: '#fff',
+        fontWeight: '700',
     },
     modalTextArea: {
         minHeight: 80,
@@ -1860,12 +1963,121 @@ const styles = StyleSheet.create({
     languageChipSelected: {
         backgroundColor: SOUP_COLORS.blue,
     },
-    languageChipText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: SOUP_COLORS.blue,
-    },
     languageChipTextSelected: {
         color: '#fff',
+    },
+    // NEW COMPREHENSIBLE STYLES
+    comprehensibleCard: {
+        backgroundColor: '#fff',
+        borderRadius: 24,
+        padding: 20,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+        elevation: 2,
+    },
+    statsTabs: {
+        flexDirection: 'row',
+        backgroundColor: SOUP_COLORS.cream,
+        borderRadius: 16,
+        padding: 4,
+        marginBottom: 20,
+    },
+    statsTab: {
+        flex: 1,
+        paddingVertical: 10,
+        alignItems: 'center',
+        borderRadius: 14,
+    },
+    statsTabActive: {
+        backgroundColor: '#fff',
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 3,
+        elevation: 1,
+    },
+    statsTabText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: SOUP_COLORS.subtext,
+    },
+    statsTabTextActive: {
+        color: SOUP_COLORS.text,
+        fontWeight: '800',
+    },
+    emptyStateContainer: {
+        alignItems: 'center',
+        paddingVertical: 30,
+    },
+    emptyEmoji: {
+        fontSize: 40,
+        marginBottom: 8,
+        opacity: 0.5,
+    },
+    statItemCard: {
+        marginBottom: 24,
+    },
+    statHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    statLangName: {
+        fontSize: 17,
+        fontWeight: '800',
+        color: SOUP_COLORS.text,
+    },
+    statLevelName: {
+        fontSize: 13,
+        color: SOUP_COLORS.subtext,
+        marginTop: 2,
+    },
+    statLevelBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    statLevelText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    cuteBarContainer: {
+        height: 16,
+        backgroundColor: SOUP_COLORS.cream,
+        borderRadius: 10,
+        marginBottom: 8,
+        overflow: 'visible', // Allow emoji to overflow
+    },
+    cuteBarFill: {
+        height: '100%',
+        borderRadius: 10,
+        position: 'relative',
+        minWidth: 16, // Ensure visible at 0%
+    },
+    travelingEmojiContainer: {
+        position: 'absolute',
+        right: -10, // Hang off the end
+        top: -12,   // Float above
+        width: 28,
+        height: 28,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 10,
+    },
+    travelingEmoji: {
+        fontSize: 20,
+        textShadowColor: 'rgba(0,0,0,0.1)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
+    },
+    statFooterText: {
+        fontSize: 12,
+        color: SOUP_COLORS.subtext,
+        textAlign: 'right',
+        fontStyle: 'italic',
     },
 });

@@ -66,6 +66,24 @@ export default function OnboardingScreen() {
             return;
         }
 
+        // Check for duplicate name
+        try {
+            const { count } = await supabase
+                .from('app_users')
+                .select('*', { count: 'exact', head: true })
+                .ilike('display_name', displayName.trim());
+
+            if (count > 0) {
+                Alert.alert(
+                    'Name taken! 👯🏾‍♀️',
+                    'Someone is already using that name.\n\nTry adding an emoji or number! ✨'
+                );
+                return;
+            }
+        } catch (error) {
+            console.error('Error checking name:', error);
+        }
+
         setSaving(true);
         try {
             // Create user profile in app_users
