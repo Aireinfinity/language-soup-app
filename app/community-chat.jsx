@@ -10,7 +10,10 @@ import { Colors } from '../constants/Colors';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
-import * as FileSystem from 'expo-file-system';
+import { MessageBubble } from '../components/MessageBubble';
+import { ChatStyles } from '../constants/ChatStyles';
+import { SharedChatUI } from '../components/SharedChatUI';
+import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 
 const SOUP_COLORS = {
@@ -54,102 +57,6 @@ function addDateSeparators(messages) {
     return result;
 }
 
-// Message Bubble Component  
-function MessageBubble({ message, isMe }) {
-    const formatTime = (dateString) => {
-        if (!dateString) return '';
-        const date = new Date(dateString);
-        return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    };
-
-    const avatarElement = (
-        <View style={[styles.avatarContainer, isMe && styles.avatarContainerMe]}>
-            {message.user?.avatar_url ? (
-                <Image source={{ uri: message.user.avatar_url }} style={styles.avatar} />
-            ) : (
-                <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                    <Text style={styles.avatarText}>
-                        {message.user?.display_name?.charAt(0).toUpperCase() || '?'}
-                    </Text>
-                </View>
-            )}
-        </View>
-    );
-
-    const bubbleElement = (
-        <View style={[
-            styles.bubble,
-            message.message_type === 'voice' && styles.bubbleVoice,
-            isMe ? styles.bubbleMe : styles.bubbleThem,
-        ]}>
-            {!isMe && message.user && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-                    <Text style={styles.senderName}>{message.user.display_name}</Text>
-                    {message.user.fluent_languages && message.user.fluent_languages.slice(0, 2).map((lang, idx) => (
-                        <View key={idx} style={{
-                            backgroundColor: 'rgba(255,255,255,0.2)',
-                            borderRadius: 4,
-                            paddingHorizontal: 4,
-                            paddingVertical: 1,
-                            marginLeft: 4
-                        }}>
-                            <Text style={{ fontSize: 9, color: '#fff', opacity: 0.9 }}>{lang}</Text>
-                        </View>
-                    ))}
-                </View>
-            )}
-
-            {/* Show languages for Me too */}
-            {isMe && message.user && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2, justifyContent: 'flex-end' }}>
-                    {message.user.fluent_languages && message.user.fluent_languages.slice(0, 2).map((lang, idx) => (
-                        <View key={idx} style={{
-                            backgroundColor: 'rgba(255,255,255,0.3)',
-                            borderRadius: 4,
-                            paddingHorizontal: 4,
-                            paddingVertical: 1,
-                            marginLeft: 4
-                        }}>
-                            <Text style={{ fontSize: 9, color: '#fff', fontWeight: '600' }}>{lang}</Text>
-                        </View>
-                    ))}
-                </View>
-            )}
-
-            {message.message_type === 'voice' ? (
-                <AudioMessage
-                    audioUrl={message.media_url}
-                    duration={message.duration_seconds}
-                    senderName={message.user?.display_name}
-                    isMe={isMe}
-                />
-            ) : (
-                <Text style={[styles.messageText, isMe && styles.messageTextMe]}>
-                    {message.content}
-                </Text>
-            )}
-        </View>
-    );
-
-    return (
-        <View style={[styles.messageRow, isMe ? styles.rowMe : styles.rowThem]}>
-            {/* For sent messages (isMe), show bubble first then avatar on right */}
-            {/* For received messages, show avatar first then bubble */}
-            {isMe ? (
-                <>
-                    {bubbleElement}
-                    {avatarElement}
-                </>
-            ) : (
-                <>
-                    {avatarElement}
-                    {bubbleElement}
-                </>
-            )}
-        </View>
-    );
-}
-
 export default function CommunityChatScreen() {
     const { user } = useAuth();
     const router = useRouter();
@@ -177,6 +84,7 @@ export default function CommunityChatScreen() {
 
     const {
         isRecording,
+        recordingDuration,
         metering,
         startRecording,
         stopRecording,
@@ -268,16 +176,24 @@ export default function CommunityChatScreen() {
                 'postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'app_community_messages' },
                 async (payload) => {
-                    if (payload.new.user_id === user?.id) return;
-
+                    // Don't skip our own messages - we want to see them!
+                    // Fetch user data for the new message
                     const { data: userData } = await supabase
                         .from('app_users')
                         .select('display_name, avatar_url, fluent_languages')
                         .eq('id', payload.new.user_id)
                         .single();
 
-                    const newMessage = { ...payload.new, user: userData };
-                    setMessages(prev => [...prev, newMessage]);
+                    const newMsg = {
+                        ...payload.new,
+                        user: userData || { display_name: 'Unknown', avatar_url: null, fluent_languages: [] }
+                    };
+
+                    setMessages(prev => {
+                        // Remove temp message if it exists
+                        const filtered = prev.filter(m => !m.id.startsWith('temp-'));
+                        return [...filtered, newMsg];
+                    });
                 }
             )
             .subscribe();
@@ -331,40 +247,83 @@ export default function CommunityChatScreen() {
     };
 
     const sendVoiceMessage = async () => {
+        console.log('[Community Voice] sendVoiceMessage called, isRecording:', isRecording);
         if (!isRecording) {
+            console.log('[Community Voice] Starting recording...');
             await startRecording();
         } else {
+            console.log('[Community Voice] Stopping recording...');
             const recording = await stopRecording();
+            console.log('[Community Voice] Recording stopped, result:', recording);
             if (recording?.uri) {
+                console.log('[Community Voice] Uploading voice message...');
                 await uploadVoiceMessage(recording.uri, recording.duration);
+            } else {
+                console.log('[Community Voice] ERROR: No recording URI!');
             }
         }
     };
 
     const uploadVoiceMessage = async (uri, duration) => {
+        // Create optimistic message
+        const optimisticMsg = {
+            id: `temp-${Date.now()}`,
+            user_id: user.id,
+            content: '',
+            message_type: 'voice',
+            media_url: uri, // Temporarily show local URI
+            duration_seconds: Math.round(duration / 1000),
+            created_at: new Date().toISOString(),
+            user: userProfile
+        };
+
+        // Add optimistically to UI
+        setMessages(prev => [...prev, optimisticMsg]);
+
         try {
+            console.log('[Community Voice] uploadVoiceMessage called with:', { uri, duration });
             const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+            console.log('[Community Voice] File read, base64 length:', base64.length);
+
             const filePath = `community/${user.id}/voice-${Date.now()}.m4a`;
+            console.log('[Community Voice] Uploading to:', filePath);
 
             const { error: uploadError } = await supabase.storage
-                .from('voice-messages')
+                .from('voice-memos')
                 .upload(filePath, decode(base64), { contentType: 'audio/m4a' });
 
-            if (uploadError) throw uploadError;
+            if (uploadError) {
+                console.log('[Community Voice] Upload error:', uploadError);
+                throw uploadError;
+            }
 
+            console.log('[Community Voice] Upload successful, getting public URL...');
             const { data: { publicUrl } } = supabase.storage
-                .from('voice-messages')
+                .from('voice-memos')
                 .getPublicUrl(filePath);
 
-            await supabase.from('app_community_messages').insert({
+            console.log('[Community Voice] Public URL:', publicUrl);
+            console.log('[Community Voice] Inserting into database...');
+
+            const { data, error } = await supabase.from('app_community_messages').insert({
                 user_id: user.id,
-                content: '',
-                message_type: 'voice',
-                media_url: publicUrl,
-                duration_seconds: Math.round(duration / 1000)
-            });
+                content: publicUrl, // Store URL in content field
+                message_type: 'voice'
+            }).select();
+
+            if (error) {
+                console.log('[Community Voice] Database insert error:', error);
+                throw error;
+            }
+
+            console.log('[Community Voice] Voice message sent successfully!', data);
+
+            // Don't remove optimistic message - let realtime subscription replace it
+            // setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
         } catch (error) {
-            console.error('Error uploading voice message:', error);
+            console.error('[Community Voice] Error uploading voice message:', error);
+            // Remove optimistic message on error
+            setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
         }
     };
 
@@ -372,9 +331,9 @@ export default function CommunityChatScreen() {
         if (item.type === 'date_separator') {
             return (
                 <View style={styles.dateSeparator}>
-                    <View style={styles.dateLine} />
-                    <Text style={styles.dateLabel}>{item.label}</Text>
-                    <View style={styles.dateLine} />
+                    <View style={styles.dateSeparatorBadge}>
+                        <Text style={styles.dateSeparatorText}>{item.label}</Text>
+                    </View>
                 </View>
             );
         }
@@ -393,6 +352,8 @@ export default function CommunityChatScreen() {
             <MessageBubble
                 message={item}
                 isMe={item.user_id === user?.id}
+                showLanguageFlags={true}
+                senderKey="user"
             />
         );
     };
@@ -428,106 +389,69 @@ export default function CommunityChatScreen() {
         );
     }
 
+    const messagesWithDates = [...addDateSeparators(messages)].reverse();
+
     return (
         <View style={styles.container}>
             <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
-            {/* Header */}
-            <BlurView intensity={80} tint="light" style={[styles.header, { paddingTop: insets.top }]}>
-                <View style={styles.headerContent}>
-                    <Pressable onPress={() => router.back()} style={styles.backButton}>
-                        <ChevronLeft size={30} color={Colors.primary} />
-                    </Pressable>
-
-                    <View style={styles.headerInfo}>
-                        <Text style={styles.headerTitle}>🌍 Community</Text>
-                        <Text style={styles.headerSubtitle}>{memberCount} members</Text>
-                    </View>
-
-                    <View style={{ width: 30 }} />
-                </View>
-            </BlurView>
-
-            {/* Announcement Banner - Tap to view on Community tab */}
-            {announcements.length > 0 && (
-                <Pressable
-                    style={[styles.announcementBanner, { top: insets.top + 65 }]}
-                    onPress={() => router.back()}
-                >
-                    <Megaphone size={16} color={SOUP_COLORS.pink} />
-                    <Text style={styles.announcementBannerText} numberOfLines={2}>
-                        {announcements[0].content}
-                    </Text>
-                    <Text style={styles.tapToViewText}>TAP TO VIEW</Text>
-                </Pressable>
-            )}
-
-            <KeyboardAvoidingView
-                style={styles.keyboardView}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-            >
-                {/* Messages */}
-                <FlatList
-                    ref={flatListRef}
-                    data={[...addDateSeparators(messages)].reverse()}
-                    renderItem={renderItem}
-                    keyExtractor={(item) => item.id}
-                    inverted
-                    contentContainerStyle={[
-                        styles.messagesList,
-                        { paddingBottom: insets.top + (announcements.length > 0 ? 130 : 70), paddingTop: 20 }
-                    ]}
-                    ListEmptyComponent={
-                        <View style={styles.emptyState}>
-                            <Text style={styles.emptyEmoji}>👋</Text>
-                            <Text style={styles.emptyTitle}>Welcome to the Community!</Text>
-                            <Text style={styles.emptyText}>Say hi to fellow language learners</Text>
-                        </View>
-                    }
-                />
-
-                {/* Input Area */}
-                <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-                    {isRecording ? (
-                        <View style={styles.recordingBar}>
-                            <Pressable onPress={cancelRecording} style={styles.cancelButton}>
-                                <Trash2 size={22} color="#FF3B30" />
+            <SharedChatUI
+                messages={messagesWithDates}
+                loading={loading}
+                onSendText={sendTextMessage}
+                onSendVoice={sendVoiceMessage}
+                textInput={inputText}
+                onTextChange={setInputText}
+                sending={sending}
+                headerComponent={
+                    <BlurView intensity={95} tint="light" style={[styles.header, { paddingTop: insets.top }]}>
+                        <View style={styles.headerContent}>
+                            <Pressable onPress={() => router.back()} style={styles.backButton}>
+                                <ChevronLeft size={28} color={Colors.primary} />
                             </Pressable>
-
-                            <View style={styles.waveformContainer}>
-                                <LiveAudioWaveform metering={metering} isRecording={isRecording} />
+                            <View style={styles.headerInfo}>
+                                <Text style={styles.headerTitle}>Community</Text>
+                                <View style={styles.memberBadge}>
+                                    <Users size={12} color={Colors.textLight} />
+                                    <Text style={styles.memberCount}>{memberCount} members</Text>
+                                </View>
                             </View>
-
-                            <Pressable onPress={sendVoiceMessage} style={styles.sendVoiceButton}>
-                                <Send size={20} color="#fff" />
-                            </Pressable>
                         </View>
-                    ) : (
-                        <>
-                            <TextInput
-                                style={styles.input}
-                                value={inputText}
-                                onChangeText={setInputText}
-                                placeholder="Type a message..."
-                                placeholderTextColor="#8E8E93"
-                                multiline
-                                maxLength={500}
-                            />
-
-                            {inputText.trim() ? (
-                                <Pressable onPress={sendTextMessage} style={styles.sendButton}>
-                                    <Send size={20} color="#fff" />
-                                </Pressable>
-                            ) : (
-                                <Pressable onPress={sendVoiceMessage} style={styles.micButton}>
-                                    <Mic size={22} color={SOUP_COLORS.blue} />
-                                </Pressable>
-                            )}
-                        </>
-                    )}
-                </View>
-            </KeyboardAvoidingView>
+                    </BlurView>
+                }
+                bannerComponent={
+                    announcements.length > 0 && latestAnnouncement && (
+                        <Pressable
+                            style={[styles.announcementBanner, { top: insets.top + 65 }]}
+                            onPress={() => scrollToAnnouncementMessage(latestAnnouncement.id)}
+                        >
+                            <BlurView intensity={95} tint="light" style={styles.announcementBlur}>
+                                <Megaphone size={18} color={SOUP_COLORS.pink} />
+                                <View style={styles.announcementText}>
+                                    <Text style={styles.announcementTitle}>Announcement</Text>
+                                    <Text style={styles.announcementPreview} numberOfLines={1}>
+                                        {latestAnnouncement.content}
+                                    </Text>
+                                </View>
+                            </BlurView>
+                        </Pressable>
+                    )
+                }
+                placeholderText="Message the community..."
+                showLanguageFlags={true}
+                senderKey="user"
+                isRecording={isRecording}
+                recordingDuration={recordingDuration}
+                metering={metering}
+                onStartRecording={startRecording}
+                onCancelRecording={cancelRecording}
+                onSendRecording={sendVoiceMessage}
+                typingIndicatorComponent={null}
+                flatListRef={flatListRef}
+                userId={user?.id}
+                contentContainerStyle={[ChatStyles.messagesList, { paddingBottom: insets.top + (announcements.length > 0 ? 130 : 70), paddingTop: 20 }]}
+                inverted={true}
+            />
         </View>
     );
 }
@@ -638,17 +562,16 @@ const styles = StyleSheet.create({
 
     // Date Separator
     dateSeparator: {
-        flexDirection: 'row',
         alignItems: 'center',
         marginVertical: 16,
     },
-    dateLine: {
-        flex: 1,
-        height: 1,
-        backgroundColor: 'rgba(0,0,0,0.1)',
-    },
-    dateLabel: {
+    dateSeparatorBadge: {
+        backgroundColor: 'rgba(0,0,0,0.05)',
+        paddingVertical: 4,
         paddingHorizontal: 12,
+        borderRadius: 12,
+    },
+    dateSeparatorText: {
         fontSize: 12,
         color: '#8E8E93',
         fontWeight: '600',
@@ -739,7 +662,7 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: '700',
         color: SOUP_COLORS.pink,
-        marginBottom: 5,
+        marginBottom: 4,
     },
     messageText: {
         fontSize: 16,

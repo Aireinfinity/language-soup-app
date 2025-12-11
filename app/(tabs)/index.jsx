@@ -714,11 +714,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 8,
         flex: 1,
-        marginRight: 4, // Ensure title doesn't hit time
+        marginRight: 8, // More breathing room
     },
     groupName: {
         fontSize: 16,
         fontWeight: '600',
+        flexShrink: 1, // Allow name to shrink if needed
     },
     memberBadge: {
         flexDirection: 'row',
@@ -728,6 +729,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 6,
         paddingVertical: 2,
         borderRadius: 10,
+        flexShrink: 0, // Don't shrink the badge
     },
     memberBadgeText: {
         fontSize: 11,
@@ -737,6 +739,8 @@ const styles = StyleSheet.create({
     time: {
         fontSize: 12,
         color: Colors.textLight,
+        flexShrink: 0, // Never shrink the time
+        minWidth: 35, // Ensure space for time like "now", "12h"
     },
     groupFooter: {
         flexDirection: 'row',

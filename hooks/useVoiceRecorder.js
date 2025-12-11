@@ -97,7 +97,7 @@ export const useVoiceRecorder = () => {
             setRecordingDuration(0);
             setMetering(-160);
 
-            return uri;
+            return { uri, duration: recordingDuration * 1000 }; // milliseconds
         } catch (err) {
             console.error('Failed to stop recording:', err);
             Alert.alert(

@@ -12,10 +12,12 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
-import * as FileSystem from 'expo-file-system';
+import { getLanguageFlag } from '../../utils/languageFlags';
+import { SharedChatUI } from '../../components/SharedChatUI';
+import { ChatStyles } from '../../constants/ChatStyles';
+import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { haptics } from '../../utils/haptics';
-import { getLanguageFlag } from '../../utils/languageFlags';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -45,105 +47,6 @@ function addDateSeparators(messages) {
         result.push(msg);
     });
     return result;
-}
-
-// Message Bubble Component
-function MessageBubble({ message, isMe }) {
-    const formatTime = (dateString) => {
-        if (!dateString) return '';
-        const date = new Date(dateString);
-        return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    };
-    const isSending = message.status === 'sending' || message.status === 'uploading';
-
-    const avatarElement = (
-        <View style={[styles.avatarContainer, isMe && styles.avatarContainerMe]}>
-            {message.sender?.avatar_url ? (
-                <Image source={{ uri: message.sender.avatar_url }} style={styles.avatar} />
-            ) : (
-                <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                    <Text style={styles.avatarText}>{message.sender?.display_name?.charAt(0).toUpperCase() || '?'}</Text>
-                </View>
-            )}
-        </View>
-    );
-
-    const languageBadges = (
-        <View style={[styles.languageBadges, isMe ? styles.languageBadgesRight : styles.languageBadgesLeft]}>
-            {/* Conversational */}
-            {message.sender.fluent_languages && message.sender.fluent_languages.length > 0 && (
-                <View style={styles.languageBadge}>
-                    <Text style={styles.languageBadgeLabel}>speaks</Text>
-                    <View style={styles.flagsRow}>
-                        {message.sender.fluent_languages.slice(0, 3).map((lang, idx) => {
-                            const flag = getLanguageFlag(lang);
-                            return flag ? <Text key={idx} style={styles.flagEmoji}>{flag}</Text> : null;
-                        })}
-                    </View>
-                </View>
-            )}
-            {/* Learning */}
-            {message.sender.learning_languages && message.sender.learning_languages.length > 0 && (
-                <View style={styles.languageBadge}>
-                    <Text style={styles.languageBadgeLabel}>learning</Text>
-                    <View style={styles.flagsRow}>
-                        {message.sender.learning_languages.slice(0, 3).map((lang, idx) => {
-                            const flag = getLanguageFlag(lang);
-                            return flag ? <Text key={idx} style={styles.flagEmoji}>{flag}</Text> : null;
-                        })}
-                    </View>
-                </View>
-            )}
-        </View>
-    );
-
-    const bubbleElement = (
-        <View style={[styles.messageContainer, isMe ? styles.myMessageContainer : styles.theirMessageContainer]}>
-            {languageBadges}
-            <View style={[styles.bubble, message.message_type === 'voice' && styles.bubbleVoice, isMe ? styles.bubbleMe : styles.bubbleThem, isSending && styles.bubbleSending]}>
-                {!isMe && message.sender && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-                        <Text style={styles.senderName}>{message.sender.display_name}</Text>
-                        {message.sender.fluent_languages && message.sender.fluent_languages.slice(0, 2).map((lang, idx) => (
-                            <View key={idx} style={{ backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1, marginLeft: 4 }}>
-                                <Text style={{ fontSize: 9, color: '#fff', opacity: 0.9 }}>{lang}</Text>
-                            </View>
-                        ))}
-                    </View>
-                )}
-                {isMe && message.sender && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2, justifyContent: 'flex-end' }}>
-                        {message.sender.fluent_languages && message.sender.fluent_languages.slice(0, 2).map((lang, idx) => (
-                            <View key={idx} style={{ backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1, marginLeft: 4 }}>
-                                <Text style={{ fontSize: 9, color: '#fff', fontWeight: '600' }}>{lang}</Text>
-                            </View>
-                        ))}
-                    </View>
-                )}
-                {message.message_type === 'voice' ? (
-                    <AudioMessage audioUrl={message.media_url} duration={message.duration_seconds} senderName={message.sender?.display_name} isMe={isMe} />
-                ) : (
-                    <Text style={[styles.messageText, isMe && styles.messageTextMe]}>{message.content}</Text>
-                )}
-            </View>
-        </View>
-    );
-
-    return (
-        <View style={[styles.messageRow, isMe ? styles.rowMe : styles.rowThem]}>
-            {isMe ? (
-                <>
-                    {bubbleElement}
-                    {avatarElement}
-                </>
-            ) : (
-                <>
-                    {avatarElement}
-                    {bubbleElement}
-                </>
-            )}
-        </View>
-    );
 }
 
 export default function ChatScreen() {
@@ -364,20 +267,6 @@ export default function ChatScreen() {
         flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     };
 
-    const renderMessage = ({ item }) => {
-        if (item.type === 'date_separator') {
-            return (
-                <View style={styles.dateSeparator}>
-                    <View style={styles.dateSeparatorBadge}>
-                        <Text style={styles.dateSeparatorText}>{item.label}</Text>
-                    </View>
-                </View>
-            );
-        }
-        const isMe = item.sender_id === user?.id;
-        return <MessageBubble message={item} isMe={isMe} />;
-    };
-
     const typingIndicator = () => {
         const recordingIds = Object.keys(recordingUsers);
         const typingIds = Object.keys(typingUsers);
@@ -454,19 +343,25 @@ export default function ChatScreen() {
     };
 
     const handleSendVoice = async () => {
-        const uri = await handleStopRecording();
-        if (uri) await sendVoiceMemo(uri);
+        const result = await handleStopRecording();
+        if (result?.uri) await sendVoiceMemo(result.uri);
     };
 
     const sendVoiceMemo = async (audioUri) => {
-        if (!audioUri || !currentChallenge || !user) return;
+        console.log('🎤 [VOICE] Starting sendVoiceMemo with URI:', audioUri);
+        if (!audioUri || !user) {
+            console.log('❌ [VOICE] Missing audioUri or user:', { audioUri, userId: user?.id });
+            return;
+        }
         const tempId = `temp-voice-${Date.now()}`;
         const duration = Math.floor(recordingDuration);
+        console.log('⏱️ [VOICE] Recording duration:', duration, 'seconds');
+
         const optimisticMessage = {
             id: tempId,
             sender_id: user.id,
             group_id: groupId,
-            challenge_id: currentChallenge.id,
+            challenge_id: currentChallenge?.id || null,
             message_type: 'voice',
             media_url: audioUri,
             duration_seconds: duration,
@@ -476,25 +371,50 @@ export default function ChatScreen() {
         };
         setMessages((prev) => [...prev, optimisticMessage]);
         setTimeout(() => scrollToBottom(), 50);
+
         try {
+            console.log('📁 [VOICE] Getting file info...');
             const fileInfo = await FileSystem.getInfoAsync(audioUri);
+            console.log('📁 [VOICE] File info:', { exists: fileInfo.exists, size: fileInfo.size, uri: fileInfo.uri });
+
+            console.log('🔄 [VOICE] Reading file as base64...');
             const audioData = await FileSystem.readAsStringAsync(audioUri, { encoding: FileSystem.EncodingType.Base64 });
-            const fileName = `voice_${Date.now()}.m4a`;
+            console.log('✅ [VOICE] Base64 data length:', audioData.length);
+
+            const fileName = `language-chat/${user.id}/voice_${Date.now()}.m4a`;
+            console.log('☁️ [VOICE] Uploading to Supabase:', fileName);
+
             const { error: uploadError } = await supabase.storage.from('voice-memos').upload(fileName, decode(audioData), { contentType: 'audio/m4a' });
-            if (uploadError) throw uploadError;
+            if (uploadError) {
+                console.error('❌ [VOICE] Upload error:', uploadError);
+                throw uploadError;
+            }
+            console.log('✅ [VOICE] Upload successful');
+
             const { data: { publicUrl } } = supabase.storage.from('voice-memos').getPublicUrl(fileName);
+            console.log('🔗 [VOICE] Public URL:', publicUrl);
+
+            console.log('💾 [VOICE] Inserting into database...');
             const { data, error: insertError } = await supabase.from('app_messages').insert({
                 sender_id: user.id,
                 group_id: groupId,
-                challenge_id: currentChallenge.id,
+                challenge_id: currentChallenge?.id || null,
                 message_type: 'voice',
                 media_url: publicUrl,
                 duration_seconds: duration,
             }).select().single();
-            if (insertError) throw insertError;
+
+            if (insertError) {
+                console.error('❌ [VOICE] Database insert error:', insertError);
+                throw insertError;
+            }
+            console.log('✅ [VOICE] Database insert successful:', data);
+
             setMessages((prev) => prev.map((msg) => (msg.id === tempId ? { ...data, sender: optimisticMessage.sender } : msg)));
+            console.log('🎉 [VOICE] Voice memo sent successfully!');
         } catch (error) {
-            console.error('Voice upload failed:', error);
+            console.error('❌ [VOICE] Complete error:', error);
+            console.error('❌ [VOICE] Error details:', JSON.stringify(error, null, 2));
             Alert.alert('Voice Message Failed', 'Could not upload voice message. Please check your connection and try again.', [{ text: 'OK' }]);
             setMessages((prev) => prev.filter((msg) => msg.id !== tempId));
         }
@@ -530,106 +450,64 @@ export default function ChatScreen() {
 
     return (
         <View style={styles.container}>
-            <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
-            <BlurView intensity={80} tint="light" style={[styles.header, { paddingTop: insets.top }]}>
-                <View style={styles.headerContent}>
-                    <Pressable onPress={() => router.back()} style={styles.backButton}>
-                        <ChevronLeft size={30} color={Colors.primary} />
-                    </Pressable>
-                    <View style={styles.headerInfo}>
-                        <Text style={styles.headerTitle}>{groupName}</Text>
-                        <Text style={styles.headerSubtitle}>{memberCount} members</Text>
-                    </View>
-                    {groupLanguage?.toLowerCase() === 'french' && (
-                        <Pressable style={styles.nativeButton} onPress={() => router.push('/native-speakers?language=French')}>
-                            <Text style={styles.nativeButtonText}>💬 Chat with a Native</Text>
-                        </Pressable>
-                    )}
-                    <Pressable style={styles.headerAction} onPress={() => router.push(`/group-info?id=${groupId}`)}>
-                        <MoreVertical size={24} color={Colors.primary} />
-                    </Pressable>
-                </View>
-            </BlurView>
-            {visibleChallenge && (
-                <BlurView intensity={95} tint="light" style={[styles.challengeBanner, { top: insets.top + 65 }]}>
-                    <View style={styles.challengeContent}>
-                        <Text style={styles.challengeHashtag}>#challenge</Text>
-                        <Text style={styles.challengeText}>{visibleChallenge.prompt_text}</Text>
-                    </View>
-                </BlurView>
-            )}
-            <KeyboardAvoidingView style={styles.keyboardView} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={0}>
-                <FlatList
-                    ref={flatListRef}
-                    data={messagesWithDates}
-                    renderItem={renderMessage}
-                    keyExtractor={(item) => item.id}
-                    inverted={true}
-                    initialScrollIndex={0}
-                    keyboardDismissMode="on-drag"
-                    contentContainerStyle={[styles.messagesList, { paddingTop: 20, paddingBottom: insets.top + (currentChallenge ? 130 : 70) }]}
-                    onViewableItemsChanged={({ viewableItems }) => {
-                        const firstVisibleMsg = viewableItems.find((item) => item.item.message_type !== undefined && item.item.type !== 'date_separator');
-                        if (firstVisibleMsg && allChallenges.length > 0) {
-                            const msgChallengeId = firstVisibleMsg.item.challenge_id;
-                            const matchingChallenge = allChallenges.find((c) => c.id === msgChallengeId);
-                            if (matchingChallenge && matchingChallenge.id !== visibleChallenge?.id) {
-                                setVisibleChallenge(matchingChallenge);
-                            }
-                        }
-                    }}
-                    viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
-                />
-                {typingIndicator()}
-                <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-                    {isRecording ? (
-                        <View style={styles.recordingBar}>
-                            <Pressable onPress={handleCancelRecording} style={styles.cancelButton}>
-                                <Trash2 size={22} color="#FF3B30" />
+            <SharedChatUI
+                messages={messagesWithDates}
+                loading={loading}
+                onSendText={sendMessage}
+                onSendVoice={handleSendVoice}
+                textInput={textInput}
+                onTextChange={handleTextChange}
+                sending={sending}
+                headerComponent={
+                    <BlurView intensity={95} tint="light" style={[styles.header, { paddingTop: insets.top }]}>
+                        <View style={styles.headerContent}>
+                            <Pressable onPress={() => router.back()} style={styles.backButton}>
+                                <ChevronLeft size={30} color={Colors.primary} />
                             </Pressable>
-                            <View style={styles.recordingMain}>
-                                <View style={styles.waveformWrapper}>
-                                    <LiveAudioWaveform metering={metering} recordingDuration={recordingDuration} />
-                                </View>
-                                <Text style={styles.recordingTimer}>
-                                    {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
-                                </Text>
+                            <View style={styles.headerInfo}>
+                                <Text style={styles.headerTitle}>{groupName}</Text>
+                                <Text style={styles.headerSubtitle}>{memberCount} members</Text>
                             </View>
-                            <Pressable onPress={handleSendVoice} style={styles.sendVoiceButton}>
-                                <Send size={22} color="#fff" />
+                            {groupLanguage?.toLowerCase() === 'french' && (
+                                <Pressable style={styles.nativeButton} onPress={() => router.push('/native-speakers?language=French')}>
+                                    <Text style={styles.nativeButtonText}>💬 Chat with a Native</Text>
+                                </Pressable>
+                            )}
+                            <Pressable style={styles.headerAction} onPress={() => router.push(`/group-info?id=${groupId}`)}>
+                                <MoreVertical size={24} color={Colors.primary} />
                             </Pressable>
                         </View>
-                    ) : (
-                        <View style={styles.standardInputBar}>
-                            <TextInput
-                                style={styles.textInput}
-                                value={textInput}
-                                onChangeText={handleTextChange}
-                                placeholder="Message..."
-                                placeholderTextColor={Colors.textLight}
-                                multiline
-                                maxLength={500}
-                            />
-                            {textInput.trim() ? (
-                                <Pressable onPress={sendMessage} disabled={sending} style={styles.sendButton}>
-                                    <Send size={24} color="#fff" />
-                                </Pressable>
-                            ) : (
-                                <View style={styles.micContainer}>
-                                    <Pressable onPress={startRecording} style={styles.micButton}>
-                                        <Mic size={26} color={Colors.primary} />
-                                    </Pressable>
-                                    <Text style={styles.tapHint}>Tap to record</Text>
-                                </View>
-                            )}
-                        </View>
-                    )}
-                </View>
-            </KeyboardAvoidingView>
+                    </BlurView>
+                }
+                bannerComponent={
+                    visibleChallenge && (
+                        <BlurView intensity={95} tint="light" style={[styles.challengeBanner, { top: insets.top + 65 }]}>
+                            <View style={styles.challengeContent}>
+                                <Text style={styles.challengeHashtag}>#challenge</Text>
+                                <Text style={styles.challengeText}>{visibleChallenge.prompt_text}</Text>
+                            </View>
+                        </BlurView>
+                    )
+                }
+                placeholderText="Message..."
+                showLanguageFlags={true}
+                senderKey="sender"
+                isRecording={isRecording}
+                recordingDuration={recordingDuration}
+                metering={metering}
+                onStartRecording={startRecording}
+                onCancelRecording={handleCancelRecording}
+                onSendRecording={handleSendVoice}
+                typingIndicatorComponent={typingIndicator()}
+                flatListRef={flatListRef}
+                userId={user?.id}
+                contentContainerStyle={[ChatStyles.messagesList, { paddingTop: 20, paddingBottom: insets.top + (currentChallenge ? 130 : 70) }]}
+            />
         </View>
     );
 }
 
+// Chat-specific styles (not in ChatStyles)
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: SOUP_COLORS.cream },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
@@ -647,53 +525,4 @@ const styles = StyleSheet.create({
     challengeHashtag: { fontSize: 11, fontWeight: '800', color: SOUP_COLORS.pink, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 },
     challengeText: { fontSize: 15, lineHeight: 21, color: '#000', fontWeight: '600', flexWrap: 'wrap' },
     keyboardView: { flex: 1 },
-    messagesList: { paddingHorizontal: 16 },
-    dateSeparator: { alignItems: 'center', marginVertical: 16 },
-    dateSeparatorBadge: { backgroundColor: 'rgba(0,0,0,0.05)', paddingVertical: 4, paddingHorizontal: 12, borderRadius: 12 },
-    dateSeparatorText: { fontSize: 12, color: Colors.textLight, fontWeight: '600' },
-    messageRow: { flexDirection: 'row', marginBottom: 8 },
-    rowMe: { justifyContent: 'flex-end' },
-    rowThem: { justifyContent: 'flex-start' },
-    avatarContainer: { marginRight: 8, justifyContent: 'flex-end', marginBottom: 4 },
-    avatarContainerMe: { marginRight: 0, marginLeft: 8 },
-    avatar: { width: 32, height: 32, borderRadius: 16 },
-    avatarPlaceholder: { backgroundColor: Colors.primary, justifyContent: 'center', alignItems: 'center' },
-    avatarText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
-    bubble: { paddingVertical: 10, paddingHorizontal: 14, maxWidth: '75%', borderRadius: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 1 },
-    bubbleVoice: { paddingVertical: 4, paddingHorizontal: 6 },
-    bubbleMe: { backgroundColor: Colors.primary, borderBottomRightRadius: 6 },
-    bubbleThem: { backgroundColor: '#fff', borderBottomLeftRadius: 6, borderWidth: 1, borderColor: '#F2F2F7' },
-    bubbleSending: { opacity: 0.7 },
-    senderName: { fontSize: 12, fontWeight: '600', color: Colors.primary },
-    messageText: { fontSize: 16, color: '#000', lineHeight: 20 },
-    messageTextMe: { color: '#fff' },
-    languageBadges: { marginBottom: 4, flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
-    languageBadgesLeft: { justifyContent: 'flex-start' },
-    languageBadgesRight: { justifyContent: 'flex-end' },
-    languageBadge: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
-    languageBadgeLabel: { fontSize: 9, fontWeight: '600', color: '#fff', marginBottom: 2 },
-    flagsRow: { flexDirection: 'row', gap: 2 },
-    flagEmoji: { fontSize: 12 },
-    typingIndicator: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 16, paddingVertical: 8, marginBottom: 4 },
-    typingAvatarContainer: { marginRight: 8 },
-    typingAvatar: { width: 32, height: 32, borderRadius: 16 },
-    typingBubble: { backgroundColor: '#fff', borderRadius: 18, borderBottomLeftRadius: 4, paddingHorizontal: 16, paddingVertical: 12 },
-    typingDots: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-    dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#8E8E93' },
-    dot1: { opacity: 0.4 },
-    dot2: { opacity: 0.6 },
-    dot3: { opacity: 0.8 },
-    inputContainer: { backgroundColor: SOUP_COLORS.cream, paddingHorizontal: 12, paddingTop: 8 },
-    standardInputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-    textInput: { flex: 1, backgroundColor: '#fff', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontSize: 16, maxHeight: 100, color: '#000' },
-    micContainer: { alignItems: 'center', gap: 2 },
-    micButton: { padding: 8 },
-    tapHint: { fontSize: 9, color: Colors.textLight, fontWeight: '500' },
-    sendButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: SOUP_COLORS.blue, justifyContent: 'center', alignItems: 'center' },
-    recordingBar: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8, gap: 12 },
-    cancelButton: { padding: 8 },
-    recordingMain: { flex: 1, alignItems: 'center', gap: 8 },
-    waveformWrapper: { width: '100%', height: 42, backgroundColor: 'rgba(0, 173, 239, 0.04)', borderRadius: 21, overflow: 'hidden', paddingHorizontal: 12 },
-    recordingTimer: { fontSize: 16, fontWeight: '700', color: Colors.text, letterSpacing: 0.5 },
-    sendVoiceButton: { width: 48, height: 48, borderRadius: 24, backgroundColor: SOUP_COLORS.blue, justifyContent: 'center', alignItems: 'center' },
 });

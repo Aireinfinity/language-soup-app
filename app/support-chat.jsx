@@ -10,7 +10,10 @@ import { AudioMessage } from '../components/AudioMessage';
 import { LiveAudioWaveform } from '../components/LiveAudioWaveform';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { Colors } from '../constants/Colors';
-import * as FileSystem from 'expo-file-system';
+import { MessageBubble } from '../components/MessageBubble';
+import { ChatStyles } from '../constants/ChatStyles';
+import { SharedChatUI } from '../components/SharedChatUI';
+import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 
 const SOUP_COLORS = {
@@ -68,6 +71,7 @@ export default function SupportChatScreen() {
 
     const {
         isRecording,
+        recordingDuration,
         metering,
         startRecording,
         stopRecording,
@@ -173,13 +177,13 @@ export default function SupportChatScreen() {
             const filePath = `support/${user.id}/voice-${Date.now()}.m4a`;
 
             const { error: uploadError } = await supabase.storage
-                .from('voice-messages')
+                .from('voice-memos')
                 .upload(filePath, decode(base64), { contentType: 'audio/m4a' });
 
             if (uploadError) throw uploadError;
 
             const { data: { publicUrl } } = supabase.storage
-                .from('voice-messages')
+                .from('voice-memos')
                 .getPublicUrl(filePath);
 
             await supabase.from('app_support_messages').insert({
@@ -199,53 +203,22 @@ export default function SupportChatScreen() {
         if (item.type === 'date_separator') {
             return (
                 <View style={styles.dateSeparator}>
-                    <View style={styles.dateLine} />
-                    <Text style={styles.dateLabel}>{item.label}</Text>
-                    <View style={styles.dateLine} />
+                    <View style={styles.dateSeparatorBadge}>
+                        <Text style={styles.dateSeparatorText}>{item.label}</Text>
+                    </View>
                 </View>
             );
         }
 
         const isFromAdmin = item.from_admin;
-        const formatTime = (dateString) => {
-            const date = new Date(dateString);
-            return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+        // Create a message object compatible with MessageBubble
+        const messageForBubble = {
+            ...item,
+            sender: isFromAdmin ? { display_name: 'Noah', avatar_url: null } : null
         };
 
-        return (
-            <View style={[styles.messageRow, isFromAdmin ? styles.rowThem : styles.rowMe]}>
-                {isFromAdmin && (
-                    <View style={styles.avatarContainer}>
-                        <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                            <Text style={styles.avatarText}>N</Text>
-                        </View>
-                    </View>
-                )}
-
-                <View style={[
-                    styles.bubble,
-                    item.message_type === 'voice' && styles.bubbleVoice,
-                    isFromAdmin ? styles.bubbleThem : styles.bubbleMe,
-                ]}>
-                    {isFromAdmin && (
-                        <Text style={styles.senderName}>Noah</Text>
-                    )}
-
-                    {item.message_type === 'voice' ? (
-                        <AudioMessage
-                            audioUrl={item.media_url}
-                            duration={item.duration_seconds}
-                            senderName={isFromAdmin ? 'Noah' : 'You'}
-                            isMe={!isFromAdmin}
-                        />
-                    ) : (
-                        <Text style={[styles.messageText, !isFromAdmin && styles.messageTextMe]}>
-                            {item.content}
-                        </Text>
-                    )}
-                </View>
-            </View>
-        );
+        return <MessageBubble message={messageForBubble} isMe={!isFromAdmin} showLanguageFlags={false} senderKey="sender" />;
     };
 
     const messagesWithDates = addDateSeparators(messages);
@@ -260,99 +233,44 @@ export default function SupportChatScreen() {
 
     return (
         <View style={styles.container}>
-            <View style={[styles.header, { paddingTop: insets.top }]}>
-                <View style={styles.headerContent}>
-                    <Pressable onPress={() => router.back()} style={styles.backButton}>
-                        <ChevronLeft size={28} color="#000" />
-                    </Pressable>
-                    <View style={styles.headerInfo}>
-                        <Text style={styles.headerTitle}>Support</Text>
-                        <View style={styles.statusBadge}>
-                            <View style={styles.statusDot} />
-                            <Text style={styles.statusText}>Usually replies in a few hours</Text>
-                        </View>
-                    </View>
-                    <View style={{ width: 28 }} />
-                </View>
-            </View>
-
-            <View style={styles.noticeBar}>
-                <Text style={styles.noticeEmoji}>👋</Text>
-                <View style={styles.noticeContent}>
-                    <Text style={styles.noticeTitle}>Hey! I'm Noah</Text>
-                    <Text style={styles.noticeText}>
-                        I check messages 3x daily and usually respond within a few hours
-                    </Text>
-                </View>
-            </View>
-
-            <KeyboardAvoidingView
-                style={styles.keyboardView}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                keyboardVerticalOffset={0}
-            >
-                <FlatList
-                    ref={flatListRef}
-                    data={messagesWithDates}
-                    renderItem={renderItem}
-                    keyExtractor={item => item.id}
-                    contentContainerStyle={[
-                        styles.messagesList,
-                        { paddingBottom: 20 }
-                    ]}
-                    onContentSizeChange={() => scrollToBottom()}
-                    ListHeaderComponent={
-                        <View style={styles.welcomeMessage}>
-                            <Text style={styles.welcomeEmoji}>👋</Text>
-                            <Text style={styles.welcomeTitle}>Need help?</Text>
-                            <Text style={styles.welcomeText}>
-                                I'm here to help with anything about Language Soup!
-                            </Text>
-                        </View>
-                    }
-                />
-
-                {/* Input Area */}
-                <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
-                    {isRecording ? (
-                        <View style={styles.recordingBar}>
-                            <Pressable onPress={cancelRecording} style={styles.cancelButton}>
-                                <Trash2 size={22} color="#FF3B30" />
+            <SharedChatUI
+                messages={messagesWithDates}
+                loading={loading}
+                onSendText={sendTextMessage}
+                onSendVoice={sendVoiceMessage}
+                textInput={inputText}
+                onTextChange={setInputText}
+                sending={sending}
+                headerComponent={
+                    <BlurView intensity={95} tint="light" style={[styles.header, { paddingTop: insets.top }]}>
+                        <View style={styles.headerContent}>
+                            <Pressable onPress={() => router.back()} style={styles.iconButton}>
+                                <ChevronLeft size={28} color={SOUP_COLORS.blue} />
                             </Pressable>
-
-                            <View style={styles.waveformContainer}>
-                                <LiveAudioWaveform metering={metering} isRecording={isRecording} />
+                            <View style={styles.headerInfo}>
+                                <Text style={styles.headerTitle}>Support</Text>
+                                <View style={styles.dot} />
+                                <Text style={styles.headerSubtitle}>Noah</Text>
                             </View>
-
-                            <Pressable onPress={sendVoiceMessage} style={styles.sendVoiceButton}>
-                                <Send size={20} color="#fff" />
-                            </Pressable>
                         </View>
-                    ) : (
-                        <>
-                            <TextInput
-                                style={styles.input}
-                                value={inputText}
-                                onChangeText={setInputText}
-                                placeholder="Type a message..."
-                                placeholderTextColor="#8E8E93"
-                                multiline
-                                maxLength={500}
-                            />
-
-                            {inputText.trim() ? (
-                                <Pressable onPress={sendTextMessage} style={styles.sendButton}>
-                                    <Send size={20} color="#fff" />
-                                </Pressable>
-                            ) : (
-                                <Pressable onPress={sendVoiceMessage} style={styles.micButton}>
-                                    <Mic size={22} color={SOUP_COLORS.blue} />
-                                </Pressable>
-                            )}
-                        </>
-                    )}
-                </View>
-            </KeyboardAvoidingView>
+                    </BlurView>
+                }
+                bannerComponent={null}
+                placeholderText="Type a message..."
+                showLanguageFlags={false}
+                senderKey="sender"
+                isRecording={isRecording}
+                recordingDuration={recordingDuration}
+                metering={metering}
+                onStartRecording={startRecording}
+                onCancelRecording={cancelRecording}
+                onSendRecording={sendVoiceMessage}
+                typingIndicatorComponent={null}
+                flatListRef={flatListRef}
+                userId={user?.id}
+                contentContainerStyle={ChatStyles.messagesList}
+                inverted={false}
+            />
         </View>
     );
 }
@@ -484,17 +402,16 @@ const styles = StyleSheet.create({
 
     // Date Separator
     dateSeparator: {
-        flexDirection: 'row',
         alignItems: 'center',
         marginVertical: 16,
     },
-    dateLine: {
-        flex: 1,
-        height: 1,
-        backgroundColor: 'rgba(0,0,0,0.1)',
-    },
-    dateLabel: {
+    dateSeparatorBadge: {
+        backgroundColor: 'rgba(0,0,0,0.05)',
+        paddingVertical: 4,
         paddingHorizontal: 12,
+        borderRadius: 12,
+    },
+    dateSeparatorText: {
         fontSize: 12,
         color: '#8E8E93',
         fontWeight: '600',
