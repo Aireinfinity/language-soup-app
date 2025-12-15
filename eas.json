@@ -14,7 +14,11 @@
       "ios": {
         "simulator": true
       },
-      "node": "22.11.0"
+      "node": "22.11.0",
+      "env": {
+        "NODE_OPTIONS": "--max-old-space-size=4096",
+        "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+      }
     },
     "production": {
       "autoIncrement": true,
