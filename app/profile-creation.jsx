@@ -21,26 +21,43 @@ export default function ProfileCreationScreen() {
 
     const pickImage = async () => {
         try {
+            console.log('[Avatar Picker] Starting image selection...');
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            console.log('[Avatar Picker] Permission status:', status);
 
             if (status !== 'granted') {
                 Alert.alert('Permission Required', 'Please grant photo library access to upload an avatar');
                 return;
             }
 
+            console.log('[Avatar Picker] Launching image library...');
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                mediaTypes: 'Images',
                 allowsEditing: true,
                 aspect: [1, 1],
                 quality: 0.8,
             });
 
+            console.log('[Avatar Picker] Result:', { canceled: result.canceled, hasAssets: !!result.assets?.[0] });
+
             if (!result.canceled && result.assets[0]) {
-                setAvatarUri(result.assets[0].uri);
+                const uri = result.assets[0].uri;
+                console.log('[Avatar Picker] Selected image URI:', uri);
+                setAvatarUri(uri);
             }
         } catch (error) {
-            console.error('Error picking image:', error);
-            Alert.alert('Error', 'Failed to pick image');
+            console.error('[Avatar Picker] Error details:', {
+                message: error.message,
+                code: error.code,
+                platform: Platform.OS,
+                fullError: JSON.stringify(error, null, 2)
+            });
+
+            const errorMessage = Platform.OS === 'android'
+                ? 'Failed to pick image on Android. Please check app permissions in Settings.'
+                : 'Failed to pick image. Please try again.';
+
+            Alert.alert('Error', errorMessage);
         }
     };
 

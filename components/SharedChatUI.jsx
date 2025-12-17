@@ -1,11 +1,13 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, FlatList, TextInput, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Send, Mic, Trash2 } from 'lucide-react-native';
+import { Send, Mic, Trash2, Image as ImageIcon } from 'lucide-react-native';
 import { MessageBubble } from './MessageBubble';
 import { LiveAudioWaveform } from './LiveAudioWaveform';
+import { ImagePreview } from './ImagePreview';
 import { ChatStyles } from '../constants/ChatStyles';
 import { Colors } from '../constants/Colors';
+import * as ImagePicker from 'expo-image-picker';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -44,6 +46,7 @@ export function SharedChatUI({
     loading,
     onSendText,
     onSendVoice,
+    onPickImage,
     textInput,
     onTextChange,
     sending,
@@ -63,10 +66,46 @@ export function SharedChatUI({
     userId,
     contentContainerStyle,
     inverted = true, // Default to inverted (newest at bottom)
+    reactions = {}, // { messageId: [{ user_id, reaction, created_at }] }
+    onReact, // (messageId, emoji) => void
+    onReactionPress, // (messageId, reactions) => void
+    groupName = null, // Name to show in mini-player
 }) {
     const insets = useSafeAreaInsets();
     const internalFlatListRef = useRef(null);
     const listRef = flatListRef || internalFlatListRef;
+    const [imagePreview, setImagePreview] = useState(null);
+
+    const handlePickImage = async () => {
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: 'Images',
+                allowsEditing: false,
+                quality: 0.8,
+            });
+
+            if (!result.canceled && result.assets[0]) {
+                setImagePreview(result.assets[0].uri);
+            }
+        } catch (error) {
+            console.error('[SharedChatUI] Error picking image:', error);
+        }
+    };
+
+    const handleSendImage = async () => {
+        console.log('[SharedChatUI] handleSendImage called', { imagePreview, hasCallback: !!onPickImage });
+        if (imagePreview && onPickImage) {
+            console.log('[SharedChatUI] Calling onPickImage with:', imagePreview);
+            await onPickImage(imagePreview);
+            setImagePreview(null);
+        } else {
+            console.log('[SharedChatUI] NOT calling - missing:', { imagePreview: !!imagePreview, onPickImage: !!onPickImage });
+        }
+    };
+
+    const handleCancelImage = () => {
+        setImagePreview(null);
+    };
 
     const renderMessage = ({ item }) => {
         if (item.type === 'date_separator') {
@@ -79,12 +118,24 @@ export function SharedChatUI({
             );
         }
         const isMe = item.sender_id === userId || item.user_id === userId;
-        return <MessageBubble message={item} isMe={isMe} showLanguageFlags={showLanguageFlags} senderKey={senderKey} />;
+        const messageReactions = reactions[item.id] || [];
+        return (
+            <MessageBubble
+                message={item}
+                isMe={isMe}
+                showLanguageFlags={showLanguageFlags}
+                senderKey={senderKey}
+                reactions={messageReactions}
+                onReact={onReact}
+                onReactionPress={onReactionPress}
+                groupName={groupName}
+            />
+        );
     };
 
     return (
         <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={{ flex: 1 }}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
@@ -144,16 +195,25 @@ export function SharedChatUI({
                                 <Send size={24} color="#fff" />
                             </Pressable>
                         ) : (
-                            <View style={ChatStyles.micContainer}>
+                            <>
+                                <Pressable onPress={handlePickImage} style={ChatStyles.micButton}>
+                                    <ImageIcon size={24} color={Colors.primary} />
+                                </Pressable>
                                 <Pressable onPress={onStartRecording} style={ChatStyles.micButton}>
                                     <Mic size={26} color={Colors.primary} />
                                 </Pressable>
-                                <Text style={ChatStyles.tapHint}>Tap to record</Text>
-                            </View>
+                            </>
                         )}
                     </View>
                 )}
             </View>
+
+            <ImagePreview
+                visible={!!imagePreview}
+                imageUri={imagePreview}
+                onSend={handleSendImage}
+                onCancel={handleCancelImage}
+            />
         </KeyboardAvoidingView>
     );
 }

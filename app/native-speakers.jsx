@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, ActivityIndicator, Text, Pressable, SafeAreaView } from 'react-native';
+import { View, StyleSheet, FlatList, ActivityIndicator, Text, Pressable, SafeAreaView, Alert, RefreshControl } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
@@ -28,18 +28,52 @@ export default function NativeSpeakersScreen() {
     const [loading, setLoading] = useState(true);
     const [selectedLanguage, setSelectedLanguage] = useState(preselectedLanguage);
     const [isAdmin, setIsAdmin] = useState(false);
+    const [hasProfile, setHasProfile] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+
+    const onRefresh = async () => {
+        setRefreshing(true);
+        await Promise.all([loadSpeakers(), checkUserProfile()]);
+        setRefreshing(false);
+    };
+
+    const checkUserProfile = async () => {
+        if (!user) return;
+
+        try {
+            const { data, error } = await supabase
+                .from('app_native_speakers')
+                .select('id')
+                .eq('user_id', user.id)
+                .single();
+
+            setHasProfile(!!data);
+        } catch (error) {
+            console.error('Error checking user profile:', error);
+        }
+    };
 
     useEffect(() => {
         loadSpeakers();
+        checkUserProfile();
 
-        // Subscribe to real-time changes
+        // Subscribe to real-time changes (INSERT and UPDATE only, not DELETE)
         const channel = supabase
             .channel('native-speakers-changes')
             .on(
                 'postgres_changes',
-                { event: '*', schema: 'public', table: 'app_native_speakers' },
+                { event: 'INSERT', schema: 'public', table: 'app_native_speakers' },
                 () => {
                     loadSpeakers();
+                    checkUserProfile();
+                }
+            )
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'app_native_speakers' },
+                () => {
+                    loadSpeakers();
+                    checkUserProfile();
                 }
             )
             .subscribe();
@@ -83,22 +117,6 @@ export default function NativeSpeakersScreen() {
         }
     };
 
-    const deleteSpeaker = async (speakerId) => {
-        try {
-            const { error } = await supabase
-                .from('app_native_speakers')
-                .delete()
-                .eq('id', speakerId);
-
-            if (error) throw error;
-
-            // Refresh list
-            loadSpeakers();
-        } catch (error) {
-            console.error('Error deleting speaker:', error);
-        }
-    };
-
     const renderLanguageFilter = () => (
         <View style={styles.filterContainer}>
             <FlatList
@@ -127,13 +145,64 @@ export default function NativeSpeakersScreen() {
         </View>
     );
 
-    const renderSpeaker = ({ item }) => (
-        <SpeakerCard
-            speaker={item}
-            isAdmin={isAdmin}
-            onDelete={() => deleteSpeaker(item.id)}
-        />
-    );
+    const handleEditProfile = (speakerId) => {
+        router.push('/add-native-speaker');
+    };
+
+    const handleDeleteProfile = async (speakerId) => {
+        Alert.alert(
+            'Delete Profile',
+            'Are you sure you want to delete this profile? This cannot be undone.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            // Immediately remove from UI with new array reference
+                            const newSpeakers = speakers.filter(s => s.id !== speakerId);
+                            const newFiltered = filteredSpeakers.filter(s => s.id !== speakerId);
+
+                            setSpeakers(newSpeakers);
+                            setFilteredSpeakers(newFiltered);
+
+                            // Then delete from database
+                            const { error } = await supabase
+                                .from('app_native_speakers')
+                                .delete()
+                                .eq('id', speakerId);
+
+                            if (error) throw error;
+
+                            // Update hasProfile state
+                            await checkUserProfile();
+
+                            Alert.alert('Success', 'Profile deleted successfully');
+                        } catch (error) {
+                            console.error('Error deleting profile:', error);
+                            Alert.alert('Error', 'Failed to delete profile');
+                            // Reload on error to restore state
+                            await loadSpeakers();
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+    const renderSpeaker = ({ item }) => {
+        const isOwner = item.user_id === user?.id;
+
+        return (
+            <SpeakerCard
+                speaker={item}
+                isOwner={isOwner}
+                onEdit={() => handleEditProfile(item.id)}
+                onDelete={() => handleDeleteProfile(item.id)}
+            />
+        );
+    };
 
     if (loading) {
         return (
@@ -158,10 +227,16 @@ export default function NativeSpeakersScreen() {
                 </View>
             </View>
 
-            {/* Add Yourself Button */}
-            <Pressable style={styles.addYourselfButton} onPress={() => router.push('/add-native-speaker')}>
-                <Text style={styles.addYourselfText}>+ Sign up for Language Exchange</Text>
-            </Pressable>
+            {/* Add/Edit Button */}
+            {hasProfile ? (
+                <Pressable style={styles.editProfileButton} onPress={() => router.push('/add-native-speaker')}>
+                    <Text style={styles.editProfileText}>✏️ Edit My Profile</Text>
+                </Pressable>
+            ) : (
+                <Pressable style={styles.addYourselfButton} onPress={() => router.push('/add-native-speaker')}>
+                    <Text style={styles.addYourselfText}>+ Sign up for Language Exchange</Text>
+                </Pressable>
+            )}
 
             {/* Speakers List */}
             <FlatList
@@ -169,6 +244,15 @@ export default function NativeSpeakersScreen() {
                 renderItem={renderSpeaker}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.list}
+                extraData={filteredSpeakers.length} // Force re-render when list changes
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        tintColor={SOUP_COLORS.blue}
+                        colors={[SOUP_COLORS.blue]}
+                    />
+                }
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
                         <Text style={styles.emptyEmoji}>🔍</Text>
@@ -281,6 +365,19 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     addYourselfText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    editProfileButton: {
+        backgroundColor: SOUP_COLORS.blue,
+        marginHorizontal: 16,
+        marginVertical: 12,
+        padding: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    editProfileText: {
         color: '#fff',
         fontSize: 16,
         fontWeight: '700',

@@ -308,6 +308,10 @@ export default function HomeScreen() {
             onPress={() => {
                 haptics.light();
                 console.log('Navigating to chat:', item.id);
+                // Optimistically clear the badge immediately
+                setGroups(prev => prev.map(g =>
+                    g.id === item.id ? { ...g, unreadCount: 0 } : g
+                ));
                 router.push(`/chat/${item.id}`);
             }}
         >

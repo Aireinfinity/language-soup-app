@@ -16,6 +16,7 @@ import { getLanguageFlag } from '../../utils/languageFlags';
 import { SharedChatUI } from '../../components/SharedChatUI';
 import { ChatStyles } from '../../constants/ChatStyles';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { haptics } from '../../utils/haptics';
 
@@ -72,10 +73,23 @@ export default function ChatScreen() {
     const [typingUsers, setTypingUsers] = useState({});
     const [recordingUsers, setRecordingUsers] = useState({});
     const [userProfile, setUserProfile] = useState(null);
+    const [reactions, setReactions] = useState({}); // { messageId: [{ user_id, reaction, created_at }] }
 
-    // Clear notifications when chat opens
+    // Clear notifications and mark as read when chat opens
     useEffect(() => {
+        const markAsRead = async () => {
+            if (!user || !groupId) return;
+
+            // Update last_read_at timestamp in app_group_members
+            await supabase
+                .from('app_group_members')
+                .update({ last_read_at: new Date().toISOString() })
+                .eq('user_id', user.id)
+                .eq('group_id', groupId);
+        };
+
         clearNotifications();
+        markAsRead();
     }, [groupId]);
 
     // Load data when group or user changes
@@ -199,6 +213,36 @@ export default function ChatScreen() {
             .on('postgres_changes', {
                 event: 'INSERT',
                 schema: 'public',
+                table: 'app_message_reactions',
+            }, (payload) => {
+                console.log('[REACTIONS REALTIME] INSERT event:', payload.new);
+                setReactions(prev => {
+                    const messageId = payload.new.message_id;
+                    const existing = prev[messageId] || [];
+                    return {
+                        ...prev,
+                        [messageId]: [...existing, payload.new]
+                    };
+                });
+            })
+            .on('postgres_changes', {
+                event: 'DELETE',
+                schema: 'public',
+                table: 'app_message_reactions',
+            }, (payload) => {
+                console.log('[REACTIONS REALTIME] DELETE event:', payload.old);
+                setReactions(prev => {
+                    const messageId = payload.old.message_id;
+                    const existing = prev[messageId] || [];
+                    return {
+                        ...prev,
+                        [messageId]: existing.filter(r => r.id !== payload.old.id)
+                    };
+                });
+            })
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
                 table: 'app_challenges',
                 filter: `group_id=eq.${groupId}`,
             }, async (payload) => {
@@ -220,6 +264,27 @@ export default function ChatScreen() {
         };
     }, [currentChallenge, user]);
 
+    // Load reactions for current messages
+    const loadReactions = async (messageIds) => {
+        if (!messageIds || messageIds.length === 0) return;
+
+        const { data: reactionsData } = await supabase
+            .from('app_message_reactions')
+            .select('id, message_id, user_id, emoji, created_at')
+            .in('message_id', messageIds);
+
+        if (reactionsData) {
+            const reactionsMap = {};
+            reactionsData.forEach(reaction => {
+                if (!reactionsMap[reaction.message_id]) {
+                    reactionsMap[reaction.message_id] = [];
+                }
+                reactionsMap[reaction.message_id].push(reaction);
+            });
+            setReactions(reactionsMap);
+        }
+    };
+
     const loadChatData = async () => {
         try {
             const { data: group } = await supabase.from('app_groups').select('name, member_count, language').eq('id', groupId).single();
@@ -238,7 +303,7 @@ export default function ChatScreen() {
                 .from('app_messages')
                 .select(`
                     *,
-                    sender:app_users(display_name, avatar_url, fluent_languages)
+                    sender:app_users(display_name, avatar_url, fluent_languages, status_text)
                 `)
                 .eq('group_id', groupId)
                 .order('created_at', { ascending: true });
@@ -254,6 +319,11 @@ export default function ChatScreen() {
                     }
                 }));
                 setMessages(messagesWithFallback);
+
+                // Load reactions for these messages
+                const messageIds = messagesData.map(m => m.id);
+                await loadReactions(messageIds);
+
                 setTimeout(() => scrollToBottom(), 100);
             }
         } catch (error) {
@@ -438,6 +508,136 @@ export default function ChatScreen() {
         }
     };
 
+
+
+    const sendImageMessage = async (imageUri) => {
+        console.log('[Image Send] Starting upload for:', imageUri);
+        if (!imageUri || !user) {
+            console.error('[Image Send] Missing imageUri or user');
+            return;
+        }
+
+        const tempId = `temp-image-${Date.now()}`;
+        const optimisticMessage = {
+            id: tempId,
+            sender_id: user.id,
+            group_id: groupId,
+            challenge_id: currentChallenge?.id || null,
+            message_type: 'image',
+            media_url: imageUri,
+            created_at: new Date().toISOString(),
+            status: 'uploading',
+            sender: {
+                display_name: userProfile?.display_name || 'Me',
+                avatar_url: userProfile?.avatar_url,
+                fluent_languages: userProfile?.fluent_languages || [],
+            },
+        };
+
+        console.log('[Image Send] Adding optimistic message');
+        setMessages((prev) => [...prev, optimisticMessage]);
+        setTimeout(() => scrollToBottom(), 50);
+
+        try {
+            console.log('[Image Send] Reading file as base64...');
+            const base64 = await FileSystem.readAsStringAsync(imageUri, {
+                encoding: FileSystem.EncodingType.Base64,
+            });
+            console.log('[Image Send] Base64 length:', base64.length);
+
+            const fileName = `chat-images/${groupId}/${user.id}/image_${Date.now()}.jpg`;
+            console.log('[Image Send] Uploading to:', fileName);
+            const { error: uploadError } = await supabase.storage
+                .from('voice-memos')
+                .upload(fileName, decode(base64), { contentType: 'image/jpeg' });
+
+            if (uploadError) {
+                console.error('[Image Send] Upload error:', uploadError);
+                throw uploadError;
+            }
+
+            console.log('[Image Send] Upload successful, getting URL...');
+            const { data: { publicUrl } } = supabase.storage
+                .from('voice-memos')
+                .getPublicUrl(fileName);
+
+            console.log('[Image Send] Public URL:', publicUrl);
+            console.log('[Image Send] Inserting into database...');
+
+            // Insert message into database
+            const { data, error: insertError } = await supabase
+                .from('app_messages')
+                .insert({
+                    sender_id: user.id,
+                    group_id: groupId,
+                    challenge_id: currentChallenge?.id || null,
+                    message_type: 'image',
+                    media_url: publicUrl,
+                })
+                .select()
+                .single();
+
+            if (insertError) {
+                console.error('[Image Send] Database error:', insertError);
+                throw insertError;
+            }
+
+            console.log('[Image Send] Success! Message data:', data);
+            setMessages((prev) =>
+                prev.map((msg) => (msg.id === tempId ? { ...data, sender: optimisticMessage.sender } : msg))
+            );
+        } catch (error) {
+            console.error('[Image Send] Complete error:', error);
+            Alert.alert('Image Failed', 'Could not upload image. Please try again.');
+            setMessages((prev) => prev.filter((msg) => msg.id !== tempId));
+        }
+    };
+
+    // Handle reaction toggle
+    const handleReact = async (messageId, emoji) => {
+        console.log('[REACTIONS] handleReact called:', { messageId, emoji, userId: user?.id });
+
+        if (!user) {
+            console.log('[REACTIONS] No user, returning');
+            return;
+        }
+
+        // Check if user already reacted with this emoji
+        const messageReactions = reactions[messageId] || [];
+        console.log('[REACTIONS] Current reactions for message:', messageReactions);
+
+        const existingReaction = messageReactions.find(
+            r => r.user_id === user.id && r.emoji === emoji  // Changed 'reaction' to 'emoji'
+        );
+
+        console.log('[REACTIONS] Existing reaction:', existingReaction);
+
+        if (existingReaction) {
+            // Remove reaction
+            console.log('[REACTIONS] Removing reaction:', existingReaction.id);
+            const { error } = await supabase
+                .from('app_message_reactions')
+                .delete()
+                .eq('id', existingReaction.id);
+
+            if (error) console.error('[REACTIONS] Delete error:', error);
+        } else {
+            // Add reaction
+            console.log('[REACTIONS] Adding new reaction');
+            const { data, error } = await supabase
+                .from('app_message_reactions')
+                .insert({
+                    message_id: messageId,
+                    user_id: user.id,
+                    emoji: emoji  // Changed from 'reaction' to 'emoji'
+                });
+
+            if (error) console.error('[REACTIONS] Insert error:', error);
+            if (data) console.log('[REACTIONS] Insert success:', data);
+        }
+    };
+
+
     const messagesWithDates = [...addDateSeparators(messages)].reverse();
 
     if (loading) {
@@ -455,6 +655,7 @@ export default function ChatScreen() {
                 loading={loading}
                 onSendText={sendMessage}
                 onSendVoice={handleSendVoice}
+                onPickImage={sendImageMessage}
                 textInput={textInput}
                 onTextChange={handleTextChange}
                 sending={sending}
@@ -502,6 +703,9 @@ export default function ChatScreen() {
                 flatListRef={flatListRef}
                 userId={user?.id}
                 contentContainerStyle={[ChatStyles.messagesList, { paddingTop: 20, paddingBottom: insets.top + (currentChallenge ? 130 : 70) }]}
+                reactions={reactions}
+                onReact={handleReact}
+                groupName={groupName}
             />
         </View>
     );

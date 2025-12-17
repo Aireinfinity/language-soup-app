@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, KeyboardAvoidingView, Platform, Pressable, ActivityIndicator, StatusBar, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, KeyboardAvoidingView, Platform, Pressable, ActivityIndicator, StatusBar, Image, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
@@ -14,6 +14,7 @@ import { MessageBubble } from '../components/MessageBubble';
 import { ChatStyles } from '../constants/ChatStyles';
 import { SharedChatUI } from '../components/SharedChatUI';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 
 const SOUP_COLORS = {
@@ -68,6 +69,7 @@ export default function SupportChatScreen() {
     const [inputText, setInputText] = useState('');
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
+    const [reactions, setReactions] = useState({}); // { messageId: [{ user_id, reaction, created_at }] }
 
     const {
         isRecording,
@@ -96,6 +98,28 @@ export default function SupportChatScreen() {
                 });
                 scrollToBottom();
             })
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'app_support_reactions',
+            }, (payload) => {
+                setReactions(prev => {
+                    const messageId = payload.new.message_id;
+                    const existing = prev[messageId] || [];
+                    return { ...prev, [messageId]: [...existing, payload.new] };
+                });
+            })
+            .on('postgres_changes', {
+                event: 'DELETE',
+                schema: 'public',
+                table: 'app_support_reactions',
+            }, (payload) => {
+                setReactions(prev => {
+                    const messageId = payload.old.message_id;
+                    const existing = prev[messageId] || [];
+                    return { ...prev, [messageId]: existing.filter(r => r.id !== payload.old.id) };
+                });
+            })
             .subscribe();
 
         return () => supabase.removeChannel(channel);
@@ -111,6 +135,27 @@ export default function SupportChatScreen() {
 
             if (error) throw error;
             setMessages(data || []);
+
+            // Load reactions
+            if (data && data.length > 0) {
+                const messageIds = data.map(m => m.id);
+                const { data: reactionsData } = await supabase
+                    .from('app_support_reactions')
+                    .select('id, message_id, user_id, emoji, created_at')
+                    .in('message_id', messageIds);
+
+                if (reactionsData) {
+                    const reactionsMap = {};
+                    reactionsData.forEach(reaction => {
+                        if (!reactionsMap[reaction.message_id]) {
+                            reactionsMap[reaction.message_id] = [];
+                        }
+                        reactionsMap[reaction.message_id].push(reaction);
+                    });
+                    setReactions(reactionsMap);
+                }
+            }
+
             scrollToBottom();
         } catch (error) {
             console.error('Error loading support messages:', error);
@@ -199,6 +244,80 @@ export default function SupportChatScreen() {
         }
     };
 
+    const sendImageMessage = async (imageUri) => {
+        console.log('[Support Image] Starting upload for:', imageUri);
+        try {
+            console.log('[Support Image] Reading as base64...');
+            const base64 = await FileSystem.readAsStringAsync(imageUri, {
+                encoding: FileSystem.EncodingType.Base64,
+            });
+            console.log('[Support Image] Base64 length:', base64.length);
+
+            const fileName = `support/${user.id}/image_${Date.now()}.jpg`;
+            console.log('[Support Image] Uploading to:', fileName);
+            const { error: uploadError } = await supabase.storage
+                .from('voice-memos')
+                .upload(fileName, decode(base64), { contentType: 'image/jpeg' });
+
+            if (uploadError) {
+                console.error('[Support Image] Upload error:', uploadError);
+                throw uploadError;
+            }
+
+            console.log('[Support Image] Getting public URL...');
+            const { data: { publicUrl } } = supabase.storage
+                .from('voice-memos')
+                .getPublicUrl(fileName);
+
+            console.log('[Support Image] Public URL:', publicUrl);
+            console.log('[Support Image] Inserting into database...');
+
+            const { data, error: insertError } = await supabase.from('app_support_messages').insert({
+                user_id: user.id,
+                content: '',
+                from_admin: false,
+                message_type: 'image',
+                media_url: publicUrl,
+            }).select();
+
+            if (insertError) {
+                console.error('[Support Image] Database error:', insertError);
+                throw insertError;
+            }
+
+            console.log('[Support Image] Success! Data:', data);
+        } catch (error) {
+            console.error('[Support Image] Complete error:', error);
+            Alert.alert('Image Failed', 'Could not upload image.');
+        }
+    };
+
+    // Handle reaction toggle
+    const handleReact = async (messageId, emoji) => {
+        if (!user) return;
+
+        const messageReactions = reactions[messageId] || [];
+        const existingReaction = messageReactions.find(
+            r => r.user_id === user.id && r.emoji === emoji
+        );
+
+        if (existingReaction) {
+            await supabase
+                .from('app_support_reactions')
+                .delete()
+                .eq('id', existingReaction.id);
+        } else {
+            await supabase
+                .from('app_support_reactions')
+                .insert({
+                    message_id: messageId,
+                    user_id: user.id,
+                    emoji: emoji  // Changed from 'reaction' to 'emoji'
+                });
+        }
+    };
+
+
     const renderItem = ({ item }) => {
         if (item.type === 'date_separator') {
             return (
@@ -238,6 +357,7 @@ export default function SupportChatScreen() {
                 loading={loading}
                 onSendText={sendTextMessage}
                 onSendVoice={sendVoiceMessage}
+                onPickImage={sendImageMessage}
                 textInput={inputText}
                 onTextChange={setInputText}
                 sending={sending}
@@ -270,6 +390,9 @@ export default function SupportChatScreen() {
                 userId={user?.id}
                 contentContainerStyle={ChatStyles.messagesList}
                 inverted={false}
+                reactions={reactions}
+                onReact={handleReact}
+                groupName="Support"
             />
         </View>
     );

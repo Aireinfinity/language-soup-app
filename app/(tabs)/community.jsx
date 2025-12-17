@@ -4,6 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Megaphone, MessageCircle, Users, ChevronRight } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { useAuth } from '../../contexts/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 // Brand Colors
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -19,16 +22,19 @@ const SOUP_COLORS = {
 
 export default function CommunityScreen() {
     const router = useRouter();
+    const { user } = useAuth();
     const [announcements, setAnnouncements] = useState([]);
     const [activeGroups, setActiveGroups] = useState([]);
     const [memberCount, setMemberCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [expandedAnnouncements, setExpandedAnnouncements] = useState({});
     const [knownIssues, setKnownIssues] = useState([]);
+    const [unreadCount, setUnreadCount] = useState(0);
 
     useFocusEffect(
         React.useCallback(() => {
             loadData();
+            loadUnreadCount();
         }, [])
     );
 
@@ -87,6 +93,24 @@ export default function CommunityScreen() {
         }
     };
 
+    const loadUnreadCount = async () => {
+        try {
+            // Get last read timestamp from AsyncStorage
+            const lastReadStr = await AsyncStorage.getItem('community_last_read');
+            const lastRead = lastReadStr || '1970-01-01';
+
+            // Count messages after last_read
+            const { count } = await supabase
+                .from('app_community_messages')
+                .select('*', { count: 'exact', head: true })
+                .gt('created_at', lastRead);
+
+            setUnreadCount(count || 0);
+        } catch (error) {
+            console.error('Error loading unread count:', error);
+        }
+    };
+
     const renderAnnouncement = ({ item }) => (
         <View style={styles.announcementCard}>
             <View style={styles.announcementIcon}>
@@ -142,11 +166,20 @@ export default function CommunityScreen() {
                 {/* Community Chat Card */}
                 <Pressable
                     style={styles.chatCard}
-                    onPress={() => router.push('/community-chat')}
+                    onPress={() => {
+                        // Optimistically clear the badge immediately
+                        setUnreadCount(0);
+                        router.push('/community-chat');
+                    }}
                 >
                     <View style={styles.chatCardLeft}>
                         <View style={styles.chatIcon}>
                             <MessageCircle size={24} color="#fff" />
+                            {unreadCount > 0 && (
+                                <View style={styles.unreadBadge}>
+                                    <Text style={styles.unreadText}>{unreadCount}</Text>
+                                </View>
+                            )}
                         </View>
                         <View style={styles.chatInfo}>
                             <Text style={styles.chatTitle}>Community Chat</Text>
@@ -308,6 +341,25 @@ const styles = StyleSheet.create({
     chatMetaText: {
         fontSize: 13,
         color: SOUP_COLORS.subtext,
+    },
+    unreadBadge: {
+        position: 'absolute',
+        top: -4,
+        right: -4,
+        backgroundColor: SOUP_COLORS.red,
+        borderRadius: 10,
+        minWidth: 20,
+        height: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 6,
+        borderWidth: 2,
+        borderColor: '#fff',
+    },
+    unreadText: {
+        color: '#fff',
+        fontSize: 11,
+        fontWeight: 'bold',
     },
 
     // Sections

@@ -23,7 +23,7 @@ const LANGUAGE_FLAGS = {
     'Korean': '🇰🇷',
 };
 
-export default function SpeakerCard({ speaker }) {
+export default function SpeakerCard({ speaker, isOwner = false, onEdit, onDelete }) {
     const handleEmail = () => {
         if (speaker.contact_email) {
             Linking.openURL(`mailto:${speaker.contact_email}?subject=Language Practice Session`);
@@ -76,16 +76,33 @@ export default function SpeakerCard({ speaker }) {
                 </Text>
             )}
 
-            {/* Contact Buttons */}
+            {/* Contact Buttons or Edit/Delete for own profiles */}
             <View style={styles.actions}>
-                {speaker.whatsapp_number && (
-                    <Pressable
-                        style={[styles.button, styles.whatsappButton]}
-                        onPress={handleWhatsApp}
-                    >
-                        <MessageCircle size={18} color="#fff" />
-                        <Text style={styles.buttonText}>Chat on WhatsApp</Text>
-                    </Pressable>
+                {isOwner ? (
+                    <>
+                        <Pressable
+                            style={[styles.button, styles.editButton]}
+                            onPress={onEdit}
+                        >
+                            <Text style={styles.buttonText}>✏️ Edit</Text>
+                        </Pressable>
+                        <Pressable
+                            style={[styles.button, styles.deleteButton]}
+                            onPress={onDelete}
+                        >
+                            <Text style={styles.buttonText}>🗑️ Delete</Text>
+                        </Pressable>
+                    </>
+                ) : (
+                    speaker.whatsapp_number && (
+                        <Pressable
+                            style={[styles.button, styles.whatsappButton]}
+                            onPress={handleWhatsApp}
+                        >
+                            <MessageCircle size={18} color="#fff" />
+                            <Text style={styles.buttonText}>Chat on WhatsApp</Text>
+                        </Pressable>
+                    )
                 )}
             </View>
         </View>
@@ -177,6 +194,10 @@ const styles = StyleSheet.create({
     },
     emailButton: {
         backgroundColor: SOUP_COLORS.blue,
+    },
+    editButton: {
+        backgroundColor: SOUP_COLORS.blue,
+        flex: 1,
     },
     deleteButton: {
         backgroundColor: SOUP_COLORS.pink,

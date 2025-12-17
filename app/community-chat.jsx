@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Text, TextInput, KeyboardAvoidingView, Platform, StatusBar, Image } from 'react-native';
+import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Text, TextInput, KeyboardAvoidingView, Platform, StatusBar, Image, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { ArrowLeft, Send, Mic, X, Trash2, ChevronLeft, Users, Megaphone } from 'lucide-react-native';
@@ -14,7 +14,9 @@ import { MessageBubble } from '../components/MessageBubble';
 import { ChatStyles } from '../constants/ChatStyles';
 import { SharedChatUI } from '../components/SharedChatUI';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -70,6 +72,7 @@ export default function CommunityChatScreen() {
     const [sending, setSending] = useState(false);
     const [memberCount, setMemberCount] = useState(0);
     const [userProfile, setUserProfile] = useState(null);
+    const [reactions, setReactions] = useState({}); // { messageId: [{ user_id, reaction, created_at }] }
 
     // Fetch my own full profile to show my languages in optimistic updates
     useEffect(() => {
@@ -92,7 +95,13 @@ export default function CommunityChatScreen() {
     } = useVoiceRecorder();
 
     useEffect(() => {
+        const markAsRead = async () => {
+            // Update last read timestamp in AsyncStorage
+            await AsyncStorage.setItem('community_last_read', new Date().toISOString());
+        };
+
         loadData();
+        markAsRead();
         const unsubscribe = subscribeToMessages();
         return unsubscribe;
     }, []);
@@ -131,7 +140,7 @@ export default function CommunityChatScreen() {
             // Fetch users
             const { data: usersData } = await supabase
                 .from('app_users')
-                .select('id, display_name, avatar_url, fluent_languages')
+                .select('id, display_name, avatar_url, fluent_languages, status_text')
                 .in('id', userIds);
 
             // Map users to messages
@@ -146,6 +155,26 @@ export default function CommunityChatScreen() {
             }));
 
             setMessages(formatted);
+
+            // Load reactions
+            if (msgData && msgData.length > 0) {
+                const messageIds = msgData.map(m => m.id);
+                const { data: reactionsData } = await supabase
+                    .from('app_community_reactions')
+                    .select('id, message_id, user_id, emoji, created_at')
+                    .in('message_id', messageIds);
+
+                if (reactionsData) {
+                    const reactionsMap = {};
+                    reactionsData.forEach(reaction => {
+                        if (!reactionsMap[reaction.message_id]) {
+                            reactionsMap[reaction.message_id] = [];
+                        }
+                        reactionsMap[reaction.message_id].push(reaction);
+                    });
+                    setReactions(reactionsMap);
+                }
+            }
 
             // Load announcements
             const { data: announcementData } = await supabase
@@ -196,6 +225,28 @@ export default function CommunityChatScreen() {
                     });
                 }
             )
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'app_community_reactions',
+            }, (payload) => {
+                setReactions(prev => {
+                    const messageId = payload.new.message_id;
+                    const existing = prev[messageId] || [];
+                    return { ...prev, [messageId]: [...existing, payload.new] };
+                });
+            })
+            .on('postgres_changes', {
+                event: 'DELETE',
+                schema: 'public',
+                table: 'app_community_reactions',
+            }, (payload) => {
+                setReactions(prev => {
+                    const messageId = payload.old.message_id;
+                    const existing = prev[messageId] || [];
+                    return { ...prev, [messageId]: existing.filter(r => r.id !== payload.old.id) };
+                });
+            })
             .subscribe();
 
         return () => supabase.removeChannel(channel);
@@ -327,6 +378,77 @@ export default function CommunityChatScreen() {
         }
     };
 
+    const pickImage = async () => {
+        try {
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: 'Images',
+                allowsEditing: false,
+                quality: 0.8,
+            });
+
+            if (!result.canceled && result.assets[0]) {
+                await sendImageMessage(result.assets[0].uri);
+            }
+        } catch (error) {
+            console.error('Error picking image:', error);
+            Alert.alert('Error', 'Failed to pick image');
+        }
+    };
+
+    const sendImageMessage = async (imageUri) => {
+        try {
+            const base64 = await FileSystem.readAsStringAsync(imageUri, {
+                encoding: FileSystem.EncodingType.Base64,
+            });
+
+            const fileName = `community/image_${Date.now()}.jpg`;
+            const { error: uploadError } = await supabase.storage
+                .from('voice-memos')
+                .upload(fileName, decode(base64), { contentType: 'image/jpeg' });
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('voice-memos')
+                .getPublicUrl(fileName);
+
+            await supabase.from('app_community_messages').insert({
+                user_id: user.id,
+                content: publicUrl, // Store URL in content field like voice messages
+                message_type: 'image',
+            });
+        } catch (error) {
+            console.error('Error uploading image:', error);
+            Alert.alert('Image Failed', 'Could not upload image.');
+        }
+    };
+
+    // Handle reaction toggle
+    const handleReact = async (messageId, emoji) => {
+        if (!user) return;
+
+        const messageReactions = reactions[messageId] || [];
+        const existingReaction = messageReactions.find(
+            r => r.user_id === user.id && r.emoji === emoji
+        );
+
+        if (existingReaction) {
+            await supabase
+                .from('app_community_reactions')
+                .delete()
+                .eq('id', existingReaction.id);
+        } else {
+            await supabase
+                .from('app_community_reactions')
+                .insert({
+                    message_id: messageId,
+                    user_id: user.id,
+                    emoji: emoji  // Changed from 'reaction' to 'emoji'
+                });
+        }
+    };
+
+
     const renderItem = ({ item }) => {
         if (item.type === 'date_separator') {
             return (
@@ -400,6 +522,7 @@ export default function CommunityChatScreen() {
                 loading={loading}
                 onSendText={sendTextMessage}
                 onSendVoice={sendVoiceMessage}
+                onPickImage={pickImage}
                 textInput={inputText}
                 onTextChange={setInputText}
                 sending={sending}
@@ -451,6 +574,9 @@ export default function CommunityChatScreen() {
                 userId={user?.id}
                 contentContainerStyle={[ChatStyles.messagesList, { paddingBottom: insets.top + (announcements.length > 0 ? 130 : 70), paddingTop: 20 }]}
                 inverted={true}
+                reactions={reactions}
+                onReact={handleReact}
+                groupName="Community"
             />
         </View>
     );

@@ -67,7 +67,7 @@ export const ChatStyles = StyleSheet.create({
     bubble: {
         paddingVertical: 10,
         paddingHorizontal: 12,
-        maxWidth: '72%',
+        maxWidth: '80%', // Increased from 72% for better text flow
         borderRadius: 20,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },

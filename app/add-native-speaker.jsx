@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Text, TextInput, Pressable, ScrollView, Alert, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, Text, TextInput, Pressable, ScrollView, Alert, Platform, KeyboardAvoidingView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Upload } from 'lucide-react-native';
@@ -22,6 +22,48 @@ export default function AddNativeSpeakerScreen() {
     const [availability, setAvailability] = useState('');
     const [whatsappNumber, setWhatsappNumber] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const [isEditMode, setIsEditMode] = useState(false);
+    const [existingProfile, setExistingProfile] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    // Load existing profile on mount
+    useEffect(() => {
+        loadExistingProfile();
+    }, []); // Empty dependency array - only run once on mount
+
+    const loadExistingProfile = async () => {
+        if (!user?.id) {
+            setLoading(false);
+            return;
+        }
+
+        try {
+            const { data, error } = await supabase
+                .from('app_native_speakers')
+                .select('*')
+                .eq('user_id', user.id)
+                .single();
+
+            if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
+                console.error('Error loading profile:', error);
+                setLoading(false);
+                return;
+            }
+
+            if (data) {
+                // Found existing profile - enter edit mode
+                setIsEditMode(true);
+                setExistingProfile(data);
+                setBio(data.bio || '');
+                setAvailability(data.availability || '');
+                setWhatsappNumber(data.whatsapp_number || '');
+            }
+        } catch (error) {
+            console.error('Error checking for existing profile:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleSubmit = async () => {
         if (!bio.trim() || !availability.trim() || !whatsappNumber.trim()) {
@@ -32,30 +74,52 @@ export default function AddNativeSpeakerScreen() {
         setSubmitting(true);
 
         try {
-            const { error } = await supabase
-                .from('app_native_speakers')
-                .insert({
-                    user_id: user.id,
-                    display_name: user.user_metadata?.display_name || 'Anonymous',
-                    languages: ['French'],
-                    bio: bio.trim(),
-                    availability: availability.trim(),
-                    whatsapp_number: whatsappNumber.trim(),
-                    photo_url: user.user_metadata?.avatar_url || null,
-                    is_active: true,
-                });
+            if (isEditMode) {
+                // Update existing profile
+                const { error } = await supabase
+                    .from('app_native_speakers')
+                    .update({
+                        bio: bio.trim(),
+                        availability: availability.trim(),
+                        whatsapp_number: whatsappNumber.trim(),
+                    })
+                    .eq('user_id', user.id);
 
-            if (error) throw error;
+                if (error) throw error;
 
-            Alert.alert('Success!', 'You\'ve been added as a native speaker', [
-                {
-                    text: 'OK',
-                    onPress: () => router.back(),
-                },
-            ]);
+                Alert.alert('Success!', 'Your profile has been updated', [
+                    {
+                        text: 'OK',
+                        onPress: () => router.back(),
+                    },
+                ]);
+            } else {
+                // Insert new profile
+                const { error } = await supabase
+                    .from('app_native_speakers')
+                    .insert({
+                        user_id: user.id,
+                        display_name: user.user_metadata?.display_name || 'Anonymous',
+                        languages: ['French'],
+                        bio: bio.trim(),
+                        availability: availability.trim(),
+                        whatsapp_number: whatsappNumber.trim(),
+                        photo_url: user.user_metadata?.avatar_url || null,
+                        is_active: true,
+                    });
+
+                if (error) throw error;
+
+                Alert.alert('Success!', 'You\'ve been added as a native speaker', [
+                    {
+                        text: 'OK',
+                        onPress: () => router.back(),
+                    },
+                ]);
+            }
         } catch (error) {
-            console.error('Error adding native speaker:', error);
-            Alert.alert('Error', 'Failed to add you as a speaker. Please try again.');
+            console.error('Error saving native speaker profile:', error);
+            Alert.alert('Error', `Failed to ${isEditMode ? 'update' : 'add'} your profile. Please try again.`);
         } finally {
             setSubmitting(false);
         }
@@ -82,6 +146,16 @@ export default function AddNativeSpeakerScreen() {
         }
     };
 
+    if (loading) {
+        return (
+            <SafeAreaView style={styles.container} edges={['top']}>
+                <View style={styles.center}>
+                    <Text style={styles.loadingText}>Loading...</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
@@ -89,52 +163,65 @@ export default function AddNativeSpeakerScreen() {
                     <ArrowLeft size={24} color={SOUP_COLORS.text} />
                 </Pressable>
                 <View style={styles.headerContent}>
-                    <Text style={styles.title}>Add Yourself</Text>
-                    <Text style={styles.subtitle}>Share your language skills 🎯</Text>
+                    <Text style={styles.title}>
+                        {isEditMode ? 'Edit Your Profile' : 'Add Yourself'}
+                    </Text>
+                    <Text style={styles.subtitle}>
+                        {isEditMode ? 'Update your details 📝' : 'Share your language skills 🎯'}
+                    </Text>
                 </View>
             </View>
 
-            <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
-                <Text style={styles.label}>Bio</Text>
-                <TextInput
-                    style={[styles.input, styles.textArea]}
-                    placeholder="Tell people about yourself..."
-                    placeholderTextColor="#999"
-                    value={bio}
-                    onChangeText={setBio}
-                    multiline
-                    numberOfLines={4}
-                />
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={{ flex: 1 }}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+            >
+                <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+                    <Text style={styles.label}>Bio</Text>
+                    <TextInput
+                        style={[styles.input, styles.textArea]}
+                        placeholder="Tell people about yourself..."
+                        placeholderTextColor="#999"
+                        value={bio}
+                        onChangeText={setBio}
+                        multiline
+                        numberOfLines={4}
+                    />
 
-                <Text style={styles.label}>When are you free?</Text>
-                <TextInput
-                    style={styles.input}
-                    placeholder="e.g., Weekends, evenings after 6pm"
-                    placeholderTextColor="#999"
-                    value={availability}
-                    onChangeText={setAvailability}
-                />
+                    <Text style={styles.label}>When are you free?</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="e.g., Weekends, evenings after 6pm"
+                        placeholderTextColor="#999"
+                        value={availability}
+                        onChangeText={setAvailability}
+                    />
 
-                <Text style={styles.label}>WhatsApp Number</Text>
-                <TextInput
-                    style={styles.input}
-                    placeholder="+1234567890"
-                    placeholderTextColor="#999"
-                    value={whatsappNumber}
-                    onChangeText={setWhatsappNumber}
-                    keyboardType="phone-pad"
-                />
+                    <Text style={styles.label}>WhatsApp Number</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="+1234567890"
+                        placeholderTextColor="#999"
+                        value={whatsappNumber}
+                        onChangeText={setWhatsappNumber}
+                        keyboardType="phone-pad"
+                    />
 
-                <Pressable
-                    style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
-                    onPress={handleSubmit}
-                    disabled={submitting}
-                >
-                    <Text style={styles.submitButtonText}>
-                        {submitting ? 'Adding...' : 'Add Me as a Native Speaker'}
-                    </Text>
-                </Pressable>
-            </ScrollView>
+                    <Pressable
+                        style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
+                        onPress={handleSubmit}
+                        disabled={submitting}
+                    >
+                        <Text style={styles.submitButtonText}>
+                            {submitting
+                                ? (isEditMode ? 'Updating...' : 'Adding...')
+                                : (isEditMode ? 'Update My Profile' : 'Add Me as a Native Speaker')
+                            }
+                        </Text>
+                    </Pressable>
+                </ScrollView>
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 }
@@ -143,6 +230,15 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: SOUP_COLORS.cream,
+    },
+    center: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingText: {
+        fontSize: 16,
+        color: SOUP_COLORS.text,
     },
     header: {
         flexDirection: 'row',

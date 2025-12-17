@@ -1,18 +1,13 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { View, StyleSheet, Pressable, Text, ActivityIndicator, Dimensions } from 'react-native';
-import { Audio } from 'expo-av';
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, StyleSheet, Pressable, Text, ActivityIndicator } from 'react-native';
 import { Play, Pause } from 'lucide-react-native';
 import { Colors } from '../constants/Colors';
 import Animated, {
     useSharedValue,
     useAnimatedStyle,
-    withTiming,
     withSpring,
-    interpolate,
-    Extrapolate,
-    runOnJS
 } from 'react-native-reanimated';
-import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useAudioPlayer } from '../contexts/AudioPlayerContext';
 import * as FileSystem from 'expo-file-system/legacy';
 
 const WAVEFORM_BARS = 30;
@@ -28,25 +23,27 @@ const CACHE_DIR = `${FileSystem.cacheDirectory}voice_memos/`;
     }
 })();
 
-export function AudioMessage({ audioUrl, duration, senderName, isMe }) {
-    const [sound, setSound] = useState(null);
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+export function AudioMessage({ audioUrl, duration, senderName, isMe, messageId, senderAvatar, senderStatus, groupName }) {
     const [loading, setLoading] = useState(false);
     const [localUri, setLocalUri] = useState(null);
-    const [fileDuration, setFileDuration] = useState(duration * 1000); // ms
+    const { currentAudio, isPlaying, position, duration: contextDuration, playAudio } = useAudioPlayer();
+
+    // Check if this message is currently playing
+    const isThisPlaying = currentAudio?.messageId === messageId && isPlaying;
+    const isThisAudio = currentAudio?.messageId === messageId;
+
+    // Calculate progress for waveform (0 to 1)
+    const progress = isThisAudio && contextDuration > 0 ? position / contextDuration : 0;
 
     // Shared values for Reanimated
-    const progress = useSharedValue(0); // 0 to 1
     const scale = useSharedValue(1);
-    const isScrubbing = useSharedValue(false);
 
     // Generate random waveform bars once
     const waveformHeights = useMemo(() => {
         return Array.from({ length: WAVEFORM_BARS }, () => Math.random() * 0.5 + 0.3);
     }, []);
 
-    // 1. Caching / Preloading Logic
+    // Caching Logic
     useEffect(() => {
         let isMounted = true;
 
@@ -74,7 +71,7 @@ export function AudioMessage({ audioUrl, duration, senderName, isMe }) {
                     if (isMounted) setLocalUri(uri);
                 }
             } catch (error) {
-                console.log('Error caching audio:', error);
+                console.log('[AudioMessage] Error caching audio:', error);
                 // Fallback to remote URL if caching fails
                 if (isMounted) setLocalUri(audioUrl);
             }
@@ -84,198 +81,81 @@ export function AudioMessage({ audioUrl, duration, senderName, isMe }) {
 
         return () => {
             isMounted = false;
-            if (sound) {
-                sound.unloadAsync();
-            }
         };
     }, [audioUrl]);
 
-    // 2. Playback Logic
-    const loadAndPlaySound = async () => {
+    const handlePlayPress = async () => {
+        if (!localUri) return;
+
+        setLoading(true);
         try {
-            if (!localUri) return;
-
-            setLoading(true);
-
-            if (sound) {
-                const status = await sound.getStatusAsync();
-                if (status.isLoaded) {
-                    if (isPlaying) {
-                        await sound.pauseAsync();
-                        setIsPlaying(false);
-                    } else {
-                        // If finished or near end, replay from start
-                        if (status.positionMillis >= status.durationMillis - 50) {
-                            await sound.replayAsync();
-                        } else {
-                            await sound.playAsync();
-                        }
-                        setIsPlaying(true);
-                    }
-                    setLoading(false);
-                    return;
-                }
-            }
-
-            // Create sound from local URI (instant)
-            await Audio.setAudioModeAsync({
-                allowsRecordingIOS: false,
-                playsInSilentModeIOS: true,
-                staysActiveInBackground: false,
-                shouldDuckAndroid: true,
-            });
-
-            const { sound: newSound, status } = await Audio.Sound.createAsync(
-                { uri: localUri },
-                {
-                    shouldPlay: true,
-                    volume: 1.0,  // Max volume for louder playback
-                    rate: playbackSpeed,
-                    progressUpdateIntervalMillis: 16 // ~60fps updates
-                },
-                onPlaybackStatusUpdate
-            );
-
-            setSound(newSound);
-            setIsPlaying(true);
-            if (status.durationMillis) {
-                setFileDuration(status.durationMillis);
-            }
+            await playAudio(localUri, duration, messageId, senderName, senderAvatar, senderStatus, groupName);
         } catch (error) {
-            console.error('Error playing audio:', error);
+            console.error('[AudioMessage] Error playing:', error);
         } finally {
             setLoading(false);
         }
     };
 
-    const onPlaybackStatusUpdate = (status) => {
-        if (status.isLoaded) {
-            // Only update progress if not scrubbing
-            if (!isScrubbing.value) {
-                progress.value = status.positionMillis / status.durationMillis;
-            }
-
-            if (status.didJustFinish) {
-                runOnJS(setIsPlaying)(false);
-                runOnJS(handlePlaybackFinish)();
-            }
-        }
+    const formatDuration = (seconds) => {
+        if (!seconds) return '0:00';
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
-
-    const handlePlaybackFinish = () => {
-        progress.value = withTiming(0, { duration: 200 });
-    };
-
-    const togglePlaybackSpeed = async () => {
-        const speeds = [1.0, 1.5, 2.0, 0.5];
-        const currentIndex = speeds.indexOf(playbackSpeed);
-        const nextSpeed = speeds[(currentIndex + 1) % speeds.length];
-
-        setPlaybackSpeed(nextSpeed);
-
-        if (sound) {
-            await sound.setRateAsync(nextSpeed, true);
-        }
-    };
-
-    // 3. Gestures & Animations
-    const tapGesture = Gesture.Tap()
-        .onBegin(() => {
-            scale.value = withSpring(0.95);
-        })
-        .onFinalize(() => {
-            scale.value = withSpring(1);
-        });
-
-    const scrubGesture = Gesture.Pan()
-        .onBegin(() => {
-            isScrubbing.value = true;
-            scale.value = withSpring(0.98);
-        })
-        .onUpdate((e) => {
-            // Approximate width of waveform container is ~160px
-            // We should ideally measure it, but for now we estimate
-            const width = 160;
-            const newProgress = Math.max(0, Math.min(1, e.x / width));
-            progress.value = newProgress;
-        })
-        .onEnd(async () => {
-            isScrubbing.value = false;
-            scale.value = withSpring(1);
-
-            if (sound && fileDuration) {
-                const seekPos = progress.value * fileDuration;
-                await runOnJS(sound.setPositionAsync)(seekPos);
-            }
-        });
-
-    const composedGesture = Gesture.Simultaneous(tapGesture, scrubGesture);
 
     const animatedContainerStyle = useAnimatedStyle(() => ({
         transform: [{ scale: scale.value }]
     }));
 
-    const formatDuration = (ms) => {
-        if (!ms) return '0:00';
-        const seconds = Math.floor(ms / 1000);
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins}:${secs.toString().padStart(2, '0')}`;
-    };
-
     return (
-        <GestureHandlerRootView>
-            <Animated.View style={[
-                styles.container,
-                isMe && styles.containerMe,
-                animatedContainerStyle
-            ]}>
-                <Pressable
-                    onPress={loadAndPlaySound}
-                    style={styles.playButton}
-                    disabled={loading}
-                >
-                    {loading ? (
-                        <ActivityIndicator size="small" color={isMe ? '#fff' : Colors.primary} />
-                    ) : isPlaying ? (
-                        <Pause size={22} color={isMe ? '#fff' : Colors.primary} fill={isMe ? '#fff' : Colors.primary} />
-                    ) : (
-                        <Play size={22} color={isMe ? '#fff' : Colors.primary} fill={isMe ? '#fff' : Colors.primary} />
-                    )}
-                </Pressable>
+        <Animated.View style={[
+            styles.container,
+            isMe && styles.containerMe,
+            animatedContainerStyle
+        ]}>
+            <Pressable
+                onPress={handlePlayPress}
+                style={styles.playButton}
+                disabled={loading}
+                onPressIn={() => { scale.value = withSpring(0.95); }}
+                onPressOut={() => { scale.value = withSpring(1); }}
+            >
+                {loading ? (
+                    <ActivityIndicator size="small" color={isMe ? '#fff' : Colors.primary} />
+                ) : isThisPlaying ? (
+                    <Pause size={22} color={isMe ? '#fff' : Colors.primary} fill={isMe ? '#fff' : Colors.primary} />
+                ) : (
+                    <Play size={22} color={isMe ? '#fff' : Colors.primary} fill={isMe ? '#fff' : Colors.primary} />
+                )}
+            </Pressable>
 
-                <GestureDetector gesture={scrubGesture}>
-                    <View style={styles.waveformContainer}>
-                        <View style={styles.waveform}>
-                            {waveformHeights.map((height, index) => (
-                                <WaveformBar
-                                    key={index}
-                                    index={index}
-                                    totalBars={WAVEFORM_BARS}
-                                    height={height}
-                                    progress={progress}
-                                    isMe={isMe}
-                                />
-                            ))}
-                        </View>
-                        {/* We use a Reanimated Text or just update this less frequently? 
-                            For 60fps timer we need Reanimated Text, but standard React state is fine for seconds */}
-                        <Text style={[styles.duration, isMe && styles.durationMe]}>
-                            {formatDuration(fileDuration)}
-                        </Text>
-                    </View>
-                </GestureDetector>
-            </Animated.View>
-        </GestureHandlerRootView>
+            <View style={styles.waveformContainer}>
+                <View style={styles.waveform}>
+                    {waveformHeights.map((height, index) => (
+                        <WaveformBar
+                            key={index}
+                            index={index}
+                            totalBars={WAVEFORM_BARS}
+                            height={height}
+                            progress={progress}
+                            isMe={isMe}
+                        />
+                    ))}
+                </View>
+                <Text style={[styles.duration, isMe && styles.durationMe]}>
+                    {formatDuration(duration)}
+                </Text>
+            </View>
+        </Animated.View>
     );
 }
 
-// Separate component for individual bars to optimize rendering
+// Separate component for individual bars
 const WaveformBar = ({ index, totalBars, height, progress, isMe }) => {
     const animatedStyle = useAnimatedStyle(() => {
         const barPos = index / totalBars;
-        // If progress > barPos, it's "played"
-        const isPlayed = progress.value > barPos;
+        const isPlayed = progress > barPos;
 
         return {
             backgroundColor: isMe
@@ -284,16 +164,8 @@ const WaveformBar = ({ index, totalBars, height, progress, isMe }) => {
             height: 24 * height,
             transform: [{
                 scaleY: isPlayed
-                    ? withSpring(1.08, {
-                        damping: 12,       // Honey smooth
-                        stiffness: 110,    // Balanced
-                        mass: 0.6          // Weighted
-                    })
-                    : withSpring(1, {
-                        damping: 12,
-                        stiffness: 110,
-                        mass: 0.6
-                    })
+                    ? withSpring(1.08, { damping: 12, stiffness: 110, mass: 0.6 })
+                    : withSpring(1, { damping: 12, stiffness: 110, mass: 0.6 })
             }]
         };
     });
@@ -323,9 +195,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         flexShrink: 0,
     },
-    playButtonMe: {
-        // No background needed
-    },
     waveformContainer: {
         flex: 1,
         flexDirection: 'row',
@@ -350,15 +219,5 @@ const styles = StyleSheet.create({
     },
     durationMe: {
         color: 'rgba(255,255,255,0.9)',
-    },
-    speedButton: {
-        paddingHorizontal: 6,
-        paddingVertical: 3,
-        marginLeft: 4,
-    },
-    speedText: {
-        fontSize: 11,
-        color: Colors.primary,
-        fontWeight: '600',
     },
 });
