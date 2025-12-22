@@ -10,7 +10,7 @@ import Animated, {
 const BAR_COUNT = 300; // Lots of bars for smooth continuous scroll
 const BAR_INTERVAL = 17; // 300 bars * 17ms = 5100ms ≈ 5 seconds
 
-export function LiveAudioWaveform({ metering, recordingDuration }) {
+export function LiveAudioWaveform({ metering, recordingDuration, isRecording }) {
     const [barHeights, setBarHeights] = useState([]);
     const lastBarTime = useRef(0);
     const animationFrame = useRef(null);
@@ -51,7 +51,7 @@ export function LiveAudioWaveform({ metering, recordingDuration }) {
                 cancelAnimationFrame(animationFrame.current);
             }
         };
-    }, [recordingDuration]); // Only depend on recordingDuration, not metering
+    }, [recordingDuration]); // Trigger loop update on duration change for that "faster" feel
 
     useEffect(() => {
         if (recordingDuration === 0) {

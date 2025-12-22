@@ -353,7 +353,11 @@ export function SharedChatUI({
                         </Pressable>
                         <View style={ChatStyles.recordingMain}>
                             <View style={ChatStyles.waveformWrapper}>
-                                <LiveAudioWaveform metering={metering} recordingDuration={recordingDuration} />
+                                <LiveAudioWaveform
+                                    metering={metering}
+                                    recordingDuration={recordingDuration}
+                                    isRecording={isRecording}
+                                />
                             </View>
                             <Text style={ChatStyles.recordingTimer}>
                                 {Math.floor(recordingDuration / 60)}:{String(Math.floor(recordingDuration % 60)).padStart(2, '0')}

@@ -39,7 +39,10 @@ export const useVoiceRecorder = () => {
             });
 
             const { recording } = await Audio.Recording.createAsync(
-                Audio.RecordingOptionsPresets.HIGH_QUALITY,
+                {
+                    ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+                    isMeteringEnabled: true,
+                },
                 (status) => {
                     setRecordingDuration(status.durationMillis / 1000);
                     if (status.metering !== undefined) {
@@ -88,8 +91,9 @@ export const useVoiceRecorder = () => {
         try {
             if (!globalRecording) return null;
 
-            await globalRecording.stopAndUnloadAsync();
+            const status = await globalRecording.stopAndUnloadAsync();
             const uri = globalRecording.getURI();
+            const finalDuration = status.durationMillis;
 
             globalRecording = null;
             setIsRecording(false);
@@ -97,7 +101,7 @@ export const useVoiceRecorder = () => {
             setRecordingDuration(0);
             setMetering(-160);
 
-            return { uri, duration: recordingDuration * 1000 }; // milliseconds
+            return { uri, duration: finalDuration }; // milliseconds
         } catch (err) {
             console.error('Failed to stop recording:', err);
             Alert.alert(
