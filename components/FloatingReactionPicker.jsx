@@ -1,85 +1,16 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, PanResponder } from 'react-native';
-import Animated, {
-    FadeIn,
-    FadeOut,
-    useSharedValue,
-    useAnimatedStyle,
-    withSpring,
-    withDecay
-} from 'react-native-reanimated';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Pressable, Modal } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
-const DEFAULT_REACTIONS = ['❤️', '😂', '😮', '😭', '🥳', '🙀'];
+const DEFAULT_REACTIONS = ['❤️', '😂', '😮', '😭', '🥳'];
 
-// Sub-component to safely use hooks per emoji without loop violations
-const RotatingEmoji = ({ emoji, index, total, radius, rotation, onReact }) => {
-    const angleStep = 360 / total;
-    const angle = index * angleStep - 90;
-    const radian = (angle * Math.PI) / 180;
-    const x = Math.cos(radian) * radius;
-    const y = Math.sin(radian) * radius;
-
-    const emojiStyle = useAnimatedStyle(() => ({
-        transform: [
-            { translateX: x },
-            { translateY: y },
-            { rotate: `${-rotation.value}deg` }
-        ]
-    }));
-
-    return (
-        <Animated.View style={[styles.emojiButton, emojiStyle]}>
-            <Pressable onPress={() => onReact(emoji)}>
-                <Text style={styles.emoji}>{emoji}</Text>
-            </Pressable>
-        </Animated.View>
-    );
-};
-
-export function FloatingReactionPicker({ visible, onReact, onClose, isMe }) {
-    const rotation = useSharedValue(0);
-    const lastAngle = useRef(0);
-
-    const dialStyle = useAnimatedStyle(() => ({
-        transform: [{ rotate: `${rotation.value}deg` }]
-    }));
-
-    const panResponder = useRef(
-        PanResponder.create({
-            onStartShouldSetPanResponder: () => true,
-            onMoveShouldSetPanResponder: () => true,
-            onPanResponderGrant: (evt) => {
-                const { locationX, locationY } = evt.nativeEvent;
-                const centerX = 40;
-                const centerY = 40;
-                lastAngle.current = Math.atan2(locationY - centerY, locationX - centerX);
-            },
-            onPanResponderMove: (evt) => {
-                const { locationX, locationY } = evt.nativeEvent;
-                const centerX = 40;
-                const centerY = 40;
-                const angle = Math.atan2(locationY - centerY, locationX - centerX);
-                const delta = (angle - lastAngle.current) * (180 / Math.PI);
-
-                rotation.value = rotation.value + delta;
-                lastAngle.current = angle;
-
-                if (Math.abs(delta) > 2) {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }
-            },
-            onPanResponderRelease: (evt, gestureState) => {
-                const velocity = Math.sqrt(gestureState.vx ** 2 + gestureState.vy ** 2);
-                if (velocity > 0.5) {
-                    rotation.value = withDecay({
-                        velocity: velocity * 100,
-                        deceleration: 0.995,
-                    });
-                }
-            },
-        })
-    ).current;
+/**
+ * FloatingReactionPicker - Two-stage menu
+ * Stage 1: Action buttons (React, Reply, Edit, Delete)
+ * Stage 2: Emoji picker (when React is tapped)
+ */
+export function FloatingReactionPicker({ visible, onReact, onClose, isMe, message, onEdit, onDelete }) {
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
     if (!visible) return null;
 
@@ -87,72 +18,155 @@ export function FloatingReactionPicker({ visible, onReact, onClose, isMe }) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         onReact(emoji);
         onClose();
+        setShowEmojiPicker(false);
     };
 
+    const handleReactButton = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        setShowEmojiPicker(true);
+    };
+
+    const handleEdit = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (onEdit && message) {
+            onEdit(message);
+        }
+        onClose();
+    };
+
+    const handleDelete = () => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (onDelete && message) {
+            onDelete(message);
+        }
+        onClose();
+    };
+
+    const canEdit = isMe && message?.message_type === 'text';
+    const canDelete = isMe;
+
     return (
-        <>
-            <Pressable style={styles.backdrop} onPress={onClose} />
-            <Animated.View
-                entering={FadeIn.duration(150)}
-                exiting={FadeOut.duration(100)}
-                style={[
-                    styles.container,
-                    isMe ? styles.containerMe : styles.containerThem
-                ]}
-                {...panResponder.panHandlers}
-            >
-                <Animated.View style={[styles.dial, dialStyle]}>
-                    {DEFAULT_REACTIONS.map((emoji, index) => (
-                        <RotatingEmoji
+        <Modal
+            visible={visible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => {
+                setShowEmojiPicker(false);
+                onClose();
+            }}
+        >
+            {/* Backdrop */}
+            <Pressable
+                style={styles.backdrop}
+                onPress={() => {
+                    setShowEmojiPicker(false);
+                    onClose();
+                }}
+            />
+
+            {showEmojiPicker ? (
+                /* Stage 2: Emoji Picker */
+                <View style={styles.emojiContainer}>
+                    {DEFAULT_REACTIONS.map((emoji) => (
+                        <Pressable
                             key={emoji}
-                            emoji={emoji}
-                            index={index}
-                            total={DEFAULT_REACTIONS.length}
-                            radius={35}
-                            rotation={rotation}
-                            onReact={handleReaction}
-                        />
+                            style={styles.emojiButton}
+                            onPress={() => handleReaction(emoji)}
+                        >
+                            <Text style={styles.emoji}>{emoji}</Text>
+                        </Pressable>
                     ))}
-                </Animated.View>
-            </Animated.View>
-        </>
+                </View>
+            ) : (
+                /* Stage 1: Action Buttons */
+                <View style={styles.actionContainer}>
+                    <Pressable style={styles.actionButton} onPress={handleReactButton}>
+                        <Text style={styles.actionEmoji}>😍</Text>
+                        <Text style={styles.actionLabel}>React</Text>
+                    </Pressable>
+
+                    <Pressable style={styles.actionButton}>
+                        <Text style={styles.actionEmoji}>💬</Text>
+                        <Text style={styles.actionLabel}>Reply</Text>
+                    </Pressable>
+
+                    {canEdit && (
+                        <Pressable style={styles.actionButton} onPress={handleEdit}>
+                            <Text style={styles.actionEmoji}>✏️</Text>
+                            <Text style={styles.actionLabel}>Edit</Text>
+                        </Pressable>
+                    )}
+
+                    {canDelete && (
+                        <Pressable style={styles.actionButton} onPress={handleDelete}>
+                            <Text style={styles.actionEmoji}>🗑️</Text>
+                            <Text style={styles.actionLabel}>Delete</Text>
+                        </Pressable>
+                    )}
+                </View>
+            )}
+        </Modal>
     );
 }
 
 const styles = StyleSheet.create({
     backdrop: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+    },
+    actionContainer: {
         position: 'absolute',
-        top: -10000,
-        left: -10000,
-        right: -10000,
-        bottom: -10000,
-        zIndex: 998,
+        top: '45%',
+        alignSelf: 'center',
+        flexDirection: 'row',
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        paddingVertical: 12,
+        paddingHorizontal: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 10,
+        gap: 8,
     },
-    container: {
-        position: 'absolute',
-        top: -20,
-        zIndex: 999,
-    },
-    containerMe: {
-        left: -20,
-    },
-    containerThem: {
-        right: -20,
-    },
-    dial: {
-        width: 80,
-        height: 80,
-        justifyContent: 'center',
+    actionButton: {
         alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+    },
+    actionEmoji: {
+        fontSize: 28,
+        marginBottom: 4,
+    },
+    actionLabel: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#333',
+    },
+    emojiContainer: {
+        position: 'absolute',
+        top: '45%',
+        alignSelf: 'center',
+        flexDirection: 'row',
+        backgroundColor: '#fff',
+        borderRadius: 25,
+        paddingVertical: 8,
+        paddingHorizontal: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 10,
+        gap: 4,
     },
     emojiButton: {
-        position: 'absolute',
-        width: 28,
-        height: 28,
+        width: 40,
+        height: 40,
         justifyContent: 'center',
         alignItems: 'center',
     },
     emoji: {
-        fontSize: 20,
+        fontSize: 24,
     },
 });

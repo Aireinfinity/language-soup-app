@@ -69,6 +69,9 @@ export function SharedChatUI({
     reactions = {}, // { messageId: [{ user_id, reaction, created_at }] }
     onReact, // (messageId, emoji) => void
     onReactionPress, // (messageId, reactions) => void
+    onEdit, // (message) => void
+    onDelete, // (message) => void
+    onAvatarPress, // (userId) => void
     groupName = null, // Name to show in mini-player
 }) {
     const insets = useSafeAreaInsets();
@@ -128,6 +131,9 @@ export function SharedChatUI({
                 reactions={messageReactions}
                 onReact={onReact}
                 onReactionPress={onReactionPress}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onAvatarPress={onAvatarPress}
                 groupName={groupName}
             />
         );

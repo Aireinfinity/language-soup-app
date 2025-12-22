@@ -7,6 +7,8 @@ import { ArrowLeft, Send, Mic, X, Trash2, Square, ChevronLeft, MoreVertical, Che
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AudioMessage } from '../../components/AudioMessage';
 import { LiveAudioWaveform } from '../../components/LiveAudioWaveform';
+import { EditMessageModal } from '../../components/EditMessageModal';
+import { UserProfileModal } from '../../components/UserProfileModal';
 import { Colors } from '../../constants/Colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -74,6 +76,8 @@ export default function ChatScreen() {
     const [recordingUsers, setRecordingUsers] = useState({});
     const [userProfile, setUserProfile] = useState(null);
     const [reactions, setReactions] = useState({}); // { messageId: [{ user_id, reaction, created_at }] }
+    const [editingMessage, setEditingMessage] = useState(null);
+    const [selectedUserId, setSelectedUserId] = useState(null);
 
     // Clear notifications and mark as read when chat opens
     useEffect(() => {
@@ -637,6 +641,69 @@ export default function ChatScreen() {
         }
     };
 
+    const handleEditMessage = async (message, newContent) => {
+        try {
+            const { error } = await supabase
+                .from('app_messages')
+                .update({
+                    content: newContent,
+                    edited_at: new Date().toISOString()
+                })
+                .eq('id', message.id);
+
+            if (error) {
+                console.error('[EDIT] Error editing message:', error);
+                Alert.alert('Error', 'Could not edit message. Please try again.');
+            } else {
+                // Update local state
+                setMessages(prev => prev.map(msg =>
+                    msg.id === message.id
+                        ? { ...msg, content: newContent, edited_at: new Date().toISOString() }
+                        : msg
+                ));
+                setEditingMessage(null);
+            }
+        } catch (error) {
+            console.error('[EDIT] Complete error:', error);
+        }
+    };
+
+    const handleDeleteMessage = async (message) => {
+        Alert.alert(
+            'Delete Message',
+            'Delete this message for everyone?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const { error } = await supabase
+                                .from('app_messages')
+                                .update({ deleted_at: new Date().toISOString() })
+                                .eq('id', message.id);
+
+                            if (error) {
+                                console.error('[DELETE] Error deleting message:', error);
+                                Alert.alert('Error', 'Could not delete message. Please try again.');
+                            } else {
+                                // Update local state
+                                setMessages(prev => prev.map(msg =>
+                                    msg.id === message.id
+                                        ? { ...msg, deleted_at: new Date().toISOString() }
+                                        : msg
+                                ));
+                            }
+                        } catch (error) {
+                            console.error('[DELETE] Complete error:', error);
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
 
     const messagesWithDates = [...addDateSeparators(messages)].reverse();
 
@@ -705,7 +772,27 @@ export default function ChatScreen() {
                 contentContainerStyle={[ChatStyles.messagesList, { paddingTop: 20, paddingBottom: insets.top + (currentChallenge ? 130 : 70) }]}
                 reactions={reactions}
                 onReact={handleReact}
+                onEdit={(msg) => setEditingMessage(msg)}
+                onDelete={handleDeleteMessage}
+                onAvatarPress={(userId) => setSelectedUserId(userId)}
                 groupName={groupName}
+            />
+
+            {/* Edit Message Modal */}
+            <EditMessageModal
+                visible={!!editingMessage}
+                message={editingMessage}
+                onClose={() => setEditingMessage(null)}
+                onSave={(content) => handleEditMessage(editingMessage, content)}
+            />
+
+            {/* User Profile Modal */}
+            <UserProfileModal
+                visible={!!selectedUserId}
+                userId={selectedUserId}
+                currentUserId={user?.id}
+                isAdmin={user?.is_admin || false}
+                onClose={() => setSelectedUserId(null)}
             />
         </View>
     );

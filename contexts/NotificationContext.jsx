@@ -73,7 +73,7 @@ export function NotificationProvider({ children }) {
 
             try {
                 token = (await Notifications.getExpoPushTokenAsync({
-                    projectId: 'language-soup-mobile', // Using app slug for local development
+                    projectId: 'affb0dd3-57d0-467c-b84c-d08c10e3b9ce', // EAS project ID from app.json
                 })).data;
             } catch (error) {
                 console.log('Push notifications not available in Expo Go. Use development build for full support.');
