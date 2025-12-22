@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Pressable, StyleSheet, TouchableWithoutFeedback, Modal, Animated } from 'react-native';
+import { View, Text, Pressable, StyleSheet, TouchableWithoutFeedback, Modal, Animated, Dimensions } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { MessageCircle, Copy, Share2, Trash2, Edit2 } from 'lucide-react-native';
 import { MessageBubble } from './MessageBubble';
@@ -156,9 +156,14 @@ export function MessageActionMenu({
                                                     <Pressable
                                                         onPress={() => {
                                                             if (emoji === '➕') {
-                                                                // TODO: Show more reactions
+                                                                const { Alert } = require('react-native');
+                                                                Alert.alert('More Reactions', 'Custom emoji selector coming soon!');
+                                                                onClose();
                                                             } else {
+                                                                const { haptics } = require('../utils/haptics');
+                                                                haptics.impactLight();
                                                                 onReact(emoji);
+                                                                onClose();
                                                             }
                                                         }}
                                                         style={styles.reactionButton}
@@ -175,24 +180,41 @@ export function MessageActionMenu({
                                         style={[
                                             styles.actionsRowPositioned,
                                             {
-                                                top: messageLayout.y + messageLayout.height + 8, // Exact 8px gap
-                                                left: messageLayout.x,
-                                                width: messageLayout.width,
-                                                alignItems: isMe ? 'flex-end' : 'flex-start', // Align to bubble edge
+                                                top: messageLayout.y + messageLayout.height + 8,
+                                                left: isMe ? 0 : messageLayout.x, // For 'Them', align to left edge
+                                                right: isMe ? (Dimensions.get('window').width - (messageLayout.x + messageLayout.width)) : 0,
+                                                width: isMe ? '100%' : messageLayout.width,
+                                                alignItems: isMe ? 'flex-end' : 'flex-start',
                                                 transform: [{ scale: scaleAnim }],
                                                 opacity: fadeAnim
                                             }
                                         ]}
                                     >
                                         <BlurView intensity={100} tint="light" style={styles.actionsRow}>
-                                            <Pressable onPress={onReply} style={styles.actionButton}>
+                                            <Pressable
+                                                onPress={() => {
+                                                    const { haptics } = require('../utils/haptics');
+                                                    haptics.impactLight();
+                                                    onReply();
+                                                    onClose();
+                                                }}
+                                                style={styles.actionButton}
+                                            >
                                                 <Text style={styles.actionText}>Reply</Text>
                                                 <MessageCircle size={20} color="#333" />
                                             </Pressable>
 
                                             <View style={styles.separator} />
 
-                                            <Pressable onPress={onCopy} style={styles.actionButton}>
+                                            <Pressable
+                                                onPress={() => {
+                                                    const { haptics } = require('../utils/haptics');
+                                                    haptics.impactLight();
+                                                    onCopy();
+                                                    onClose();
+                                                }}
+                                                style={styles.actionButton}
+                                            >
                                                 <Text style={styles.actionText}>Copy</Text>
                                                 <Copy size={20} color="#333" />
                                             </Pressable>
@@ -202,6 +224,8 @@ export function MessageActionMenu({
                                             <Pressable
                                                 onPress={() => {
                                                     const { Alert } = require('react-native');
+                                                    const { haptics } = require('../utils/haptics');
+                                                    haptics.impactLight();
                                                     Alert.alert('Coming Soon', 'Translate feature is coming soon!');
                                                     onClose();
                                                 }}
@@ -214,13 +238,29 @@ export function MessageActionMenu({
                                             {isMe && (
                                                 <>
                                                     <View style={styles.separator} />
-                                                    <Pressable onPress={onEdit} style={styles.actionButton}>
+                                                    <Pressable
+                                                        onPress={() => {
+                                                            const { haptics } = require('../utils/haptics');
+                                                            haptics.impactLight();
+                                                            onEdit();
+                                                            onClose();
+                                                        }}
+                                                        style={styles.actionButton}
+                                                    >
                                                         <Text style={styles.actionText}>Edit</Text>
                                                         <Edit2 size={20} color="#333" />
                                                     </Pressable>
 
                                                     <View style={styles.separator} />
-                                                    <Pressable onPress={onDelete} style={styles.actionButton}>
+                                                    <Pressable
+                                                        onPress={() => {
+                                                            const { haptics } = require('../utils/haptics');
+                                                            haptics.impactLight();
+                                                            onDelete();
+                                                            onClose();
+                                                        }}
+                                                        style={styles.actionButton}
+                                                    >
                                                         <Text style={[styles.actionText, { color: '#ff3b30' }]}>Delete</Text>
                                                         <Trash2 size={20} color="#ff3b30" />
                                                     </Pressable>
@@ -278,6 +318,7 @@ const styles = StyleSheet.create({
     actionsRowPositioned: {
         position: 'absolute',
         zIndex: 1000,
+        paddingHorizontal: 12, // Minimal gutter
     },
     actionsRow: {
         borderRadius: 14,
