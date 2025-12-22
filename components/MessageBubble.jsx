@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Image, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Image, Pressable, ActivityIndicator, Platform } from 'react-native';
 import { ChatStyles } from '../constants/ChatStyles';
 import { AudioMessage } from './AudioMessage';
 import { MessageActionMenu } from './MessageActionMenu';
@@ -187,9 +187,14 @@ export function MessageBubble({
                     resizeMode="cover"
                 />
             ) : message.message_type === 'system' ? (
-                <Text style={styles.systemMessage}>{message.content}</Text>
+                <Text style={[styles.systemMessageText, isMe && { color: '#fff' }]}>
+                    {message.content}
+                </Text>
             ) : (
-                <Text style={[ChatStyles.messageText, isMe && ChatStyles.messageTextMe]}>
+                <Text style={[
+                    ChatStyles.messageText,
+                    isMe && ChatStyles.messageTextMe
+                ]}>
                     {message.content}
                     {message.edited_at && (
                         <Text style={[styles.editedLabel, isMe && { color: '#fff' }]}> Edited</Text>
@@ -197,22 +202,17 @@ export function MessageBubble({
                 </Text>
             )}
 
-            {/* Reactions Display */}
+            {/* Reactions summary */}
             {Object.keys(reactionSummary).length > 0 && (
                 <View style={[styles.reactionsContainer, isMe ? styles.reactionsContainerMe : styles.reactionsContainerThem]}>
                     {Object.entries(reactionSummary).map(([emoji, data]) => (
                         <Pressable
                             key={emoji}
                             style={styles.reactionBadge}
-                            onPress={(e) => {
-                                e.stopPropagation();
-                                onReactionPress?.(message.id, reactions);
-                            }}
+                            onPress={() => onReactionPress && onReactionPress(message, emoji, data.users)}
                         >
                             <Text style={styles.reactionEmoji}>{emoji}</Text>
-                            {data.count > 1 && (
-                                <Text style={styles.reactionCount}>{data.count}</Text>
-                            )}
+                            {data.count > 1 && <Text style={styles.reactionCount}>{data.count}</Text>}
                         </Pressable>
                     ))}
                 </View>
@@ -283,6 +283,7 @@ export function MessageBubble({
                             onCopy={handleCopy}
                             onEdit={handleEdit}
                             onDelete={handleDelete}
+                            onShowMoreReactions={() => setShowEmojiPicker(true)}
                             onClose={() => setShowActionMenu(false)}
                             message={message}
                             isMe={isMe}
@@ -292,6 +293,13 @@ export function MessageBubble({
                             reactions={reactions}
                             onReactionPress={onReactionPress}
                             groupName={groupName}
+                        />
+
+                        <ReactionPicker
+                            visible={showEmojiPicker}
+                            onClose={() => setShowEmojiPicker(false)}
+                            onReact={(emoji) => handleReact(emoji)}
+                            defaultShowCustom={true}
                         />
                     </Pressable>
                     {avatarElement}
@@ -358,6 +366,7 @@ export function MessageBubble({
                             visible={showEmojiPicker}
                             onClose={() => setShowEmojiPicker(false)}
                             onReact={(emoji) => handleReact(emoji)}
+                            defaultShowCustom={true}
                         />
                     </Pressable>
                 </>
@@ -440,6 +449,17 @@ const styles = StyleSheet.create({
         color: '#999',
         fontStyle: 'italic',
     },
+    systemMessageContent: {
+        fontSize: 11,
+        fontStyle: 'italic',
+        opacity: 0.8,
+    },
+    systemMessageText: {
+        fontSize: 11,
+        color: '#666', // Dark enough for visibility on white
+        fontStyle: 'italic',
+        textAlign: 'center',
+    },
     systemMessage: {
         fontSize: 13,
         color: '#fff',
@@ -452,8 +472,8 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 20,
         elevation: 15,
-        backgroundColor: '#fff', // Ensure it stays bright
-        borderColor: 'rgba(0, 0, 0, 0.05)',
+        backgroundColor: '#fff',
+        borderColor: Platform.OS === 'android' ? '#eee' : 'rgba(0, 0, 0, 0.05)',
         borderWidth: 1,
     },
 });

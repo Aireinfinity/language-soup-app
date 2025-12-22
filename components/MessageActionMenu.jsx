@@ -101,8 +101,8 @@ export function MessageActionMenu({
                             style={{
                                 position: 'absolute',
                                 top: messageLayout.y - 2, // Slight adjustment for modal skew
-                                left: isMe ? messageLayout.x : messageLayout.x - 40, // Shift left if avatar is present
-                                width: isMe ? messageLayout.width : messageLayout.width + 40, // Allow space for avatar only for others
+                                left: isMe ? messageLayout.x : messageLayout.x - 36, // Shift left if avatar is present
+                                width: isMe ? messageLayout.width : messageLayout.width + 36, // Allow space for avatar only for others
                                 zIndex: 50,
                             }}
                         >

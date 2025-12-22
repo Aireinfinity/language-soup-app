@@ -272,4 +272,21 @@ export const ChatStyles = StyleSheet.create({
         padding: 4,
         marginLeft: 12,
     },
+    // System Messages (e.g., "This message was deleted")
+    systemMessageContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginVertical: 12,
+        paddingHorizontal: 40,
+    },
+    systemMessageText: {
+        fontSize: 12,
+        color: '#8e8e93',
+        textAlign: 'center',
+        backgroundColor: 'rgba(0,0,0,0.05)',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 10,
+        overflow: 'hidden',
+    },
 });

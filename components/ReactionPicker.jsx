@@ -17,17 +17,42 @@ const DEFAULT_REACTIONS = ['❤️', '😂', '😮', '😭', '🥳', '🙀'];
  * ReactionPicker - Bottom sheet modal for selecting reactions
  * Clean design matching mini-player aesthetic
  */
-export function ReactionPicker({ visible, onClose, onReact }) {
-    const [showCustomInput, setShowCustomInput] = useState(false);
-    const [customEmoji, setCustomEmoji] = useState('');
+export function ReactionPicker({ visible, onClose, onReact, defaultShowCustom = false }) {
+    const [showCustomInput, setShowCustomInput] = React.useState(defaultShowCustom);
+    const [customEmoji, setCustomEmoji] = React.useState('');
 
-    const handleReaction = (emoji) => {
+    const handleReaction = React.useCallback((emoji) => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         onReact(emoji);
         onClose();
         setShowCustomInput(false);
         setCustomEmoji('');
-    };
+    }, [onReact, onClose]);
+
+    // Update showCustomInput when visible changes if defaultShowCustom is true
+    React.useEffect(() => {
+        if (visible && defaultShowCustom) {
+            setShowCustomInput(true);
+        } else if (!visible) {
+            // Reset when closing
+            setShowCustomInput(false);
+            setCustomEmoji('');
+        }
+    }, [visible, defaultShowCustom]);
+
+    // Auto-submit when an emoji is picked from the native keyboard
+    React.useEffect(() => {
+        if (showCustomInput && customEmoji.length > 0) {
+            // Check if it's likely a single emoji (emojis can be multichat surrogate pairs)
+            // A simple heuristic for "just picked one thing"
+            if (customEmoji.length >= 2 || (customEmoji.length === 1 && !customEmoji.match(/[a-zA-Z0-9]/))) {
+                const timer = setTimeout(() => {
+                    handleReaction(customEmoji);
+                }, 100);
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [customEmoji, showCustomInput, handleReaction]);
 
     const handleCustomEmoji = () => {
         if (customEmoji.trim()) {
@@ -74,37 +99,18 @@ export function ReactionPicker({ visible, onClose, onReact }) {
                         </Pressable>
                     </View>
 
-                    {/* Custom emoji input */}
+                    {/* Hidden Custom emoji input - Visually hidden but auto-focused */}
                     {showCustomInput && (
-                        <Animated.View entering={FadeIn.duration(150)} style={styles.customInputContainer}>
+                        <View style={styles.hiddenInputContainer}>
                             <TextInput
-                                style={styles.customInput}
-                                placeholder="Type any emoji..."
-                                placeholderTextColor="#999"
+                                style={styles.hiddenInput}
                                 value={customEmoji}
                                 onChangeText={setCustomEmoji}
-                                maxLength={4}
-                                autoFocus
+                                autoFocus={true}
+                                blurOnSubmit={true}
                             />
-                            <Pressable
-                                style={[
-                                    styles.sendCustomButton,
-                                    !customEmoji.trim() && styles.sendCustomButtonDisabled
-                                ]}
-                                onPress={handleCustomEmoji}
-                                disabled={!customEmoji.trim()}
-                            >
-                                <Text style={styles.sendCustomText}>
-                                    Add
-                                </Text>
-                            </Pressable>
-                        </Animated.View>
+                        </View>
                     )}
-
-                    {/* Close button - minimal like mini-player */}
-                    <Pressable style={styles.closeButton} onPress={handleClose} hitSlop={10}>
-                        <X size={20} color="#666" strokeWidth={2.5} />
-                    </Pressable>
                 </Animated.View>
             </Pressable>
         </Modal>
@@ -114,80 +120,52 @@ export function ReactionPicker({ visible, onClose, onReact }) {
 const styles = StyleSheet.create({
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.4)',
+        backgroundColor: 'rgba(0,0,0,0.3)',
         justifyContent: 'flex-end',
     },
     container: {
         backgroundColor: '#fff',
-        borderTopLeftRadius: 16,
-        borderTopRightRadius: 16,
-        paddingHorizontal: 16,
-        paddingTop: 20,
-        paddingBottom: 32,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 5,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        padding: 20,
+        paddingBottom: 40,
+        alignItems: 'center',
     },
     reactionsRow: {
         flexDirection: 'row',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        marginBottom: 4,
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        gap: 12,
+        marginBottom: 10,
     },
     reactionButton: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        justifyContent: 'center',
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: '#f5f5f5',
         alignItems: 'center',
-        backgroundColor: SOUP_COLORS.cream,
+        justifyContent: 'center',
     },
     reactionEmoji: {
-        fontSize: 30,
+        fontSize: 28,
     },
     customButton: {
-        backgroundColor: SOUP_COLORS.blue,
+        backgroundColor: '#f0f0f0',
     },
     customButtonText: {
-        fontSize: 28,
-        fontWeight: '600',
-        color: '#fff',
+        fontSize: 24,
+        color: '#666',
+        fontWeight: '300',
     },
-    customInputContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 10,
-        marginTop: 12,
-    },
-    customInput: {
-        flex: 1,
-        backgroundColor: SOUP_COLORS.cream,
-        borderRadius: 12,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        fontSize: 15,
-        borderWidth: 0,
-    },
-    sendCustomButton: {
-        paddingHorizontal: 18,
-        paddingVertical: 10,
-        backgroundColor: SOUP_COLORS.pink,
-        borderRadius: 12,
-    },
-    sendCustomButtonDisabled: {
-        opacity: 0.4,
-    },
-    sendCustomText: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#fff',
-    },
-    closeButton: {
+    hiddenInputContainer: {
         position: 'absolute',
-        top: 10,
-        right: 10,
-        padding: 6,
+        width: 1,
+        height: 1,
+        opacity: 0,
+        bottom: -100, // Move off-screen
     },
+    hiddenInput: {
+        width: 1,
+        height: 1,
+    }
 });
