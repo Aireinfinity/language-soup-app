@@ -99,6 +99,17 @@ export default function SupportChatScreen() {
                 scrollToBottom();
             })
             .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'app_support_messages',
+                filter: `user_id=eq.${user.id}`
+            }, (payload) => {
+                // Handle message edit s and deletes
+                setMessages(prev => prev.map(msg =>
+                    msg.id === payload.new.id ? { ...msg, ...payload.new } : msg
+                ));
+            })
+            .on('postgres_changes', {
                 event: 'INSERT',
                 schema: 'public',
                 table: 'app_support_reactions',
@@ -318,29 +329,7 @@ export default function SupportChatScreen() {
     };
 
 
-    const renderItem = ({ item }) => {
-        if (item.type === 'date_separator') {
-            return (
-                <View style={styles.dateSeparator}>
-                    <View style={styles.dateSeparatorBadge}>
-                        <Text style={styles.dateSeparatorText}>{item.label}</Text>
-                    </View>
-                </View>
-            );
-        }
-
-        const isFromAdmin = item.from_admin;
-
-        // Create a message object compatible with MessageBubble
-        const messageForBubble = {
-            ...item,
-            sender: isFromAdmin ? { display_name: 'Noah', avatar_url: null } : null
-        };
-
-        return <MessageBubble message={messageForBubble} isMe={!isFromAdmin} showLanguageFlags={false} senderKey="sender" />;
-    };
-
-    const messagesWithDates = addDateSeparators(messages);
+    const messagesWithDates = [...addDateSeparators(messages)].reverse();
 
     if (loading) {
         return (
@@ -353,6 +342,9 @@ export default function SupportChatScreen() {
     return (
         <View style={styles.container}>
             <SharedChatUI
+                chatType="support"
+                tableName="app_support_messages"
+                reactionsTable="app_support_reactions"
                 messages={messagesWithDates}
                 loading={loading}
                 onSendText={sendTextMessage}
@@ -388,8 +380,8 @@ export default function SupportChatScreen() {
                 typingIndicatorComponent={null}
                 flatListRef={flatListRef}
                 userId={user?.id}
-                contentContainerStyle={ChatStyles.messagesList}
-                inverted={false}
+                contentContainerStyle={[ChatStyles.messagesList, { paddingTop: 20, paddingBottom: insets.top + 80 }]}
+                inverted={true}
                 reactions={reactions}
                 onReact={handleReact}
                 groupName="Support"

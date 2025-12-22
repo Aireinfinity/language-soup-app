@@ -33,20 +33,37 @@ export default function SendChallengeScreen() {
 
     const loadGroups = async () => {
         try {
+            // Check if user is admin or community manager from app_users table
+            const { data: userProfile } = await supabase
+                .from('app_users')
+                .select('is_admin, is_community_manager')
+                .eq('id', user.id)
+                .single();
+
             let query = supabase
                 .from('app_groups')
                 .select('id, name, language, member_count');
 
-            // If community manager, only show assigned groups
-            if (user?.role === 'community_manager') {
+            // If community manager (but NOT admin), only show assigned groups
+            if (userProfile?.is_community_manager && !userProfile?.is_admin) {
                 const { data: assignments } = await supabase
                     .from('app_community_managers')
                     .select('group_id')
                     .eq('user_id', user.id);
 
                 const groupIds = assignments?.map(a => a.group_id) || [];
-                query = query.in('id', groupIds);
+
+                // Only apply filter if there are assigned groups
+                if (groupIds.length > 0) {
+                    query = query.in('id', groupIds);
+                } else {
+                    // Community manager with no assignments - show no groups
+                    setGroups([]);
+                    setLoading(false);
+                    return;
+                }
             }
+            // If admin, show all groups (no filter applied)
 
             const { data, error } = await query.order('name');
 
@@ -83,6 +100,8 @@ export default function SendChallengeScreen() {
 
             if (error) throw error;
 
+            // Remove the manual system message insert - the trigger handles it now
+
             // --- SEND PUSH NOTIFICATIONS ---
             console.log('Sending push notifications...');
 
@@ -103,22 +122,54 @@ export default function SendChallengeScreen() {
                         .in('user_id', userIds);
 
                     if (tokens?.length > 0) {
-                        // Find group name
+                        // Find group name and language
                         const targetGroup = groups.find(g => g.id === selectedGroup);
                         const targetGroupName = targetGroup ? targetGroup.name : 'your group';
+                        const groupLanguage = targetGroup?.language?.toLowerCase();
 
-                        // 3. Send via Expo API
-                        const pushMessages = tokens.map(t => ({
-                            to: t.expo_push_token,
-                            sound: 'default',
-                            title: '🥣 Soup\'s On!',
-                            body: `New Challenge in ${targetGroupName}: ${englishVersion.substring(0, 50)}...`,
-                            data: {
-                                type: 'challenge',
-                                groupId: selectedGroup,
-                                challengeId: challenge.id
-                            },
-                        }));
+                        // Fetch language-specific notification from database
+                        let languageNotification = null;
+                        if (groupLanguage) {
+                            const { data: langData } = await supabase
+                                .from('app_language_notifications')
+                                .select('country_flag, notification_message')
+                                .eq('language', groupLanguage)
+                                .single();
+
+                            if (langData) {
+                                languageNotification = `${langData.country_flag} ${langData.notification_message}`;
+                            }
+                        }
+
+                        // Random emojis for non-flag notifications
+                        const randomEmojis = ['😰', '🥳', '🥹', '😵‍💫', '🌈', '🙀', '🤪', '☺️', '😚', '🤯'];
+                        const randomEmoji = randomEmojis[Math.floor(Math.random() * randomEmojis.length)];
+
+                        // 4 notification options (rotate randomly)
+                        const notificationOptions = [
+                            `${randomEmoji} new challenge in ${targetGroupName}`,
+                            `${randomEmoji} bro ur late the challenge is here! ${targetGroupName}`,
+                            `${randomEmoji} wait wait wait... new challenge? hell yeah! ${targetGroupName}`,
+                            languageNotification
+                                ? `${languageNotification} (${targetGroupName})`
+                                : `${randomEmoji} new challenge in ${targetGroupName}` // Fallback if language not in database
+                        ];
+
+                        // 3. Send via Expo API with random notification
+                        const pushMessages = tokens.map(t => {
+                            const randomBody = notificationOptions[Math.floor(Math.random() * notificationOptions.length)];
+                            return {
+                                to: t.expo_push_token,
+                                sound: 'default',
+                                title: 'mmm goood soup!',
+                                body: randomBody,
+                                data: {
+                                    type: 'challenge',
+                                    groupId: selectedGroup,
+                                    challengeId: challenge.id
+                                },
+                            };
+                        });
 
                         await fetch('https://exp.host/--/api/v2/push/send', {
                             method: 'POST',
@@ -140,7 +191,11 @@ export default function SendChallengeScreen() {
             ]);
         } catch (error) {
             console.error('Error sending challenge:', error);
-            Alert.alert('Error', 'Failed to send challenge');
+            console.error('Error details:', JSON.stringify(error, null, 2));
+            console.error('Error message:', error.message);
+            console.error('Error hint:', error.hint);
+            console.error('Error details:', error.details);
+            Alert.alert('Error', `Failed to send challenge: ${error.message || 'Unknown error'}`);
         } finally {
             setSending(false);
         }

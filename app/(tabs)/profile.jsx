@@ -45,7 +45,6 @@ export default function ProfileScreen() {
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
     const [editing, setEditing] = useState(false);
-    const [notificationLevel, setNotificationLevel] = useState('challenges_only'); // 'all', 'challenges_only', 'none'
 
     // Editable States
     const [newName, setNewName] = useState('');
@@ -161,32 +160,11 @@ export default function ProfileScreen() {
                     'HST', 'AKST', 'AST'
                 ].sort();
                 setAvailableTimezones(allTimezones);
-            }
-            const { data: statsData } = await supabase
+            } const { data: statsData } = await supabase
                 .rpc('get_user_stats', { uid: authUser.id });
 
             if (statsData) {
                 setStats(statsData);
-            }
-
-            // Load notification preferences
-            const { data: notifPrefs } = await supabase
-                .from('app_notification_preferences')
-                .select('*')
-                .eq('user_id', authUser.id)
-                .single();
-
-            if (notifPrefs) {
-                // Determine notification level based on preferences
-                if (!notifPrefs.push_enabled) {
-                    setNotificationLevel('none');
-                } else if (notifPrefs.new_messages && notifPrefs.new_challenges) {
-                    setNotificationLevel('all');
-                } else if (notifPrefs.new_challenges) {
-                    setNotificationLevel('challenges_only');
-                } else {
-                    setNotificationLevel('none');
-                }
             }
 
         } catch (error) {
@@ -269,37 +247,6 @@ export default function ProfileScreen() {
             Alert.alert('Error', `Failed to upload avatar: ${error.message || 'Unknown error'}`);
         } finally {
             setUploading(false);
-        }
-    };
-
-    const handleNotificationChange = async (level) => {
-        setNotificationLevel(level);
-
-        try {
-            // Map level to database preferences
-            const prefs = {
-                push_enabled: level !== 'none',
-                new_messages: level === 'all',
-                new_challenges: level === 'all' || level === 'challenges_only',
-                support_replies: level === 'all',
-            };
-
-            // Upsert notification preferences
-            const { error } = await supabase
-                .from('app_notification_preferences')
-                .upsert({
-                    user_id: authUser.id,
-                    ...prefs,
-                    updated_at: new Date().toISOString()
-                }, {
-                    onConflict: 'user_id'
-                });
-
-            if (error) {
-                console.error('Error saving notification preferences:', error);
-            }
-        } catch (error) {
-            console.error('Error updating notifications:', error);
         }
     };
 
@@ -570,67 +517,6 @@ export default function ProfileScreen() {
         );
     };
 
-    const renderNotificationSettings = () => {
-        const options = [
-            {
-                id: 'all',
-                emoji: '😘',
-                title: 'spam me!',
-                subtitle: 'notify me when new challenges drop, when there are new responses and anything else on the app'
-            },
-            {
-                id: 'challenges_only',
-                emoji: '🤩',
-                title: 'just notify me when new challenges drop please!',
-                subtitle: 'only challenge notifications, nothing else'
-            },
-            {
-                id: 'none',
-                emoji: '🤬',
-                title: 'nope please don\'t notify me!',
-                subtitle: 'i\'ll check the app when i feel like it'
-            }
-        ];
-
-        return (
-            <View style={styles.notificationSection}>
-                <Text style={styles.notificationHeader}>keep missing challenges? turn on notifications!</Text>
-                <Text style={styles.notificationSubheader}>you can decide how many notifications you get</Text>
-
-                <View style={styles.notificationOptions}>
-                    {options.map(option => (
-                        <Pressable
-                            key={option.id}
-                            style={[
-                                styles.notificationOption,
-                                notificationLevel === option.id && styles.notificationOptionActive
-                            ]}
-                            onPress={() => handleNotificationChange(option.id)}
-                        >
-                            <View style={styles.notificationOptionContent}>
-                                <Text style={styles.notificationEmoji}>{option.emoji}</Text>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={[
-                                        styles.notificationOptionTitle,
-                                        notificationLevel === option.id && styles.notificationOptionTitleActive
-                                    ]}>
-                                        {option.title}
-                                    </Text>
-                                    <Text style={styles.notificationOptionSubtitle}>{option.subtitle}</Text>
-                                </View>
-                            </View>
-                            {notificationLevel === option.id && (
-                                <View style={styles.notificationCheckmark}>
-                                    <Text style={{ fontSize: 16 }}>✓</Text>
-                                </View>
-                            )}
-                        </Pressable>
-                    ))}
-                </View>
-            </View>
-        );
-    };
-
     const renderWrapped = () => {
         return (
             <Pressable onPress={() => setShowWrappedModal(true)}>
@@ -833,7 +719,6 @@ export default function ProfileScreen() {
 
                 {renderIdentity()}
                 {renderStats()}
-                {renderNotificationSettings()}
                 {renderWrapped()}
             </ScrollView>
             {renderWrappedModal()}
@@ -2194,76 +2079,5 @@ const styles = StyleSheet.create({
         color: SOUP_COLORS.subtext,
         textAlign: 'right',
         fontStyle: 'italic',
-    },
-    // Notification Settings Styles
-    notificationSection: {
-        backgroundColor: SOUP_COLORS.cardBg,
-        borderRadius: 16,
-        padding: 20,
-        marginHorizontal: 16,
-        marginBottom: 20,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
-    },
-    notificationHeader: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: SOUP_COLORS.text,
-        marginBottom: 4,
-    },
-    notificationSubheader: {
-        fontSize: 14,
-        color: SOUP_COLORS.subtext,
-        marginBottom: 16,
-    },
-    notificationOptions: {
-        gap: 12,
-    },
-    notificationOption: {
-        backgroundColor: SOUP_COLORS.cream,
-        borderRadius: 12,
-        padding: 16,
-        borderWidth: 2,
-        borderColor: 'transparent',
-    },
-    notificationOptionActive: {
-        borderColor: SOUP_COLORS.pink,
-        backgroundColor: '#fff',
-    },
-    notificationOptionContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    notificationEmoji: {
-        fontSize: 24,
-    },
-    notificationOptionTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: SOUP_COLORS.text,
-        marginBottom: 4,
-    },
-    notificationOptionTitleActive: {
-        color: SOUP_COLORS.pink,
-    },
-    notificationOptionSubtitle: {
-        fontSize: 13,
-        color: SOUP_COLORS.subtext,
-        lineHeight: 18,
-    },
-    notificationCheckmark: {
-        position: 'absolute',
-        top: 12,
-        right: 12,
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: SOUP_COLORS.pink,
-        justifyContent: 'center',
-        alignItems: 'center',
     },
 });

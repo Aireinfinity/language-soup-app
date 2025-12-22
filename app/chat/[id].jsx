@@ -7,8 +7,6 @@ import { ArrowLeft, Send, Mic, X, Trash2, Square, ChevronLeft, MoreVertical, Che
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AudioMessage } from '../../components/AudioMessage';
 import { LiveAudioWaveform } from '../../components/LiveAudioWaveform';
-import { EditMessageModal } from '../../components/EditMessageModal';
-import { UserProfileModal } from '../../components/UserProfileModal';
 import { Colors } from '../../constants/Colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -16,6 +14,7 @@ import { useNotifications } from '../../contexts/NotificationContext';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import { getLanguageFlag } from '../../utils/languageFlags';
 import { SharedChatUI } from '../../components/SharedChatUI';
+import { ReactionViewerModal } from '../../components/ReactionViewerModal';
 import { ChatStyles } from '../../constants/ChatStyles';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
@@ -76,8 +75,7 @@ export default function ChatScreen() {
     const [recordingUsers, setRecordingUsers] = useState({});
     const [userProfile, setUserProfile] = useState(null);
     const [reactions, setReactions] = useState({}); // { messageId: [{ user_id, reaction, created_at }] }
-    const [editingMessage, setEditingMessage] = useState(null);
-    const [selectedUserId, setSelectedUserId] = useState(null);
+    // Note: reply, edit, delete, reaction viewer are now handled internally by SharedChatUI
 
     // Clear notifications and mark as read when chat opens
     useEffect(() => {
@@ -183,6 +181,17 @@ export default function ChatScreen() {
                 const newMessage = { ...payload.new, sender };
                 setMessages((prev) => [...prev, newMessage]);
                 setTimeout(() => scrollToBottom(), 100);
+            })
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'app_messages',
+                filter: `challenge_id=eq.${currentChallenge?.id}`,
+            }, (payload) => {
+                // Handle message edits and deletes
+                setMessages((prev) => prev.map((msg) =>
+                    msg.id === payload.new.id ? { ...msg, ...payload.new } : msg
+                ));
             })
             .on('broadcast', { event: 'typing' }, ({ payload }) => {
                 if (payload.user_id === user.id) return;
@@ -311,7 +320,6 @@ export default function ChatScreen() {
                 `)
                 .eq('group_id', groupId)
                 .order('created_at', { ascending: true });
-
             if (messagesData) {
                 // Handle deleted users by providing fallback data
                 const messagesWithFallback = messagesData.map(msg => ({
@@ -378,6 +386,8 @@ export default function ChatScreen() {
         const messageText = textInput.trim();
         setTextInput('');
         setSending(true);
+
+        // Regular send (reply/edit handled by SharedChatUI)
         const tempId = `temp-${Date.now()}`;
         const optimisticMessage = {
             id: tempId,
@@ -415,6 +425,39 @@ export default function ChatScreen() {
             setSending(false);
         }
     };
+
+
+
+    const handleDeleteMessage = async (messageId) => {
+        try {
+            // Delete for everyone - update message to show system message
+            const { error } = await supabase
+                .from('app_messages')
+                .update({
+                    content: 'This message was deleted',
+                    message_type: 'system',
+                    deleted_at: new Date().toISOString()
+                })
+                .eq('id', messageId)
+                .eq('sender_id', user.id);
+
+            if (error) {
+                console.error('[ChatScreen] Error deleting message:', error);
+                Alert.alert('Error', 'Failed to delete message');
+            } else {
+                // Update local state immediately
+                setMessages((prev) => prev.map((msg) =>
+                    msg.id === messageId
+                        ? { ...msg, content: 'This message was deleted', message_type: 'system', deleted_at: new Date().toISOString() }
+                        : msg
+                ));
+            }
+        } catch (error) {
+            console.error('[ChatScreen] Error deleting message:', error);
+        }
+    };
+
+
 
     const handleSendVoice = async () => {
         const result = await handleStopRecording();
@@ -597,112 +640,30 @@ export default function ChatScreen() {
         }
     };
 
-    // Handle reaction toggle
     const handleReact = async (messageId, emoji) => {
-        console.log('[REACTIONS] handleReact called:', { messageId, emoji, userId: user?.id });
-
-        if (!user) {
-            console.log('[REACTIONS] No user, returning');
-            return;
-        }
-
-        // Check if user already reacted with this emoji
+        if (!user) return;
         const messageReactions = reactions[messageId] || [];
-        console.log('[REACTIONS] Current reactions for message:', messageReactions);
-
         const existingReaction = messageReactions.find(
-            r => r.user_id === user.id && r.emoji === emoji  // Changed 'reaction' to 'emoji'
+            r => r.user_id === user.id && r.emoji === emoji
         );
 
-        console.log('[REACTIONS] Existing reaction:', existingReaction);
-
         if (existingReaction) {
-            // Remove reaction
-            console.log('[REACTIONS] Removing reaction:', existingReaction.id);
-            const { error } = await supabase
+            await supabase
                 .from('app_message_reactions')
                 .delete()
                 .eq('id', existingReaction.id);
-
-            if (error) console.error('[REACTIONS] Delete error:', error);
         } else {
-            // Add reaction
-            console.log('[REACTIONS] Adding new reaction');
-            const { data, error } = await supabase
+            await supabase
                 .from('app_message_reactions')
                 .insert({
                     message_id: messageId,
                     user_id: user.id,
-                    emoji: emoji  // Changed from 'reaction' to 'emoji'
+                    emoji: emoji
                 });
-
-            if (error) console.error('[REACTIONS] Insert error:', error);
-            if (data) console.log('[REACTIONS] Insert success:', data);
         }
     };
 
-    const handleEditMessage = async (message, newContent) => {
-        try {
-            const { error } = await supabase
-                .from('app_messages')
-                .update({
-                    content: newContent,
-                    edited_at: new Date().toISOString()
-                })
-                .eq('id', message.id);
 
-            if (error) {
-                console.error('[EDIT] Error editing message:', error);
-                Alert.alert('Error', 'Could not edit message. Please try again.');
-            } else {
-                // Update local state
-                setMessages(prev => prev.map(msg =>
-                    msg.id === message.id
-                        ? { ...msg, content: newContent, edited_at: new Date().toISOString() }
-                        : msg
-                ));
-                setEditingMessage(null);
-            }
-        } catch (error) {
-            console.error('[EDIT] Complete error:', error);
-        }
-    };
-
-    const handleDeleteMessage = async (message) => {
-        Alert.alert(
-            'Delete Message',
-            'Delete this message for everyone?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: async () => {
-                        try {
-                            const { error } = await supabase
-                                .from('app_messages')
-                                .update({ deleted_at: new Date().toISOString() })
-                                .eq('id', message.id);
-
-                            if (error) {
-                                console.error('[DELETE] Error deleting message:', error);
-                                Alert.alert('Error', 'Could not delete message. Please try again.');
-                            } else {
-                                // Update local state
-                                setMessages(prev => prev.map(msg =>
-                                    msg.id === message.id
-                                        ? { ...msg, deleted_at: new Date().toISOString() }
-                                        : msg
-                                ));
-                            }
-                        } catch (error) {
-                            console.error('[DELETE] Complete error:', error);
-                        }
-                    }
-                }
-            ]
-        );
-    };
 
 
     const messagesWithDates = [...addDateSeparators(messages)].reverse();
@@ -718,6 +679,9 @@ export default function ChatScreen() {
     return (
         <View style={styles.container}>
             <SharedChatUI
+                chatType="group"
+                tableName="app_messages"
+                reactionsTable="app_message_reactions"
                 messages={messagesWithDates}
                 loading={loading}
                 onSendText={sendMessage}
@@ -752,7 +716,9 @@ export default function ChatScreen() {
                         <BlurView intensity={95} tint="light" style={[styles.challengeBanner, { top: insets.top + 65 }]}>
                             <View style={styles.challengeContent}>
                                 <Text style={styles.challengeHashtag}>#challenge</Text>
-                                <Text style={styles.challengeText}>{visibleChallenge.prompt_text}</Text>
+                                {visibleChallenge.prompt_text.split('\n').map((line, index) => (
+                                    <Text key={index} style={styles.challengeText}>{line}</Text>
+                                ))}
                             </View>
                         </BlurView>
                     )
@@ -769,30 +735,10 @@ export default function ChatScreen() {
                 typingIndicatorComponent={typingIndicator()}
                 flatListRef={flatListRef}
                 userId={user?.id}
-                contentContainerStyle={[ChatStyles.messagesList, { paddingTop: 20, paddingBottom: insets.top + (currentChallenge ? 130 : 70) }]}
+                contentContainerStyle={[ChatStyles.messagesList, { paddingTop: 20, paddingBottom: insets.top + (currentChallenge ? 140 : 80) }]}
                 reactions={reactions}
                 onReact={handleReact}
-                onEdit={(msg) => setEditingMessage(msg)}
-                onDelete={handleDeleteMessage}
-                onAvatarPress={(userId) => setSelectedUserId(userId)}
                 groupName={groupName}
-            />
-
-            {/* Edit Message Modal */}
-            <EditMessageModal
-                visible={!!editingMessage}
-                message={editingMessage}
-                onClose={() => setEditingMessage(null)}
-                onSave={(content) => handleEditMessage(editingMessage, content)}
-            />
-
-            {/* User Profile Modal */}
-            <UserProfileModal
-                visible={!!selectedUserId}
-                userId={selectedUserId}
-                currentUserId={user?.id}
-                isAdmin={user?.is_admin || false}
-                onClose={() => setSelectedUserId(null)}
             />
         </View>
     );

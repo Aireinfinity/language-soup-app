@@ -6,6 +6,7 @@ import { MessageActionMenu } from './MessageActionMenu';
 import { ReactionViewerModal } from "./ReactionViewerModal";
 
 import { getLanguageFlag } from '../utils/languageFlags';
+import { ReactionPicker } from './ReactionPicker';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -34,6 +35,7 @@ export function MessageBubble({
     const [showReactionDetails, setShowReactionDetails] = useState(null); // Which emoji is expanded
     const [reactionViewerData, setReactionViewerData] = useState(null);
     const [messageLayout, setMessageLayout] = useState(null);
+    const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [reactionUsers, setReactionUsers] = useState({});
     const bubbleRef = useRef(null);
     const isSending = message.status === 'sending' || message.status === 'uploading';
@@ -97,15 +99,19 @@ export function MessageBubble({
             onReact(message.id, emoji);
         }
         setShowActionMenu(false);
+        setShowEmojiPicker(false);
     };
 
     const handleCopy = async () => {
-        const { Clipboard } = require('react-native');
-        const { Alert } = require('react-native');
-        if (message.content) {
-            Clipboard.setString(message.content);
-            // Show toast feedback
-            Alert.alert('', 'Copied to clipboard', [{ text: 'OK' }], { cancelable: true });
+        try {
+            const Clipboard = require('expo-clipboard');
+            if (message.content) {
+                await Clipboard.setStringAsync(message.content);
+                const { Alert } = require('react-native');
+                Alert.alert('', 'saved to clipboard', [{ text: 'OK' }], { cancelable: true });
+            }
+        } catch (error) {
+            console.error('[MessageBubble] Copy error:', error);
         }
         setShowActionMenu(false);
     };
@@ -128,11 +134,6 @@ export function MessageBubble({
         if (onDelete) {
             onDelete(message.id);
         }
-        setShowActionMenu(false);
-    };
-
-    const handleForward = () => {
-        // TODO: Implement forward functionality
         setShowActionMenu(false);
     };
 
@@ -280,7 +281,6 @@ export function MessageBubble({
                             onReact={handleReact}
                             onReply={handleReply}
                             onCopy={handleCopy}
-                            onForward={handleForward}
                             onEdit={handleEdit}
                             onDelete={handleDelete}
                             onClose={() => setShowActionMenu(false)}
@@ -340,9 +340,9 @@ export function MessageBubble({
                             onReact={handleReact}
                             onReply={handleReply}
                             onCopy={handleCopy}
-                            onForward={handleForward}
                             onEdit={handleEdit}
                             onDelete={handleDelete}
+                            onShowMoreReactions={() => setShowEmojiPicker(true)}
                             onClose={() => setShowActionMenu(false)}
                             message={message}
                             isMe={isMe}
@@ -352,6 +352,12 @@ export function MessageBubble({
                             reactions={reactions}
                             onReactionPress={onReactionPress}
                             groupName={groupName}
+                        />
+
+                        <ReactionPicker
+                            visible={showEmojiPicker}
+                            onClose={() => setShowEmojiPicker(false)}
+                            onReact={(emoji) => handleReact(emoji)}
                         />
                     </Pressable>
                 </>

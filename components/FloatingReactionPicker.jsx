@@ -4,11 +4,6 @@ import * as Haptics from 'expo-haptics';
 
 const DEFAULT_REACTIONS = ['❤️', '😂', '😮', '😭', '🥳'];
 
-/**
- * FloatingReactionPicker - Two-stage menu
- * Stage 1: Action buttons (React, Reply, Edit, Delete)
- * Stage 2: Emoji picker (when React is tapped)
- */
 export function FloatingReactionPicker({ visible, onReact, onClose, isMe, message, onEdit, onDelete }) {
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
@@ -55,7 +50,6 @@ export function FloatingReactionPicker({ visible, onReact, onClose, isMe, messag
                 onClose();
             }}
         >
-            {/* Backdrop */}
             <Pressable
                 style={styles.backdrop}
                 onPress={() => {
@@ -65,7 +59,6 @@ export function FloatingReactionPicker({ visible, onReact, onClose, isMe, messag
             />
 
             {showEmojiPicker ? (
-                /* Stage 2: Emoji Picker */
                 <View style={styles.emojiContainer}>
                     {DEFAULT_REACTIONS.map((emoji) => (
                         <Pressable
@@ -78,7 +71,6 @@ export function FloatingReactionPicker({ visible, onReact, onClose, isMe, messag
                     ))}
                 </View>
             ) : (
-                /* Stage 1: Action Buttons */
                 <View style={styles.actionContainer}>
                     <Pressable style={styles.actionButton} onPress={handleReactButton}>
                         <Text style={styles.actionEmoji}>😍</Text>

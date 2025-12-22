@@ -168,6 +168,13 @@ export const ChatStyles = StyleSheet.create({
         maxHeight: 100,
         color: '#000'
     },
+    textInputEditing: {
+        backgroundColor: 'rgba(236, 0, 139, 0.05)', // Subtle pink background when editing
+    },
+    inputContainerWithPreview: {
+        borderTopLeftRadius: 0,
+        borderTopRightRadius: 0,
+    },
     micContainer: {
         alignItems: 'center',
         gap: 2
@@ -226,5 +233,43 @@ export const ChatStyles = StyleSheet.create({
         backgroundColor: SOUP_COLORS.blue,
         justifyContent: 'center',
         alignItems: 'center'
+    },
+
+    // Reply/Edit Preview Styles (WhatsApp Parity)
+    previewContainerMerged: {
+        backgroundColor: '#fff',
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: 'rgba(0,0,0,0.1)',
+    },
+    editPreviewInline: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.03)',
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+    },
+    editBarInline: {
+        width: 4,
+        height: '100%',
+        backgroundColor: SOUP_COLORS.pink,
+        borderRadius: 2,
+        marginRight: 12,
+    },
+    editContentInline: {
+        flex: 1,
+    },
+    editLabelInline: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: SOUP_COLORS.pink,
+        marginBottom: 2,
+    },
+    editMessageInline: {
+        fontSize: 14,
+        color: '#666',
+    },
+    editCloseButtonInline: {
+        padding: 4,
+        marginLeft: 12,
     },
 });

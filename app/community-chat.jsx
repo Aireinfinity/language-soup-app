@@ -225,6 +225,16 @@ export default function CommunityChatScreen() {
                     });
                 }
             )
+            .on(
+                'postgres_changes',
+                { event: 'UPDATE', schema: 'public', table: 'app_community_messages' },
+                (payload) => {
+                    // Handle message edits and deletes
+                    setMessages(prev => prev.map(msg =>
+                        msg.id === payload.new.id ? { ...msg, ...payload.new } : msg
+                    ));
+                }
+            )
             .on('postgres_changes', {
                 event: 'INSERT',
                 schema: 'public',
@@ -449,36 +459,6 @@ export default function CommunityChatScreen() {
     };
 
 
-    const renderItem = ({ item }) => {
-        if (item.type === 'date_separator') {
-            return (
-                <View style={styles.dateSeparator}>
-                    <View style={styles.dateSeparatorBadge}>
-                        <Text style={styles.dateSeparatorText}>{item.label}</Text>
-                    </View>
-                </View>
-            );
-        }
-
-        // System message (announcement)
-        if (item.type === 'announcement') {
-            return (
-                <View style={styles.systemMessage}>
-                    <Megaphone size={14} color={SOUP_COLORS.pink} />
-                    <Text style={styles.systemText}>{item.content}</Text>
-                </View>
-            );
-        }
-
-        return (
-            <MessageBubble
-                message={item}
-                isMe={item.user_id === user?.id}
-                showLanguageFlags={true}
-                senderKey="user"
-            />
-        );
-    };
 
     // Find and scroll to announcement message in the chat
     const scrollToAnnouncementMessage = (announcementId) => {
@@ -518,6 +498,9 @@ export default function CommunityChatScreen() {
             <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
             <SharedChatUI
+                chatType="community"
+                tableName="app_community_messages"
+                reactionsTable="app_community_reactions"
                 messages={messagesWithDates}
                 loading={loading}
                 onSendText={sendTextMessage}
@@ -572,7 +555,7 @@ export default function CommunityChatScreen() {
                 typingIndicatorComponent={null}
                 flatListRef={flatListRef}
                 userId={user?.id}
-                contentContainerStyle={[ChatStyles.messagesList, { paddingBottom: insets.top + (announcements.length > 0 ? 130 : 70), paddingTop: 20 }]}
+                contentContainerStyle={[ChatStyles.messagesList, { paddingBottom: insets.top + (announcements.length > 0 ? 140 : 80), paddingTop: 20 }]}
                 inverted={true}
                 reactions={reactions}
                 onReact={handleReact}

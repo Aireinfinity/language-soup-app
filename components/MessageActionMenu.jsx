@@ -2,7 +2,9 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, TouchableWithoutFeedback, Modal, Animated, Dimensions } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { MessageCircle, Copy, Share2, Trash2, Edit2 } from 'lucide-react-native';
-import { MessageBubble } from './MessageBubble';
+
+// Removed circular import of MessageBubble. It will be required lazily inside the component.
+
 
 const REACTIONS = ['❤️', '😂', '😮', '😢', '🙏', '👍', '➕'];
 
@@ -11,9 +13,9 @@ export function MessageActionMenu({
     onReact,
     onReply,
     onCopy,
-    onForward,
     onEdit,
     onDelete,
+    onShowMoreReactions,
     onClose,
     message,
     isMe,
@@ -100,176 +102,202 @@ export function MessageActionMenu({
                                 position: 'absolute',
                                 top: messageLayout.y - 2, // Slight adjustment for modal skew
                                 left: isMe ? messageLayout.x : messageLayout.x - 40, // Shift left if avatar is present
-                                width: isMe ? messageLayout.width + 40 : messageLayout.width + 40, // Allow space for avatar
+                                width: isMe ? messageLayout.width : messageLayout.width + 40, // Allow space for avatar only for others
                                 zIndex: 50,
                             }}
                         >
-                            <MessageBubble
-                                message={message}
-                                isMe={isMe}
-                                showLanguageFlags={showLanguageFlags}
-                                senderKey={senderKey}
-                                reactions={reactions || []}
-                                onReact={() => { }}
-                                onReactionPress={onReactionPress}
-                                onReply={() => { }}
-                                onEdit={() => { }}
-                                onDelete={() => { }}
-                                groupName={groupName}
-                                isSpotlight={true}
-                            />
+                            {(() => {
+                                const { MessageBubble: LazyMessageBubble } = require('./MessageBubble');
+                                return (
+                                    <LazyMessageBubble
+                                        message={message}
+                                        isMe={isMe}
+                                        showLanguageFlags={showLanguageFlags}
+                                        senderKey={senderKey}
+                                        reactions={reactions || []}
+                                        onReact={() => { }}
+                                        onReactionPress={onReactionPress}
+                                        onReply={() => { }}
+                                        onEdit={() => { }}
+                                        onDelete={() => { }}
+                                        groupName={groupName}
+                                        isSpotlight={true}
+                                    />
+                                );
+                            })()}
                         </View>
                     )}
 
                     <TouchableWithoutFeedback>
                         <View style={styles.menuContainer}>
-                            {messageLayout && (
-                                <>
-                                    {/* Reactions Row - centered above message */}
-                                    <Animated.View
-                                        style={[
-                                            styles.reactionsRowPositioned,
-                                            {
-                                                top: messageLayout.y - 46, // ~8px above the bubble
-                                                left: messageLayout.x,
-                                                width: messageLayout.width,
-                                                alignItems: 'center', // Center over the bubble
-                                                transform: [{ scale: scaleAnim }],
-                                                opacity: fadeAnim
-                                            }
-                                        ]}
-                                    >
-                                        <BlurView intensity={95} tint="light" style={styles.reactionsRow}>
-                                            {REACTIONS.map((emoji, index) => (
-                                                <Animated.View
-                                                    key={index}
-                                                    style={{
-                                                        opacity: emojiAnims[index],
-                                                        transform: [{
-                                                            scale: emojiAnims[index].interpolate({
-                                                                inputRange: [0, 1],
-                                                                outputRange: [0.3, 1]
-                                                            })
-                                                        }]
+                            {messageLayout && (() => {
+                                const screenHeight = Dimensions.get('window').height;
+                                const showReactionsBelow = messageLayout.y < 80;
+                                const estimatedMenuHeight = isMe ? 240 : 180;
+                                const showMenuAbove = (screenHeight - (messageLayout.y + messageLayout.height)) < estimatedMenuHeight + 20;
+
+                                // Base positions
+                                let reactionsTop = messageLayout.y - 46;
+                                let actionsTop = messageLayout.y + messageLayout.height + 8;
+
+                                // Flip logic
+                                if (showReactionsBelow) {
+                                    reactionsTop = messageLayout.y + messageLayout.height + 8;
+                                    actionsTop = reactionsTop + 54; // Below reactions
+                                } else if (showMenuAbove) {
+                                    actionsTop = messageLayout.y - estimatedMenuHeight - 8;
+                                    reactionsTop = actionsTop - 54; // Above menu
+                                }
+
+                                return (
+                                    <>
+                                        {/* Reactions Row */}
+                                        <Animated.View
+                                            style={[
+                                                styles.reactionsRowPositioned,
+                                                {
+                                                    top: reactionsTop,
+                                                    left: messageLayout.x,
+                                                    width: messageLayout.width,
+                                                    alignItems: 'center',
+                                                    transform: [{ scale: scaleAnim }],
+                                                    opacity: fadeAnim
+                                                }
+                                            ]}
+                                        >
+                                            <BlurView intensity={95} tint="light" style={styles.reactionsRow}>
+                                                {REACTIONS.map((emoji, index) => (
+                                                    <Animated.View
+                                                        key={index}
+                                                        style={{
+                                                            opacity: emojiAnims[index],
+                                                            transform: [{
+                                                                scale: emojiAnims[index].interpolate({
+                                                                    inputRange: [0, 1],
+                                                                    outputRange: [0.3, 1]
+                                                                })
+                                                            }]
+                                                        }}
+                                                    >
+                                                        <Pressable
+                                                            onPress={() => {
+                                                                if (emoji === '➕') {
+                                                                    const { haptics } = require('../utils/haptics');
+                                                                    haptics.light();
+                                                                    onClose();
+                                                                    if (onShowMoreReactions) {
+                                                                        onShowMoreReactions();
+                                                                    }
+                                                                } else {
+                                                                    const { haptics } = require('../utils/haptics');
+                                                                    haptics.light();
+                                                                    onReact(emoji);
+                                                                    onClose();
+                                                                }
+                                                            }}
+                                                            style={styles.reactionButton}
+                                                        >
+                                                            <Text style={styles.reactionEmoji}>{emoji}</Text>
+                                                        </Pressable>
+                                                    </Animated.View>
+                                                ))}
+                                            </BlurView>
+                                        </Animated.View>
+
+                                        {/* Actions Row */}
+                                        <Animated.View
+                                            style={[
+                                                styles.actionsRowPositioned,
+                                                {
+                                                    top: actionsTop,
+                                                    left: isMe ? undefined : (messageLayout.x - 20 < 10 ? 10 : messageLayout.x - 20),
+                                                    right: isMe ? (Dimensions.get('window').width - (messageLayout.x + messageLayout.width) - 20 < 10 ? 10 : Dimensions.get('window').width - (messageLayout.x + messageLayout.width) - 20) : undefined,
+                                                    transform: [{ scale: scaleAnim }],
+                                                    opacity: fadeAnim
+                                                }
+                                            ]}
+                                        >
+                                            <BlurView intensity={100} tint="light" style={styles.actionsRow}>
+                                                <Pressable
+                                                    onPress={() => {
+                                                        const { haptics } = require('../utils/haptics');
+                                                        haptics.light();
+                                                        onReply();
+                                                        onClose();
                                                     }}
+                                                    style={styles.actionButton}
                                                 >
-                                                    <Pressable
-                                                        onPress={() => {
-                                                            if (emoji === '➕') {
-                                                                const { Alert } = require('react-native');
-                                                                Alert.alert('More Reactions', 'Custom emoji selector coming soon!');
-                                                                onClose();
-                                                            } else {
+                                                    <Text style={styles.actionText}>Reply</Text>
+                                                    <MessageCircle size={20} color="#333" />
+                                                </Pressable>
+
+                                                <View style={styles.separator} />
+
+                                                <Pressable
+                                                    onPress={() => {
+                                                        const { haptics } = require('../utils/haptics');
+                                                        haptics.light();
+                                                        onCopy();
+                                                        onClose();
+                                                    }}
+                                                    style={styles.actionButton}
+                                                >
+                                                    <Text style={styles.actionText}>Copy</Text>
+                                                    <Copy size={20} color="#333" />
+                                                </Pressable>
+
+                                                <View style={styles.separator} />
+
+                                                <Pressable
+                                                    onPress={() => {
+                                                        const { Alert } = require('react-native');
+                                                        const { haptics } = require('../utils/haptics');
+                                                        haptics.light();
+                                                        Alert.alert('Coming Soon', 'Translate feature is coming soon!');
+                                                        onClose();
+                                                    }}
+                                                    style={styles.actionButton}
+                                                >
+                                                    <Text style={styles.actionText}>Translate</Text>
+                                                    <Share2 size={20} color="#333" />
+                                                </Pressable>
+
+                                                {isMe && (
+                                                    <>
+                                                        <View style={styles.separator} />
+                                                        <Pressable
+                                                            onPress={() => {
                                                                 const { haptics } = require('../utils/haptics');
-                                                                haptics.impactLight();
-                                                                onReact(emoji);
+                                                                haptics.light();
+                                                                onEdit();
                                                                 onClose();
-                                                            }
-                                                        }}
-                                                        style={styles.reactionButton}
-                                                    >
-                                                        <Text style={styles.reactionEmoji}>{emoji}</Text>
-                                                    </Pressable>
-                                                </Animated.View>
-                                            ))}
-                                        </BlurView>
-                                    </Animated.View>
+                                                            }}
+                                                            style={styles.actionButton}
+                                                        >
+                                                            <Text style={styles.actionText}>Edit</Text>
+                                                            <Edit2 size={20} color="#333" />
+                                                        </Pressable>
 
-                                    {/* Actions Row - Vertical for WhatsApp parity */}
-                                    <Animated.View
-                                        style={[
-                                            styles.actionsRowPositioned,
-                                            {
-                                                top: messageLayout.y + messageLayout.height + 8,
-                                                left: isMe ? 0 : messageLayout.x, // For 'Them', align to left edge
-                                                right: isMe ? (Dimensions.get('window').width - (messageLayout.x + messageLayout.width)) : 0,
-                                                width: isMe ? '100%' : messageLayout.width,
-                                                alignItems: isMe ? 'flex-end' : 'flex-start',
-                                                transform: [{ scale: scaleAnim }],
-                                                opacity: fadeAnim
-                                            }
-                                        ]}
-                                    >
-                                        <BlurView intensity={100} tint="light" style={styles.actionsRow}>
-                                            <Pressable
-                                                onPress={() => {
-                                                    const { haptics } = require('../utils/haptics');
-                                                    haptics.impactLight();
-                                                    onReply();
-                                                    onClose();
-                                                }}
-                                                style={styles.actionButton}
-                                            >
-                                                <Text style={styles.actionText}>Reply</Text>
-                                                <MessageCircle size={20} color="#333" />
-                                            </Pressable>
-
-                                            <View style={styles.separator} />
-
-                                            <Pressable
-                                                onPress={() => {
-                                                    const { haptics } = require('../utils/haptics');
-                                                    haptics.impactLight();
-                                                    onCopy();
-                                                    onClose();
-                                                }}
-                                                style={styles.actionButton}
-                                            >
-                                                <Text style={styles.actionText}>Copy</Text>
-                                                <Copy size={20} color="#333" />
-                                            </Pressable>
-
-                                            <View style={styles.separator} />
-
-                                            <Pressable
-                                                onPress={() => {
-                                                    const { Alert } = require('react-native');
-                                                    const { haptics } = require('../utils/haptics');
-                                                    haptics.impactLight();
-                                                    Alert.alert('Coming Soon', 'Translate feature is coming soon!');
-                                                    onClose();
-                                                }}
-                                                style={styles.actionButton}
-                                            >
-                                                <Text style={styles.actionText}>Translate</Text>
-                                                <Share2 size={20} color="#333" />
-                                            </Pressable>
-
-                                            {isMe && (
-                                                <>
-                                                    <View style={styles.separator} />
-                                                    <Pressable
-                                                        onPress={() => {
-                                                            const { haptics } = require('../utils/haptics');
-                                                            haptics.impactLight();
-                                                            onEdit();
-                                                            onClose();
-                                                        }}
-                                                        style={styles.actionButton}
-                                                    >
-                                                        <Text style={styles.actionText}>Edit</Text>
-                                                        <Edit2 size={20} color="#333" />
-                                                    </Pressable>
-
-                                                    <View style={styles.separator} />
-                                                    <Pressable
-                                                        onPress={() => {
-                                                            const { haptics } = require('../utils/haptics');
-                                                            haptics.impactLight();
-                                                            onDelete();
-                                                            onClose();
-                                                        }}
-                                                        style={styles.actionButton}
-                                                    >
-                                                        <Text style={[styles.actionText, { color: '#ff3b30' }]}>Delete</Text>
-                                                        <Trash2 size={20} color="#ff3b30" />
-                                                    </Pressable>
-                                                </>
-                                            )}
-                                        </BlurView>
-                                    </Animated.View>
-                                </>
-                            )}
+                                                        <View style={styles.separator} />
+                                                        <Pressable
+                                                            onPress={() => {
+                                                                const { haptics } = require('../utils/haptics');
+                                                                haptics.light();
+                                                                onDelete();
+                                                                onClose();
+                                                            }}
+                                                            style={styles.actionButton}
+                                                        >
+                                                            <Text style={[styles.actionText, { color: '#ff3b30' }]}>Delete</Text>
+                                                            <Trash2 size={20} color="#ff3b30" />
+                                                        </Pressable>
+                                                    </>
+                                                )}
+                                            </BlurView>
+                                        </Animated.View>
+                                    </>
+                                );
+                            })()}
                         </View>
                     </TouchableWithoutFeedback>
                 </Animated.View>
