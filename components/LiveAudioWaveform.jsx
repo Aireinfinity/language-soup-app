@@ -42,7 +42,7 @@ export function LiveAudioWaveform({ metering, recordingDuration, isRecording }) 
             animationFrame.current = requestAnimationFrame(updateBars);
         };
 
-        if (recordingDuration > 0) {
+        if (isRecording) { // Trigger immediately on isRecording
             animationFrame.current = requestAnimationFrame(updateBars);
         }
 
@@ -51,7 +51,7 @@ export function LiveAudioWaveform({ metering, recordingDuration, isRecording }) 
                 cancelAnimationFrame(animationFrame.current);
             }
         };
-    }, [recordingDuration]); // Trigger loop update on duration change for that "faster" feel
+    }, [isRecording]); // Keep the isRecording fix for immediate display
 
     useEffect(() => {
         if (recordingDuration === 0) {
