@@ -6,6 +6,8 @@ import { supabase } from '../../lib/supabase';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { FloatingAvatars } from '../../components/FloatingAvatars';
+import { UserPreviewModal } from '../../components/UserPreviewModal';
 
 // Brand Colors
 const SOUP_COLORS = {
@@ -30,11 +32,14 @@ export default function CommunityScreen() {
     const [expandedAnnouncements, setExpandedAnnouncements] = useState({});
     const [knownIssues, setKnownIssues] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
+    const [activeUsers, setActiveUsers] = useState([]);
+    const [selectedUser, setSelectedUser] = useState(null);
 
     useFocusEffect(
         React.useCallback(() => {
             loadData();
             loadUnreadCount();
+            loadActiveUsers();
         }, [])
     );
 
@@ -90,6 +95,45 @@ export default function CommunityScreen() {
             console.error('Error loading community data:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadActiveUsers = async () => {
+        try {
+            // Fetch all users (not just photos/soup avatars)
+            const { data: usersData } = await supabase
+                .from('app_users')
+                .select('id, display_name, avatar_url, status_text, fluent_languages, learning_languages')
+                .neq('id', user?.id) // Exclude current user
+                .not('display_name', 'is', null)
+                .neq('display_name', 'User') // Exclude test users
+                .neq('display_name', 'user') // Exclude test users (lowercase)
+                .limit(30);
+
+            // Sort: 1) Photos, 2) Soup avatars, 3) Everyone else, then alphabetically
+            const sorted = (usersData || [])
+                .sort((a, b) => {
+                    const aIsPhoto = a.avatar_url?.startsWith('http');
+                    const bIsPhoto = b.avatar_url?.startsWith('http');
+                    const aIsSoup = a.avatar_url?.includes('avatars/');
+                    const bIsSoup = b.avatar_url?.includes('avatars/');
+
+                    // Photos first
+                    if (aIsPhoto && !bIsPhoto) return -1;
+                    if (!aIsPhoto && bIsPhoto) return 1;
+
+                    // Then soup avatars
+                    if (aIsSoup && !bIsSoup) return -1;
+                    if (!aIsSoup && bIsSoup) return 1;
+
+                    // Then alphabetically
+                    return (a.display_name || '').localeCompare(b.display_name || '');
+                })
+                .slice(0, 15);
+
+            setActiveUsers(sorted);
+        } catch (error) {
+            console.error('Error loading active users:', error);
         }
     };
 
@@ -220,6 +264,17 @@ export default function CommunityScreen() {
                     />
                 </View>
 
+                {/* The Community - Floating Avatars */}
+                {activeUsers.length > 0 && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>🍜 The Community</Text>
+                        <FloatingAvatars
+                            users={activeUsers}
+                            onUserPress={(user) => setSelectedUser(user)}
+                        />
+                    </View>
+                )}
+
                 {/* Admin Announcements */}
                 {announcements.length > 0 && (
                     <View style={styles.section}>
@@ -264,6 +319,13 @@ export default function CommunityScreen() {
                     </View>
                 )}
             </ScrollView>
+
+            {/* User Preview Modal */}
+            <UserPreviewModal
+                visible={!!selectedUser}
+                user={selectedUser}
+                onClose={() => setSelectedUser(null)}
+            />
         </SafeAreaView>
     );
 }
