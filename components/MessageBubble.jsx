@@ -3,11 +3,11 @@ import { View, Text, StyleSheet, Image, Pressable, ActivityIndicator, Platform, 
 import { Video } from 'expo-av';
 import { ChatStyles } from '../constants/ChatStyles';
 import { AudioMessage } from './AudioMessage';
-import { MessageActionMenu } from './MessageActionMenu';
-import { ReactionViewerModal } from "./ReactionViewerModal";
-
-import { getLanguageFlag } from '../utils/languageFlags';
 import { ReactionPicker } from './ReactionPicker';
+import { MessageActionMenu } from './MessageActionMenu';
+import { ReactionViewerModal } from './ReactionViewerModal';
+import { getLanguageFlag } from '../utils/languageFlags';
+import { UserPreviewModal } from './UserPreviewModal';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -40,6 +40,7 @@ export function MessageBubble({
     const [reactionUsers, setReactionUsers] = useState({});
     const bubbleRef = useRef(null);
     const [selectedImage, setSelectedImage] = useState(null);
+    const [selectedUserProfile, setSelectedUserProfile] = useState(null);
     const isSending = message.status === 'sending' || message.status === 'uploading';
     const isDeleted = !!message.deleted_at;
     const sender = message[senderKey];
@@ -139,9 +140,15 @@ export function MessageBubble({
         }
         setShowActionMenu(false);
     };
-
+    // Avatar rendering
     const avatarElement = sender && !isMe && sender.avatar_url ? (
-        <Image source={{ uri: sender.avatar_url }} style={ChatStyles.avatar} />
+        <Pressable onPress={() => setSelectedUserProfile(sender)}>
+            <Image source={{ uri: sender.avatar_url }} style={ChatStyles.avatar} />
+        </Pressable>
+    ) : sender && !isMe ? (
+        <View style={ChatStyles.avatarPlaceholder}>
+            <Text style={ChatStyles.avatarInitial}>{sender.display_name?.[0]?.toUpperCase() || '?'}</Text>
+        </View>
     ) : null;
 
     const bubbleContent = (
@@ -417,6 +424,13 @@ export function MessageBubble({
                     />
                 </Pressable>
             </Modal>
+
+            {/* User Profile Preview Modal */}
+            <UserPreviewModal
+                visible={!!selectedUserProfile}
+                user={selectedUserProfile}
+                onClose={() => setSelectedUserProfile(null)}
+            />
         </View>
     );
 }
