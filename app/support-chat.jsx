@@ -255,51 +255,59 @@ export default function SupportChatScreen() {
         }
     };
 
-    const sendImageMessage = async (imageUri) => {
-        console.log('[Support Image] Starting upload for:', imageUri);
+    const sendImageMessage = async (media) => {
+        // Handle both old format (string) and new format (object)
+        const imageUri = typeof media === 'string' ? media : media.uri;
+        const mediaType = typeof media === 'string' ? 'image' : (media.type || 'image');
+        const caption = typeof media === 'string' ? '' : (media.caption || '');
+
+        console.log('[Support Media] Starting upload for:', { imageUri, mediaType, caption });
         try {
-            console.log('[Support Image] Reading as base64...');
+            console.log('[Support Media] Reading as base64...');
             const base64 = await FileSystem.readAsStringAsync(imageUri, {
                 encoding: FileSystem.EncodingType.Base64,
             });
-            console.log('[Support Image] Base64 length:', base64.length);
+            console.log('[Support Media] Base64 length:', base64.length);
 
-            const fileName = `support/${user.id}/image_${Date.now()}.jpg`;
-            console.log('[Support Image] Uploading to:', fileName);
+            const extension = mediaType === 'video' ? 'mp4' : 'jpg';
+            const contentType = mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
+            const fileName = `support/${user.id}/${mediaType}_${Date.now()}.${extension}`;
+
+            console.log('[Support Media] Uploading to:', fileName);
             const { error: uploadError } = await supabase.storage
                 .from('voice-memos')
-                .upload(fileName, decode(base64), { contentType: 'image/jpeg' });
+                .upload(fileName, decode(base64), { contentType });
 
             if (uploadError) {
-                console.error('[Support Image] Upload error:', uploadError);
+                console.error('[Support Media] Upload error:', uploadError);
                 throw uploadError;
             }
 
-            console.log('[Support Image] Getting public URL...');
+            console.log('[Support Media] Getting public URL...');
             const { data: { publicUrl } } = supabase.storage
                 .from('voice-memos')
                 .getPublicUrl(fileName);
 
-            console.log('[Support Image] Public URL:', publicUrl);
-            console.log('[Support Image] Inserting into database...');
+            console.log('[Support Media] Public URL:', publicUrl);
+            console.log('[Support Media] Inserting into database...');
 
             const { data, error: insertError } = await supabase.from('app_support_messages').insert({
                 user_id: user.id,
-                content: '',
+                content: caption || '',
                 from_admin: false,
-                message_type: 'image',
+                message_type: mediaType,
                 media_url: publicUrl,
             }).select();
 
             if (insertError) {
-                console.error('[Support Image] Database error:', insertError);
+                console.error('[Support Media] Database error:', insertError);
                 throw insertError;
             }
 
-            console.log('[Support Image] Success! Data:', data);
+            console.log('[Support Media] Success! Data:', data);
         } catch (error) {
-            console.error('[Support Image] Complete error:', error);
-            Alert.alert('Image Failed', 'Could not upload image.');
+            console.error('[Support Media] Complete error:', error);
+            Alert.alert(`${mediaType === 'video' ? 'Video' : 'Image'} Failed`, `Could not upload ${mediaType}.`);
         }
     };
 

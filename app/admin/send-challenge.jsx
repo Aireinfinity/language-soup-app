@@ -100,10 +100,7 @@ export default function SendChallengeScreen() {
 
             if (error) throw error;
 
-            // Remove the manual system message insert - the trigger handles it now
-
             // --- SEND PUSH NOTIFICATIONS ---
-            console.log('Sending push notifications...');
 
             // 1. Get all members of the group
             const { data: members } = await supabase

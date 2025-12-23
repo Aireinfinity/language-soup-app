@@ -12,6 +12,7 @@ import { decode } from 'base64-arraybuffer';
 import ViewShot from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import * as MediaLibrary from 'expo-media-library';
+import { Asset } from 'expo-asset';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -35,6 +36,17 @@ const EXAMPLE_TAGLINES = [
     'slay slay slay',
     'always late to challenges',
     'polyglot in training',
+];
+
+// Soup avatars from onboarding
+const SOUP_AVATARS = [
+    { id: 'cereal', name: 'cereal soup', source: require('../../assets/images/avatars/cereal.png') },
+    { id: 'tomato', name: 'tomato soup', source: require('../../assets/images/avatars/tomato_soup.png') },
+    { id: 'salad', name: 'salad soup', source: require('../../assets/images/avatars/salad.png') },
+    { id: 'acai', name: 'acai soup', source: require('../../assets/images/avatars/acai.png') },
+    { id: 'chicken', name: 'chicken soup', source: require('../../assets/images/avatars/chicken_soup.png') },
+    { id: 'water', name: 'ice soup', source: require('../../assets/images/avatars/water_soup.png') },
+    { id: 'bathtub', name: 'human soup', source: require('../../assets/images/avatars/bathtub_soup.png') },
 ];
 
 export default function ProfileScreen() {
@@ -62,6 +74,8 @@ export default function ProfileScreen() {
     const [newSoupFlavor, setNewSoupFlavor] = useState('');
     const [statsTab, setStatsTab] = useState('input'); // 'input' | 'output'
     const [showLevelsInfo, setShowLevelsInfo] = useState(false);
+    const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+    const [selectedSoupId, setSelectedSoupId] = useState(null);
     const wrappedRef = useRef();
 
     useEffect(() => {
@@ -207,32 +221,50 @@ export default function ProfileScreen() {
 
     const pickImage = async () => {
         try {
+            console.log('[Profile] pickImage called');
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            console.log('[Profile] Permission status:', status);
             if (status !== 'granted') return Alert.alert('Permission Required', 'Needs photo access');
 
+            console.log('[Profile] Launching image picker...');
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                mediaTypes: 'images',
                 allowsEditing: true,
                 aspect: [1, 1],
                 quality: 0.8,
             });
 
+            console.log('[Profile] Picker result:', { canceled: result.canceled, hasAssets: !!result.assets?.[0] });
             if (!result.canceled && result.assets[0]) {
-                await uploadAvatar(result.assets[0].uri);
+                console.log('[Profile] Starting upload...');
+                await uploadAvatar(result.assets[0].uri, true);
             }
         } catch (error) {
-            console.error('Error picking image:', error);
+            console.error('[Profile] Error picking image:', error);
+            Alert.alert('Error', 'Failed to pick image. Please try again.');
         }
     };
 
-    const uploadAvatar = async (uri) => {
+    const handleSelectSoup = async (soup) => {
+        setSelectedSoupId(soup.id);
+        setShowAvatarPicker(false);
+
+        // Upload soup avatar
+        const asset = Asset.fromModule(soup.source);
+        await asset.downloadAsync();
+        await uploadAvatar(asset.localUri, false);
+    };
+
+    const uploadAvatar = async (uri, isCustomPhoto = true) => {
         setUploading(true);
         try {
             const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-            const filePath = `${authUser.id}/avatar-${Date.now()}.jpg`;
+            const ext = isCustomPhoto ? 'jpg' : 'png';
+            const mimeType = isCustomPhoto ? 'image/jpeg' : 'image/png';
+            const filePath = `${authUser.id}/avatar-${Date.now()}.${ext}`;
 
             const { error: uploadError } = await supabase.storage.from('avatars')
-                .upload(filePath, decode(base64), { contentType: 'image/jpeg', upsert: true });
+                .upload(filePath, decode(base64), { contentType: mimeType, upsert: true });
 
             if (uploadError) {
                 console.error('Storage upload error:', uploadError);
@@ -268,9 +300,25 @@ export default function ProfileScreen() {
 
     // --- RENDER HELPERS ---
 
+    const showAvatarOptions = () => {
+        Alert.alert(
+            'Choose Avatar',
+            'Select a photo or pick a soup',
+            [
+                { text: 'Upload Photo', onPress: pickImage },
+                ...SOUP_AVATARS.map(soup => ({
+                    text: soup.name,
+                    onPress: () => handleSelectSoup(soup)
+                })),
+                { text: 'Cancel', style: 'cancel' }
+            ],
+            { cancelable: true }
+        );
+    };
+
     const renderIdentity = () => (
         <View style={styles.identitySection}>
-            <Pressable onPress={pickImage} style={styles.avatarContainer}>
+            <Pressable onPress={showAvatarOptions} style={styles.avatarContainer}>
                 {user?.avatar_url ? (
                     <Image source={{ uri: user.avatar_url }} style={styles.avatar} />
                 ) : (
@@ -1015,6 +1063,66 @@ export default function ProfileScreen() {
                         <Text style={styles.scrollPrompt}>👆 Scroll to see all levels</Text>
                     </View>
                 </View>
+            </Modal>
+
+            {/* Avatar Picker Modal */}
+            <Modal
+                visible={showAvatarPicker}
+                animationType="slide"
+                presentationStyle="formSheet"
+                onRequestClose={() => setShowAvatarPicker(false)}
+            >
+                <SafeAreaView style={styles.modalContainer} edges={['top']}>
+                    <View style={styles.modalHeader}>
+                        <Pressable onPress={() => setShowAvatarPicker(false)}>
+                            <Text style={styles.modalCancel}>Cancel</Text>
+                        </Pressable>
+                        <Text style={styles.modalTitle}>Choose Avatar</Text>
+                        <View style={{ width: 60 }} />
+                    </View>
+
+                    <ScrollView style={styles.modalScroll} contentContainerStyle={{ paddingBottom: 40 }}>
+                        <View style={styles.modalContent}>
+                            <Text style={styles.sectionTitle}>Choose Your Avatar</Text>
+                            <Text style={styles.sectionSubtitle}>Upload a photo or pick a soup</Text>
+
+                            {/* Avatar Grid */}
+                            <View style={styles.soupGrid}>
+                                {/* Photo Upload Option */}
+                                <Pressable
+                                    style={styles.soupOption}
+                                    onPress={() => {
+                                        setShowAvatarPicker(false);
+                                        pickImage();
+                                    }}
+                                >
+                                    <View style={styles.photoUploadIcon}>
+                                        <Camera size={40} color={SOUP_COLORS.blue} />
+                                    </View>
+                                    <Text style={styles.soupName}>your photo</Text>
+                                </Pressable>
+
+                                {/* Soup Avatars */}
+                                {SOUP_AVATARS.map((soup) => (
+                                    <Pressable
+                                        key={soup.id}
+                                        style={[
+                                            styles.soupOption,
+                                            selectedSoupId === soup.id && styles.soupOptionSelected
+                                        ]}
+                                        onPress={() => handleSelectSoup(soup)}
+                                    >
+                                        <Image source={soup.source} style={styles.soupImage} resizeMode="contain" />
+                                        <Text style={[
+                                            styles.soupName,
+                                            selectedSoupId === soup.id && styles.soupNameSelected
+                                        ]}>{soup.name}</Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+                        </View>
+                    </ScrollView>
+                </SafeAreaView>
             </Modal>
         </SafeAreaView>
     );
@@ -2079,5 +2187,105 @@ const styles = StyleSheet.create({
         color: SOUP_COLORS.subtext,
         textAlign: 'right',
         fontStyle: 'italic',
+    },
+    // Avatar Picker Modal Styles
+    photoPickerOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 12,
+        backgroundColor: '#fff',
+        padding: 20,
+        borderRadius: 16,
+        borderWidth: 2,
+        borderColor: SOUP_COLORS.blue,
+        borderStyle: 'dashed',
+        marginBottom: 24,
+    },
+    photoPickerText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: SOUP_COLORS.blue,
+    },
+    divider: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 24,
+        gap: 12,
+    },
+    dividerLine: {
+        flex: 1,
+        height: 1,
+        backgroundColor: '#e0e0e0',
+    },
+    dividerText: {
+        fontSize: 14,
+        color: SOUP_COLORS.subtext,
+        fontStyle: 'italic',
+    },
+    soupGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        gap: 16,
+    },
+    soupOption: {
+        width: '30%',
+        aspectRatio: 0.85,
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: 'transparent',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    soupOptionSelected: {
+        borderColor: SOUP_COLORS.blue,
+        backgroundColor: '#F0F9FF',
+    },
+    soupImage: {
+        width: '80%',
+        height: '70%',
+        marginBottom: 8,
+    },
+    soupName: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: SOUP_COLORS.subtext,
+        textAlign: 'center',
+        lineHeight: 14,
+    },
+    soupNameSelected: {
+        color: SOUP_COLORS.blue,
+    },
+    photoUploadIcon: {
+        width: '80%',
+        height: '70%',
+        marginBottom: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#F0F9FF',
+        borderRadius: 12,
+    },
+    soupSelectorButton: {
+        marginTop: 12,
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: SOUP_COLORS.blue,
+    },
+    soupSelectorText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: SOUP_COLORS.blue,
+        textAlign: 'center',
     },
 });

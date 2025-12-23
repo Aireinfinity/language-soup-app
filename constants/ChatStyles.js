@@ -289,4 +289,11 @@ export const ChatStyles = StyleSheet.create({
         borderRadius: 10,
         overflow: 'hidden',
     },
+    // Image/Video Messages
+    messageImage: {
+        width: 250,
+        height: 250,
+        borderRadius: 12,
+        marginBottom: 4,
+    },
 });

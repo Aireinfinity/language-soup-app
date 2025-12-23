@@ -14,10 +14,10 @@ import { useAuth } from '../../contexts/AuthContext';
 
 // Import delicious soups
 const SOUP_AVATARS = [
-    { id: 'cereal', name: 'cereal', source: require('../../assets/images/avatars/cereal.png') },
+    { id: 'cereal', name: 'cereal soup', source: require('../../assets/images/avatars/cereal.png') },
     { id: 'tomato', name: 'tomato soup', source: require('../../assets/images/avatars/tomato_soup.png') },
-    { id: 'salad', name: 'salad dressing', source: require('../../assets/images/avatars/salad.png') },
-    { id: 'acai', name: 'acai bowl', source: require('../../assets/images/avatars/acai.png') },
+    { id: 'salad', name: 'salad soup', source: require('../../assets/images/avatars/salad.png') },
+    { id: 'acai', name: 'acai soup', source: require('../../assets/images/avatars/acai.png') },
     { id: 'chicken', name: 'chicken soup', source: require('../../assets/images/avatars/chicken_soup.png') },
     { id: 'water', name: 'ice soup', source: require('../../assets/images/avatars/water_soup.png') },
     { id: 'bathtub', name: 'human soup', source: require('../../assets/images/avatars/bathtub_soup.png') },
@@ -41,7 +41,7 @@ export default function AvatarScreen() {
             }
 
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                mediaTypes: 'images',
                 allowsEditing: true,
                 aspect: [1, 1],
                 quality: 0.8,

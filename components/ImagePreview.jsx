@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Image, StyleSheet, Pressable, Text, Modal, ActivityIndicator } from 'react-native';
+import { View, Image, StyleSheet, Pressable, Text, Modal, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { Video } from 'expo-av';
 import { X, Send } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 
@@ -8,8 +9,9 @@ const SOUP_COLORS = {
     pink: '#ec008b',
 };
 
-export function ImagePreview({ visible, imageUri, onSend, onCancel }) {
+export function ImagePreview({ visible, imageUri, mediaType = 'image', onSend, onCancel }) {
     const [isSending, setIsSending] = useState(false);
+    const [caption, setCaption] = useState('');
 
     if (!visible || !imageUri) return null;
 
@@ -17,34 +19,69 @@ export function ImagePreview({ visible, imageUri, onSend, onCancel }) {
         if (isSending) return; // Prevent double-tap
         setIsSending(true);
         try {
-            await onSend();
+            await onSend(caption);
+            setCaption(''); // Clear caption after sending
         } finally {
             setIsSending(false);
         }
     };
+
+    const handleCancel = () => {
+        setCaption(''); // Clear caption on cancel
+        onCancel();
+    };
+
+    const isVideo = mediaType === 'video' || imageUri.toLowerCase().match(/\.(mp4|mov|m4v)$/);
 
     return (
         <Modal
             visible={visible}
             transparent={true}
             animationType="fade"
-            onRequestClose={onCancel}
+            onRequestClose={handleCancel}
         >
-            <View style={styles.container}>
+            <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={styles.container}
+            >
                 <BlurView intensity={95} tint="dark" style={styles.blur}>
                     {/* Header with cancel button */}
                     <View style={styles.header}>
-                        <Pressable onPress={onCancel} style={styles.cancelButton} disabled={isSending}>
+                        <Pressable onPress={handleCancel} style={styles.cancelButton} disabled={isSending}>
                             <X size={28} color="#fff" />
                         </Pressable>
                     </View>
 
-                    {/* Image preview */}
+                    {/* Media preview */}
                     <View style={styles.imageContainer}>
-                        <Image
-                            source={{ uri: imageUri }}
-                            style={styles.image}
-                            resizeMode="contain"
+                        {isVideo ? (
+                            <Video
+                                source={{ uri: imageUri }}
+                                style={styles.image}
+                                useNativeControls
+                                resizeMode="contain"
+                                shouldPlay={false}
+                            />
+                        ) : (
+                            <Image
+                                source={{ uri: imageUri }}
+                                style={styles.image}
+                                resizeMode="contain"
+                            />
+                        )}
+                    </View>
+
+                    {/* Caption input */}
+                    <View style={styles.captionContainer}>
+                        <TextInput
+                            style={styles.captionInput}
+                            placeholder="Add a caption..."
+                            placeholderTextColor="rgba(255,255,255,0.6)"
+                            value={caption}
+                            onChangeText={setCaption}
+                            multiline
+                            maxLength={200}
+                            editable={!isSending}
                         />
                     </View>
 
@@ -69,7 +106,7 @@ export function ImagePreview({ visible, imageUri, onSend, onCancel }) {
                         </Pressable>
                     </View>
                 </BlurView>
-            </View>
+            </KeyboardAvoidingView>
         </Modal>
     );
 }
@@ -106,6 +143,19 @@ const styles = StyleSheet.create({
         width: '100%',
         height: '100%',
         maxHeight: 500,
+    },
+    captionContainer: {
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+    },
+    captionInput: {
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        borderRadius: 20,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        color: '#fff',
+        fontSize: 16,
+        maxHeight: 100,
     },
     footer: {
         paddingBottom: 40,

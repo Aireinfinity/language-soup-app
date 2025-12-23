@@ -77,11 +77,6 @@ export function FloatingReactionPicker({ visible, onReact, onClose, isMe, messag
                         <Text style={styles.actionLabel}>React</Text>
                     </Pressable>
 
-                    <Pressable style={styles.actionButton}>
-                        <Text style={styles.actionEmoji}>💬</Text>
-                        <Text style={styles.actionLabel}>Reply</Text>
-                    </Pressable>
-
                     {canEdit && (
                         <Pressable style={styles.actionButton} onPress={handleEdit}>
                             <Text style={styles.actionEmoji}>✏️</Text>

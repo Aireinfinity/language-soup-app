@@ -48,8 +48,6 @@ export function AudioPlayerProvider({ children }) {
 
     const playAudio = async (url, audioDuration, messageId, senderName, senderAvatar = null, senderStatus = null, groupName = null) => {
         try {
-            console.log('[AudioPlayer] playAudio called:', { url, messageId, currentAudio: currentAudio?.messageId });
-
             // If clicking the same audio that's playing, toggle pause/play
             if (currentAudio?.messageId === messageId && soundRef.current) {
                 const status = await soundRef.current.getStatusAsync();
@@ -67,7 +65,6 @@ export function AudioPlayerProvider({ children }) {
 
             // Stop and unload previous audio
             if (soundRef.current) {
-                console.log('[AudioPlayer] Stopping previous audio');
                 await soundRef.current.unloadAsync();
                 soundRef.current = null;
             }
@@ -79,8 +76,6 @@ export function AudioPlayerProvider({ children }) {
                 staysActiveInBackground: true, // Keep playing in background
                 shouldDuckAndroid: true,
             });
-
-            console.log('[AudioPlayer] Creating new sound from:', url);
 
             // Create and play new audio
             const { sound, status } = await Audio.Sound.createAsync(
@@ -109,8 +104,6 @@ export function AudioPlayerProvider({ children }) {
             if (status.durationMillis) {
                 setDuration(status.durationMillis);
             }
-
-            console.log('[AudioPlayer] Audio playing successfully');
         } catch (error) {
             console.error('[AudioPlayer] Error playing audio:', error);
         }

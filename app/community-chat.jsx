@@ -388,33 +388,48 @@ export default function CommunityChatScreen() {
         }
     };
 
-    const pickImage = async () => {
+    const pickImage = async (media) => {
         try {
-            const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: 'Images',
-                allowsEditing: false,
-                quality: 0.8,
-            });
+            // Handle both direct call (old) and SharedChatUI call (new with media object)
+            if (media && typeof media === 'object' && media.uri) {
+                // Called from SharedChatUI with media object
+                await sendImageMessage(media);
+            } else {
+                // Direct call - shouldn't happen anymore but keep for safety
+                const result = await ImagePicker.launchImageLibraryAsync({
+                    mediaTypes: ['images', 'videos'],
+                    allowsEditing: false,
+                    quality: 0.8,
+                });
 
-            if (!result.canceled && result.assets[0]) {
-                await sendImageMessage(result.assets[0].uri);
+                if (!result.canceled && result.assets[0]) {
+                    await sendImageMessage({ uri: result.assets[0].uri, type: 'image', caption: '' });
+                }
             }
         } catch (error) {
             console.error('Error picking image:', error);
-            Alert.alert('Error', 'Failed to pick image');
+            Alert.alert('Error', 'Failed to pick media');
         }
     };
 
-    const sendImageMessage = async (imageUri) => {
+    const sendImageMessage = async (media) => {
         try {
+            // Handle both old format (string) and new format (object)
+            const imageUri = typeof media === 'string' ? media : media.uri;
+            const mediaType = typeof media === 'string' ? 'image' : (media.type || 'image');
+            const caption = typeof media === 'string' ? '' : (media.caption || '');
+
             const base64 = await FileSystem.readAsStringAsync(imageUri, {
                 encoding: FileSystem.EncodingType.Base64,
             });
 
-            const fileName = `community/image_${Date.now()}.jpg`;
+            const extension = mediaType === 'video' ? 'mp4' : 'jpg';
+            const contentType = mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
+            const fileName = `community/${mediaType}_${Date.now()}.${extension}`;
+
             const { error: uploadError } = await supabase.storage
                 .from('voice-memos')
-                .upload(fileName, decode(base64), { contentType: 'image/jpeg' });
+                .upload(fileName, decode(base64), { contentType });
 
             if (uploadError) throw uploadError;
 
@@ -424,12 +439,13 @@ export default function CommunityChatScreen() {
 
             await supabase.from('app_community_messages').insert({
                 user_id: user.id,
-                content: publicUrl, // Store URL in content field like voice messages
-                message_type: 'image',
+                content: caption || publicUrl, // Store caption if provided, otherwise URL
+                media_url: publicUrl, // Store media URL separately
+                message_type: mediaType,
             });
         } catch (error) {
-            console.error('Error uploading image:', error);
-            Alert.alert('Image Failed', 'Could not upload image.');
+            console.error('Error uploading media:', error);
+            Alert.alert(`${mediaType === 'video' ? 'Video' : 'Image'} Failed`, `Could not upload ${mediaType}.`);
         }
     };
 

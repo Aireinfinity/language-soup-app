@@ -100,6 +100,11 @@ export function SharedChatUI({
     };
 
     const handleEdit = (message) => {
+        // Don't allow editing deleted messages
+        if (message.deleted_at || message.message_type === 'system') {
+            return;
+        }
+
         setEditingMessage({
             messageId: message.id,
             originalContent: message.content
@@ -209,6 +214,7 @@ export function SharedChatUI({
     const internalFlatListRef = useRef(null);
     const listRef = flatListRef || internalFlatListRef;
     const [imagePreview, setImagePreview] = useState(null);
+    const [mediaType, setMediaType] = useState('image');
 
     // Dynamic focus/blur for input context
     useEffect(() => {
@@ -220,25 +226,30 @@ export function SharedChatUI({
     const handlePickImage = async () => {
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: 'Images',
+                mediaTypes: ['images', 'videos'],
                 allowsEditing: false,
                 quality: 0.8,
+                videoMaxDuration: 60, // 60 seconds max
             });
 
             if (!result.canceled && result.assets[0]) {
-                setImagePreview(result.assets[0].uri);
+                const asset = result.assets[0];
+                setImagePreview(asset.uri);
+                // Detect media type from asset or URI
+                setMediaType(asset.type || (asset.uri.match(/\.(mp4|mov|m4v)$/i) ? 'video' : 'image'));
             }
         } catch (error) {
             console.error('[SharedChatUI] Error picking image:', error);
         }
     };
 
-    const handleSendImage = async () => {
-        console.log('[SharedChatUI] handleSendImage called', { imagePreview, hasCallback: !!onPickImage });
+    const handleSendImage = async (caption) => {
+        console.log('[SharedChatUI] handleSendImage called', { imagePreview, mediaType, caption, hasCallback: !!onPickImage });
         if (imagePreview && onPickImage) {
-            console.log('[SharedChatUI] Calling onPickImage with:', imagePreview);
-            await onPickImage(imagePreview);
+            console.log('[SharedChatUI] Calling onPickImage with:', { uri: imagePreview, type: mediaType, caption });
+            await onPickImage({ uri: imagePreview, type: mediaType, caption });
             setImagePreview(null);
+            setMediaType('image');
         } else {
             console.log('[SharedChatUI] NOT calling - missing:', { imagePreview: !!imagePreview, onPickImage: !!onPickImage });
         }
@@ -246,6 +257,7 @@ export function SharedChatUI({
 
     const handleCancelImage = () => {
         setImagePreview(null);
+        setMediaType('image');
     };
 
     const renderMessage = ({ item }) => {
@@ -402,6 +414,7 @@ export function SharedChatUI({
             <ImagePreview
                 visible={!!imagePreview}
                 imageUri={imagePreview}
+                mediaType={mediaType}
                 onSend={handleSendImage}
                 onCancel={handleCancelImage}
             />

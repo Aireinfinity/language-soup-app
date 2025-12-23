@@ -46,7 +46,13 @@
       ],
       "expo-asset",
       "expo-audio",
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Language Soup to access your photos to set your profile picture"
+        }
+      ]
     ],
     "platforms": [
       "ios"

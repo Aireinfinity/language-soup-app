@@ -53,7 +53,7 @@ function addDateSeparators(messages) {
 
 export default function ChatScreen() {
     const { user } = useAuth();
-    const { clearNotifications } = useNotifications();
+    const { clearNotifications, clearGroupNotifications } = useNotifications();
     const router = useRouter();
     const { id: groupId } = useLocalSearchParams();
     const flatListRef = useRef(null);
@@ -90,7 +90,7 @@ export default function ChatScreen() {
                 .eq('group_id', groupId);
         };
 
-        clearNotifications();
+        clearGroupNotifications(groupId);
         markAsRead();
     }, [groupId]);
 
@@ -557,21 +557,27 @@ export default function ChatScreen() {
 
 
 
-    const sendImageMessage = async (imageUri) => {
-        console.log('[Image Send] Starting upload for:', imageUri);
+    const sendImageMessage = async (media) => {
+        // Handle both old format (string) and new format (object)
+        const imageUri = typeof media === 'string' ? media : media.uri;
+        const mediaType = typeof media === 'string' ? 'image' : (media.type || 'image');
+        const caption = typeof media === 'string' ? '' : (media.caption || '');
+
+        console.log('[Media Send] Starting upload for:', { imageUri, mediaType, caption });
         if (!imageUri || !user) {
-            console.error('[Image Send] Missing imageUri or user');
+            console.error('[Media Send] Missing imageUri or user');
             return;
         }
 
-        const tempId = `temp-image-${Date.now()}`;
+        const tempId = `temp-${mediaType}-${Date.now()}`;
         const optimisticMessage = {
             id: tempId,
             sender_id: user.id,
             group_id: groupId,
             challenge_id: currentChallenge?.id || null,
-            message_type: 'image',
+            message_type: mediaType,
             media_url: imageUri,
+            content: caption, // Store caption in content field
             created_at: new Date().toISOString(),
             status: 'uploading',
             sender: {
@@ -581,35 +587,38 @@ export default function ChatScreen() {
             },
         };
 
-        console.log('[Image Send] Adding optimistic message');
+        console.log('[Media Send] Adding optimistic message');
         setMessages((prev) => [...prev, optimisticMessage]);
         setTimeout(() => scrollToBottom(), 50);
 
         try {
-            console.log('[Image Send] Reading file as base64...');
+            console.log('[Media Send] Reading file as base64...');
             const base64 = await FileSystem.readAsStringAsync(imageUri, {
                 encoding: FileSystem.EncodingType.Base64,
             });
-            console.log('[Image Send] Base64 length:', base64.length);
+            console.log('[Media Send] Base64 length:', base64.length);
 
-            const fileName = `chat-images/${groupId}/${user.id}/image_${Date.now()}.jpg`;
-            console.log('[Image Send] Uploading to:', fileName);
+            const extension = mediaType === 'video' ? 'mp4' : 'jpg';
+            const contentType = mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
+            const fileName = `chat-media/${groupId}/${user.id}/${mediaType}_${Date.now()}.${extension}`;
+
+            console.log('[Media Send] Uploading to:', fileName);
             const { error: uploadError } = await supabase.storage
                 .from('voice-memos')
-                .upload(fileName, decode(base64), { contentType: 'image/jpeg' });
+                .upload(fileName, decode(base64), { contentType });
 
             if (uploadError) {
-                console.error('[Image Send] Upload error:', uploadError);
+                console.error('[Media Send] Upload error:', uploadError);
                 throw uploadError;
             }
 
-            console.log('[Image Send] Upload successful, getting URL...');
+            console.log('[Media Send] Upload successful, getting URL...');
             const { data: { publicUrl } } = supabase.storage
                 .from('voice-memos')
                 .getPublicUrl(fileName);
 
-            console.log('[Image Send] Public URL:', publicUrl);
-            console.log('[Image Send] Inserting into database...');
+            console.log('[Media Send] Public URL:', publicUrl);
+            console.log('[Media Send] Inserting into database...');
 
             // Insert message into database
             const { data, error: insertError } = await supabase
@@ -618,24 +627,25 @@ export default function ChatScreen() {
                     sender_id: user.id,
                     group_id: groupId,
                     challenge_id: currentChallenge?.id || null,
-                    message_type: 'image',
+                    message_type: mediaType,
                     media_url: publicUrl,
+                    content: caption || null, // Store caption
                 })
                 .select()
                 .single();
 
             if (insertError) {
-                console.error('[Image Send] Database error:', insertError);
+                console.error('[Media Send] Database error:', insertError);
                 throw insertError;
             }
 
-            console.log('[Image Send] Success! Message data:', data);
+            console.log('[Media Send] Success! Message data:', data);
             setMessages((prev) =>
                 prev.map((msg) => (msg.id === tempId ? { ...data, sender: optimisticMessage.sender } : msg))
             );
         } catch (error) {
-            console.error('[Image Send] Complete error:', error);
-            Alert.alert('Image Failed', 'Could not upload image. Please try again.');
+            console.error('[Media Send] Complete error:', error);
+            Alert.alert(`${mediaType === 'video' ? 'Video' : 'Image'} Failed`, `Could not upload ${mediaType}. Please try again.`);
             setMessages((prev) => prev.filter((msg) => msg.id !== tempId));
         }
     };

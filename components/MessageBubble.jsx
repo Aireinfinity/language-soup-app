@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Image, Pressable, ActivityIndicator, Platform } from 'react-native';
+import { View, Text, StyleSheet, Image, Pressable, ActivityIndicator, Platform, Modal } from 'react-native';
+import { Video } from 'expo-av';
 import { ChatStyles } from '../constants/ChatStyles';
 import { AudioMessage } from './AudioMessage';
 import { MessageActionMenu } from './MessageActionMenu';
@@ -38,9 +39,11 @@ export function MessageBubble({
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [reactionUsers, setReactionUsers] = useState({});
     const bubbleRef = useRef(null);
+    const [selectedImage, setSelectedImage] = useState(null);
     const isSending = message.status === 'sending' || message.status === 'uploading';
     const isDeleted = !!message.deleted_at;
     const sender = message[senderKey];
+
 
     // Fetch user data for reactions
     useEffect(() => {
@@ -180,12 +183,36 @@ export function MessageBubble({
                     senderStatus={sender?.status_text}
                     groupName={groupName}
                 />
-            ) : message.message_type === 'image' ? (
-                <Image
-                    source={{ uri: message.media_url || message.content }}
-                    style={ChatStyles.messageImage}
-                    resizeMode="cover"
-                />
+            ) : message.message_type === 'image' || message.message_type === 'video' ? (
+                <View>
+                    {message.message_type === 'image' ? (
+                        <Pressable onPress={() => setSelectedImage(message.media_url || message.content)}>
+                            <Image
+                                source={{ uri: message.media_url || message.content }}
+                                style={ChatStyles.messageImage}
+                                resizeMode="cover"
+                            />
+                        </Pressable>
+                    ) : (
+                        <Video
+                            source={{ uri: message.media_url }}
+                            style={ChatStyles.messageImage}
+                            useNativeControls
+                            resizeMode="contain"
+                            shouldPlay={false}
+                        />
+                    )}
+                    {/* Caption below media */}
+                    {message.content && message.content !== message.media_url && (
+                        <Text style={[
+                            ChatStyles.messageText,
+                            isMe && ChatStyles.messageTextMe,
+                            { marginTop: 8 }
+                        ]}>
+                            {message.content}
+                        </Text>
+                    )}
+                </View>
             ) : message.message_type === 'system' ? (
                 <Text style={[styles.systemMessageText, isMe && { color: '#fff' }]}>
                     {message.content}
@@ -371,6 +398,25 @@ export function MessageBubble({
                     </Pressable>
                 </>
             )}
+
+            {/* Fullscreen Image Viewer */}
+            <Modal
+                visible={!!selectedImage}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setSelectedImage(null)}
+            >
+                <Pressable
+                    style={styles.fullscreenOverlay}
+                    onPress={() => setSelectedImage(null)}
+                >
+                    <Image
+                        source={{ uri: selectedImage }}
+                        style={styles.fullscreenImage}
+                        resizeMode="contain"
+                    />
+                </Pressable>
+            </Modal>
         </View>
     );
 }
@@ -475,5 +521,15 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
         borderColor: Platform.OS === 'android' ? '#eee' : 'rgba(0, 0, 0, 0.05)',
         borderWidth: 1,
+    },
+    fullscreenOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.95)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    fullscreenImage: {
+        width: '100%',
+        height: '100%',
     },
 });
