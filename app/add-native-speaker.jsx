@@ -94,17 +94,28 @@ export default function AddNativeSpeakerScreen() {
                     },
                 ]);
             } else {
-                // Insert new profile
+                // Fetch current user profile data from app_users
+                const { data: userData, error: userError } = await supabase
+                    .from('app_users')
+                    .select('display_name, avatar_url')
+                    .eq('id', user.id)
+                    .single();
+
+                if (userError) {
+                    console.error('Error fetching user data:', userError);
+                }
+
+                // Insert new profile with current user data
                 const { error } = await supabase
                     .from('app_native_speakers')
                     .insert({
                         user_id: user.id,
-                        display_name: user.user_metadata?.display_name || 'Anonymous',
+                        display_name: userData?.display_name || user.user_metadata?.display_name || 'Anonymous',
                         languages: ['French'],
                         bio: bio.trim(),
                         availability: availability.trim(),
                         whatsapp_number: whatsappNumber.trim(),
-                        photo_url: user.user_metadata?.avatar_url || null,
+                        photo_url: userData?.avatar_url || user.user_metadata?.avatar_url || null,
                         is_active: true,
                     });
 
