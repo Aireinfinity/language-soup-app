@@ -12,8 +12,10 @@ import LanguageRequestModal from '../../components/LanguageRequestModal';
 import { FloatingSupportButton } from '../../components/FloatingSupportButton';
 import { haptics } from '../../utils/haptics';
 import AdminLoginModal from '../../components/AdminLoginModal';
-import HomeTutorial from '../../components/HomeTutorial';
 import FounderWelcomeModal from '../../components/FounderWelcomeModal';
+import { QuestProvider } from '../../contexts/QuestContext';
+import QuestProgress from '../../components/QuestProgress';
+import ContextualTooltip from '../../components/ContextualTooltip';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -34,7 +36,6 @@ export default function HomeScreen() {
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
     const [showAdminModal, setShowAdminModal] = useState(false);
     const [adminModeEnabled, setAdminModeEnabled] = useState(false);
-    const [showTutorial, setShowTutorial] = useState(false);
     const [showFounderWelcome, setShowFounderWelcome] = useState(false);
 
     useFocusEffect(
@@ -46,33 +47,7 @@ export default function HomeScreen() {
         }, [user])
     );
 
-    useEffect(() => {
-        checkTutorialStatus();
-    }, []);
 
-    const checkTutorialStatus = async () => {
-        try {
-            const hasSeen = await AsyncStorage.getItem('has_seen_home_tutorial_v1');
-            console.log('Tutorial check:', hasSeen);
-            if (hasSeen !== 'true') {
-                // Short delay to let the screen load
-                setTimeout(() => {
-                    setShowTutorial(true);
-                }, 1500);
-            }
-        } catch (error) {
-            console.error('Error checking tutorial status:', error);
-        }
-    };
-
-    const handleTutorialClose = async () => {
-        setShowTutorial(false);
-        try {
-            await AsyncStorage.setItem('has_seen_home_tutorial_v1', 'true');
-        } catch (error) {
-            console.error('Error saving tutorial status:', error);
-        }
-    };
 
     // Realtime updates for Admin Badges
     useEffect(() => {
@@ -376,162 +351,173 @@ export default function HomeScreen() {
     }
 
     return (
-        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-            <View style={styles.header}>
-                <View style={styles.headerContent}>
-                    <Image
-                        source={require('../../assets/images/logo.png')}
-                        style={styles.headerLogo}
-                        resizeMode="contain"
-                    />
-                    <View style={styles.headerTextContainer}>
-                        <ThemedText style={styles.title}>your soup</ThemedText>
-                    </View>
-                </View>
-                <Pressable
-                    style={styles.headerButton}
-                    onPress={() => router.push('/browse-groups')}
-                >
-                    <Plus size={24} color={SOUP_COLORS.blue} />
-                </Pressable>
-            </View>
-
-            <FlatList
-                data={groups.filter(g => !g.name.toLowerCase().includes('support'))}
-                renderItem={renderGroup}
-                keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.list}
-                refreshControl={
-                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                }
-                ListHeaderComponent={
-                    (isAdmin || isCommunityManager) ? (
-                        <View style={styles.adminSection}>
-                            {/* Admin Cards Row - Side by side */}
-                            {isAdmin && (
-                                <View style={styles.adminCardRow}>
-                                    <Pressable
-                                        style={[styles.adminCardSmall, { backgroundColor: SOUP_COLORS.blue }]}
-                                        onPress={() => router.push('/admin/dashboard')}
-                                    >
-                                        <Sparkles size={24} color="#fff" />
-                                        <Text style={styles.adminCardSmallTitle}>Founder Daddy</Text>
-                                    </Pressable>
-
-                                    <Pressable
-                                        style={[styles.adminCardSmall, { backgroundColor: SOUP_COLORS.pink }]}
-                                        onPress={() => router.push('/admin/support')}
-                                    >
-                                        <MessageCircle size={24} color="#fff" />
-                                        <Text style={styles.adminCardSmallTitle}>Fuck It's Not Working</Text>
-                                    </Pressable>
-                                </View>
-                            )}
-
-                            {/* Community Manager Dashboard - Only for community managers */}
-                            {isCommunityManager && (
-                                <Pressable
-                                    style={styles.adminCard}
-                                    onPress={() => router.push('/admin/community-dashboard')}
-                                >
-                                    <View style={[styles.adminCardIcon, { backgroundColor: SOUP_COLORS.green }]}>
-                                        <Sparkles size={24} color="#fff" />
-                                    </View>
-                                    <View style={styles.adminCardInfo}>
-                                        <Text style={[styles.adminCardTitle, { color: SOUP_COLORS.green }]}>Community Manager</Text>
-                                        <Text style={styles.adminCardSubtitle}>Send challenges to your groups</Text>
-                                    </View>
-                                </Pressable>
-                            )}
+        <QuestProvider>
+            <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+                <View style={styles.header}>
+                    <View style={styles.headerContent}>
+                        <Image
+                            source={require('../../assets/images/logo.png')}
+                            style={styles.headerLogo}
+                            resizeMode="contain"
+                        />
+                        <View style={styles.headerTextContainer}>
+                            <ThemedText style={styles.title}>your soup</ThemedText>
                         </View>
-                    ) : null
-                }
-                ListEmptyComponent={
-                    <View style={styles.emptyState}>
-                        <Text style={styles.emptyEmoji}>🥣</Text>
-                        <ThemedText style={styles.emptyTitle}>your soup is looking empty...</ThemedText>
-                        <ThemedText style={styles.emptyText}>add some languages to get started!</ThemedText>
-                        <Pressable
-                            style={styles.addButton}
-                            onPress={() => {
-                                router.push('/group-selection');
-                            }}
-                        >
-                            <ThemedText style={styles.addButtonText}>add languages</ThemedText>
-                        </Pressable>
                     </View>
-                }
-                ListFooterComponent={
-                    groups.length > 0 ? (
-                        <View style={{ height: 120 }} />
-                    ) : null
-                }
-            />
+                    <Pressable
+                        style={styles.headerButton}
+                        onPress={() => router.push('/browse-groups')}
+                    >
+                        <Plus size={24} color={SOUP_COLORS.blue} />
+                    </Pressable>
+                </View>
 
-            <LanguageRequestModal
-                visible={showRequestModal}
-                onClose={() => setShowRequestModal(false)}
-                onSubmit={handleLanguageRequest}
-            />
-
-            {/* Floating Request Group Button (left side) - Hide for admins */}
-            {groups.length > 0 && !isAdmin && (
-                <Pressable
-                    style={styles.floatingRequestBtn}
-                    onPress={() => setShowRequestModal(true)}
-                >
-                    <View style={styles.floatingRequestCircle}>
-                        <Sparkles size={24} color="#fff" />
-                    </View>
-                    <Text style={styles.floatingRequestLabel}>request group</Text>
-                </Pressable>
-            )}
-
-            {/* Floating Support Button (for non-admin users) */}
-            {!isAdmin && (
-                <FloatingSupportButton
-                    onPress={() => router.push('/support-chat')}
-                />
-            )}
-
-            {/* Admin Toggle Button (bottom right corner) */}
-            <Pressable
-                style={styles.adminToggleButton}
-                onPress={() => {
-                    if (adminModeEnabled) {
-                        setAdminModeEnabled(false);
-                        setIsAdmin(false);
-                    } else {
-                        setShowAdminModal(true);
+                <FlatList
+                    data={groups.filter(g => !g.name.toLowerCase().includes('support'))}
+                    renderItem={renderGroup}
+                    keyExtractor={(item) => item.id}
+                    contentContainerStyle={styles.list}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
                     }
-                }}
-            >
-                <Text style={styles.adminToggleText}>
-                    {adminModeEnabled ? '👤' : '🔐'}
-                </Text>
-            </Pressable>
+                    ListHeaderComponent={
+                        (isAdmin || isCommunityManager) ? (
+                            <View style={styles.adminSection}>
+                                {/* Admin Cards Row - Side by side */}
+                                {isAdmin && (
+                                    <View style={styles.adminCardRow}>
+                                        <Pressable
+                                            style={[styles.adminCardSmall, { backgroundColor: SOUP_COLORS.blue }]}
+                                            onPress={() => router.push('/admin/dashboard')}
+                                        >
+                                            <Sparkles size={24} color="#fff" />
+                                            <Text style={styles.adminCardSmallTitle}>Founder Daddy</Text>
+                                        </Pressable>
 
-            {/* Admin Password Modal */}
-            <AdminLoginModal
-                visible={showAdminModal}
-                onClose={() => setShowAdminModal(false)}
-                onSuccess={() => {
-                    setAdminModeEnabled(true);
-                    setIsAdmin(true);
-                    setShowFounderWelcome(true); // TRIGGER THE EGO BOOST
-                }}
-            />
+                                        <Pressable
+                                            style={[styles.adminCardSmall, { backgroundColor: SOUP_COLORS.pink }]}
+                                            onPress={() => router.push('/admin/support')}
+                                        >
+                                            <MessageCircle size={24} color="#fff" />
+                                            <Text style={styles.adminCardSmallTitle}>Fuck It's Not Working</Text>
+                                        </Pressable>
+                                    </View>
+                                )}
 
-            <FounderWelcomeModal
-                visible={showFounderWelcome}
-                onClose={() => {
-                    setShowFounderWelcome(false);
-                    router.push('/(tabs)/profile'); // Navigate to profile after enjoying the praise
-                }}
-            />
+                                {/* Community Manager Dashboard - Only for community managers */}
+                                {isCommunityManager && (
+                                    <Pressable
+                                        style={styles.adminCard}
+                                        onPress={() => router.push('/admin/community-dashboard')}
+                                    >
+                                        <View style={[styles.adminCardIcon, { backgroundColor: SOUP_COLORS.green }]}>
+                                            <Sparkles size={24} color="#fff" />
+                                        </View>
+                                        <View style={styles.adminCardInfo}>
+                                            <Text style={[styles.adminCardTitle, { color: SOUP_COLORS.green }]}>Community Manager</Text>
+                                            <Text style={styles.adminCardSubtitle}>Send challenges to your groups</Text>
+                                        </View>
+                                    </Pressable>
+                                )}
+                            </View>
+                        ) : null
+                    }
+                    ListEmptyComponent={
+                        <View style={styles.emptyState}>
+                            <Text style={styles.emptyEmoji}>🥣</Text>
+                            <ThemedText style={styles.emptyTitle}>your soup is looking empty...</ThemedText>
+                            <ThemedText style={styles.emptyText}>add some languages to get started!</ThemedText>
+                            <Pressable
+                                style={styles.addButton}
+                                onPress={() => {
+                                    router.push('/group-selection');
+                                }}
+                            >
+                                <ThemedText style={styles.addButtonText}>add languages</ThemedText>
+                            </Pressable>
+                        </View>
+                    }
+                    ListFooterComponent={
+                        groups.length > 0 ? (
+                            <View style={{ height: 120 }} />
+                        ) : null
+                    }
+                />
 
-            <HomeTutorial visible={showTutorial} onClose={handleTutorialClose} />
-        </SafeAreaView>
+                <LanguageRequestModal
+                    visible={showRequestModal}
+                    onClose={() => setShowRequestModal(false)}
+                    onSubmit={handleLanguageRequest}
+                />
+
+                {/* Floating Request Group Button (left side) - Hide for admins */}
+                {groups.length > 0 && !isAdmin && (
+                    <Pressable
+                        style={styles.floatingRequestBtn}
+                        onPress={() => setShowRequestModal(true)}
+                    >
+                        <View style={styles.floatingRequestCircle}>
+                            <Sparkles size={24} color="#fff" />
+                        </View>
+                        <Text style={styles.floatingRequestLabel}>request group</Text>
+                    </Pressable>
+                )}
+
+                {/* Floating Support Button (for non-admin users) */}
+                {!isAdmin && (
+                    <>
+                        <FloatingSupportButton
+                            onPress={() => router.push('/support-chat')}
+                        />
+                        <ContextualTooltip
+                            message="Found a bug? Tap here to tell Noah! 🐛"
+                            targetPosition={{ bottom: 160, right: 20 }}
+                            arrowDirection="down"
+                            tooltipId="support_button_hint"
+                        />
+                    </>
+                )}
+
+                {/* Quest Progress Tracker */}
+                <QuestProgress />
+
+                {/* Admin Toggle Button (bottom right corner) */}
+                <Pressable
+                    style={styles.adminToggleButton}
+                    onPress={() => {
+                        if (adminModeEnabled) {
+                            setAdminModeEnabled(false);
+                            setIsAdmin(false);
+                        } else {
+                            setShowAdminModal(true);
+                        }
+                    }}
+                >
+                    <Text style={styles.adminToggleText}>
+                        {adminModeEnabled ? '👤' : '🔐'}
+                    </Text>
+                </Pressable>
+
+                {/* Admin Password Modal */}
+                <AdminLoginModal
+                    visible={showAdminModal}
+                    onClose={() => setShowAdminModal(false)}
+                    onSuccess={() => {
+                        setAdminModeEnabled(true);
+                        setIsAdmin(true);
+                        setShowFounderWelcome(true); // TRIGGER THE EGO BOOST
+                    }}
+                />
+
+                <FounderWelcomeModal
+                    visible={showFounderWelcome}
+                    onClose={() => {
+                        setShowFounderWelcome(false);
+                        router.push('/(tabs)/profile'); // Navigate to profile after enjoying the praise
+                    }}
+                />
+            </SafeAreaView>
+        </QuestProvider>
     );
 }
 

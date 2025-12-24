@@ -20,6 +20,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { haptics } from '../../utils/haptics';
+import { useQuests } from '../../contexts/QuestContext';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -60,6 +61,7 @@ export default function ChatScreen() {
     const insets = useSafeAreaInsets();
     const channelRef = useRef(null);
     const lastTypingSent = useRef(0);
+    const { completeQuest } = useQuests();
 
     const [messages, setMessages] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -416,6 +418,9 @@ export default function ChatScreen() {
             }).select().single();
             if (error) throw error;
             setMessages((prev) => prev.map((msg) => (msg.id === tempId ? { ...data, sender: optimisticMessage.sender } : msg)));
+
+            // Complete quest for first text message
+            await completeQuest('first_text');
         } catch (error) {
             console.error('Send failed:', error);
             Alert.alert('Message Failed', 'Could not send message. Please check your connection and try again.', [{ text: 'OK' }]);
@@ -529,6 +534,9 @@ export default function ChatScreen() {
 
             setMessages((prev) => prev.map((msg) => (msg.id === tempId ? { ...data, sender: optimisticMessage.sender } : msg)));
             console.log('🎉 [VOICE] Voice memo sent successfully!');
+
+            // Complete quest for first audio message
+            await completeQuest('first_audio');
         } catch (error) {
             console.error('❌ [VOICE] Complete error:', error);
             console.error('❌ [VOICE] Error details:', JSON.stringify(error, null, 2));

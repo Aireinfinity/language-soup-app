@@ -17,6 +17,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useQuests } from '../contexts/QuestContext';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -73,6 +74,7 @@ export default function CommunityChatScreen() {
     const [memberCount, setMemberCount] = useState(0);
     const [userProfile, setUserProfile] = useState(null);
     const [reactions, setReactions] = useState({}); // { messageId: [{ user_id, reaction, created_at }] }
+    const { completeQuest } = useQuests();
 
     // Fetch my own full profile to show my languages in optimistic updates
     useEffect(() => {
@@ -298,6 +300,9 @@ export default function CommunityChatScreen() {
                 content: text,
                 message_type: 'text'
             });
+
+            // Complete quest for first community message
+            await completeQuest('community_chat');
         } catch (error) {
             console.error('Error sending message:', error);
             setInputText(text);

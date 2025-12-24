@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FloatingAvatars } from '../../components/FloatingAvatars';
 import { UserPreviewModal } from '../../components/UserPreviewModal';
+import { useQuests } from '../../contexts/QuestContext';
 
 // Brand Colors
 const SOUP_COLORS = {
@@ -34,6 +35,7 @@ export default function CommunityScreen() {
     const [unreadCount, setUnreadCount] = useState(0);
     const [activeUsers, setActiveUsers] = useState([]);
     const [selectedUser, setSelectedUser] = useState(null);
+    const { completeQuest } = useQuests();
 
     useFocusEffect(
         React.useCallback(() => {
@@ -95,6 +97,11 @@ export default function CommunityScreen() {
             console.error('Error loading community data:', error);
         } finally {
             setLoading(false);
+
+            // Complete quest for peeking at active groups
+            if (activeGroups.length > 0) {
+                completeQuest('peek_active_groups');
+            }
         }
     };
 
@@ -261,6 +268,14 @@ export default function CommunityScreen() {
                         horizontal
                         showsHorizontalScrollIndicator={false}
                         contentContainerStyle={styles.groupsList}
+                    />
+
+                    {/* Tooltip for browsing groups */}
+                    <ContextualTooltip
+                        message="Tap any group to peek at their chat! 👀"
+                        targetPosition={{ top: 380, left: 20 }}
+                        arrowDirection="up"
+                        tooltipId="browse_active_groups_hint"
                     />
                 </View>
 

@@ -13,6 +13,7 @@ import ViewShot from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import * as MediaLibrary from 'expo-media-library';
 import { Asset } from 'expo-asset';
+import { useQuests } from '../../contexts/QuestContext';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -77,10 +78,13 @@ export default function ProfileScreen() {
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [selectedSoupId, setSelectedSoupId] = useState(null);
     const wrappedRef = useRef();
+    const { completeQuest } = useQuests();
 
     useEffect(() => {
         if (authUser) {
             loadProfile();
+            // Complete quest for viewing profile
+            completeQuest('view_profile');
         }
     }, [authUser]);
 

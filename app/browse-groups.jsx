@@ -5,6 +5,7 @@ import { ArrowLeft, Users, Plus, LogOut } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'expo-router';
+import { useQuests } from '../contexts/QuestContext';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -17,6 +18,7 @@ const SOUP_COLORS = {
 export default function BrowseGroups() {
     const { user } = useAuth();
     const router = useRouter();
+    const { completeQuest } = useQuests();
     const [loading, setLoading] = useState(true);
     const [groups, setGroups] = useState([]);
     const [myGroupIds, setMyGroupIds] = useState([]);
@@ -67,6 +69,9 @@ export default function BrowseGroups() {
 
             // Update local state
             setMyGroupIds([...myGroupIds, groupId]);
+
+            // Complete quest!
+            await completeQuest('join_group');
 
             // Refresh groups (trigger will update member_count automatically)
             await loadGroups();

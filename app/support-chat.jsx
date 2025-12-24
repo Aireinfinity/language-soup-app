@@ -16,6 +16,7 @@ import { SharedChatUI } from '../components/SharedChatUI';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
+import { useQuests } from '../contexts/QuestContext';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -70,6 +71,7 @@ export default function SupportChatScreen() {
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
     const [reactions, setReactions] = useState({}); // { messageId: [{ user_id, reaction, created_at }] }
+    const { completeQuest } = useQuests();
 
     const {
         isRecording,
@@ -207,6 +209,15 @@ export default function SupportChatScreen() {
                 from_admin: false,
                 message_type: 'text'
             });
+
+            // Complete quest for sending bug report
+            await completeQuest('send_bug');
+
+            // Check if message contains language request keywords
+            const lowerMessage = messageText.toLowerCase();
+            if (lowerMessage.includes('language') && (lowerMessage.includes('request') || lowerMessage.includes('add') || lowerMessage.includes('new'))) {
+                await completeQuest('request_language');
+            }
         } catch (error) {
             console.error('Error sending message:', error);
             setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
