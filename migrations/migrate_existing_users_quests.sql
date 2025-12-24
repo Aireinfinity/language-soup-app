@@ -50,7 +50,7 @@ BEGIN
         IF EXISTS (
             SELECT 1 FROM app_messages 
             WHERE sender_id = user_record.id 
-            AND reply_to_id IS NOT NULL
+            AND reply_to IS NOT NULL
         ) THEN
             INSERT INTO app_user_quests (user_id, quest_id, seen_celebration)
             VALUES (user_record.id, 'reply_challenge', TRUE)
