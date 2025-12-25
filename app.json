@@ -25,6 +25,7 @@
     },
     "android": {
       "package": "com.aireinfinity.languagesoup",
+      "versionCode": 11,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
