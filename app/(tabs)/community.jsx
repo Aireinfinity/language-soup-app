@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FloatingAvatars } from '../../components/FloatingAvatars';
 import { UserPreviewModal } from '../../components/UserPreviewModal';
 import { useQuests } from '../../contexts/QuestContext';
+import ContextualTooltip from '../../components/ContextualTooltip';
 
 // Brand Colors
 const SOUP_COLORS = {

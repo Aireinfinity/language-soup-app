@@ -26,6 +26,7 @@ export default function SendChallengeScreen() {
     const [nativeVersion, setNativeVersion] = useState('');
     const [sending, setSending] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [broadcastToAll, setBroadcastToAll] = useState(false);
 
     useEffect(() => {
         loadGroups();
@@ -77,121 +78,159 @@ export default function SendChallengeScreen() {
     };
 
     const sendChallenge = async () => {
-        if (!selectedGroup || !englishVersion.trim() || !nativeVersion.trim()) {
-            Alert.alert('Missing Info', 'Please select a group and enter both versions');
+        if (!englishVersion.trim() || !nativeVersion.trim()) {
+            Alert.alert('Missing Info', 'Please enter both English and native language versions');
             return;
         }
 
+        // Determine target groups
+        const targetGroups = broadcastToAll ? groups : groups.filter(g => g.id === selectedGroup);
+
+        if (targetGroups.length === 0) {
+            Alert.alert('No Groups', 'Please select a group or enable broadcast mode');
+            return;
+        }
+
+        // Confirmation for broadcast
+        if (broadcastToAll) {
+            Alert.alert(
+                '🎄 Holiday Broadcast',
+                `Send this challenge to ALL ${targetGroups.length} groups?\n\nThis will notify everyone in every group!`,
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: `Send to ${targetGroups.length} Groups`,
+                        style: 'destructive',
+                        onPress: () => executeSend(targetGroups)
+                    }
+                ]
+            );
+        } else {
+            if (!selectedGroup) {
+                Alert.alert('No Group Selected', 'Please select a group');
+                return;
+            }
+            executeSend(targetGroups);
+        }
+    };
+
+    const executeSend = async (targetGroups) => {
         setSending(true);
+        let successCount = 0;
+        let failCount = 0;
+
         try {
-            // Combine English and native versions
             const combinedPrompt = `${englishVersion.trim()}\n${nativeVersion.trim()}`;
 
-            // Insert challenge
-            const { data: challenge, error } = await supabase
-                .from('app_challenges')
-                .insert({
-                    group_id: selectedGroup,
-                    prompt_text: combinedPrompt,
-                    created_by: user.id
-                })
-                .select()
-                .single();
+            // Send to each target group
+            for (const group of targetGroups) {
+                try {
+                    // Insert challenge
+                    const { data: challenge, error } = await supabase
+                        .from('app_challenges')
+                        .insert({
+                            group_id: group.id,
+                            prompt_text: combinedPrompt,
+                            created_by: user.id
+                        })
+                        .select()
+                        .single();
 
-            if (error) throw error;
+                    if (error) throw error;
 
-            // --- SEND PUSH NOTIFICATIONS ---
+                    // Send push notifications for this group
+                    const { data: members } = await supabase
+                        .from('app_group_members')
+                        .select('user_id')
+                        .eq('group_id', group.id);
 
-            // 1. Get all members of the group
-            const { data: members } = await supabase
-                .from('app_group_members')
-                .select('user_id')
-                .eq('group_id', selectedGroup);
+                    if (members?.length > 0) {
+                        const userIds = members.map(m => m.user_id).filter(id => id !== user.id);
 
-            if (members?.length > 0) {
-                // 2. Get tokens for these members (excluding self)
-                const userIds = members.map(m => m.user_id).filter(id => id !== user.id);
+                        if (userIds.length > 0) {
+                            const { data: tokens } = await supabase
+                                .from('app_push_tokens')
+                                .select('expo_push_token')
+                                .in('user_id', userIds);
 
-                if (userIds.length > 0) {
-                    const { data: tokens } = await supabase
-                        .from('app_push_tokens')
-                        .select('expo_push_token')
-                        .in('user_id', userIds);
+                            if (tokens?.length > 0) {
+                                const groupLanguage = group.language?.toLowerCase();
 
-                    if (tokens?.length > 0) {
-                        // Find group name and language
-                        const targetGroup = groups.find(g => g.id === selectedGroup);
-                        const targetGroupName = targetGroup ? targetGroup.name : 'your group';
-                        const groupLanguage = targetGroup?.language?.toLowerCase();
+                                // Fetch language-specific notification
+                                let languageNotification = null;
+                                if (groupLanguage) {
+                                    const { data: langData } = await supabase
+                                        .from('app_language_notifications')
+                                        .select('country_flag, notification_message')
+                                        .eq('language', groupLanguage)
+                                        .single();
 
-                        // Fetch language-specific notification from database
-                        let languageNotification = null;
-                        if (groupLanguage) {
-                            const { data: langData } = await supabase
-                                .from('app_language_notifications')
-                                .select('country_flag, notification_message')
-                                .eq('language', groupLanguage)
-                                .single();
+                                    if (langData) {
+                                        languageNotification = `${langData.country_flag} ${langData.notification_message}`;
+                                    }
+                                }
 
-                            if (langData) {
-                                languageNotification = `${langData.country_flag} ${langData.notification_message}`;
+                                const randomEmojis = ['😰', '🥳', '🥹', '😵‍💫', '🌈', '🙀', '🤪', '☺️', '😚', '🤯'];
+                                const randomEmoji = randomEmojis[Math.floor(Math.random() * randomEmojis.length)];
+
+                                const notificationOptions = [
+                                    `${randomEmoji} new challenge in ${group.name}`,
+                                    `${randomEmoji} bro ur late the challenge is here! ${group.name}`,
+                                    `${randomEmoji} wait wait wait... new challenge? hell yeah! ${group.name}`,
+                                    languageNotification
+                                        ? `${languageNotification} (${group.name})`
+                                        : `${randomEmoji} new challenge in ${group.name}`
+                                ];
+
+                                const pushMessages = tokens.map(t => {
+                                    const randomBody = notificationOptions[Math.floor(Math.random() * notificationOptions.length)];
+                                    return {
+                                        to: t.expo_push_token,
+                                        sound: 'default',
+                                        title: 'mmm goood soup!',
+                                        body: randomBody,
+                                        data: {
+                                            type: 'challenge',
+                                            groupId: group.id,
+                                            challengeId: challenge.id
+                                        },
+                                    };
+                                });
+
+                                await fetch('https://exp.host/--/api/v2/push/send', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Accept': 'application/json',
+                                        'Accept-encoding': 'gzip, deflate',
+                                        'Content-Type': 'application/json',
+                                    },
+                                    body: JSON.stringify(pushMessages),
+                                });
                             }
                         }
-
-                        // Random emojis for non-flag notifications
-                        const randomEmojis = ['😰', '🥳', '🥹', '😵‍💫', '🌈', '🙀', '🤪', '☺️', '😚', '🤯'];
-                        const randomEmoji = randomEmojis[Math.floor(Math.random() * randomEmojis.length)];
-
-                        // 4 notification options (rotate randomly)
-                        const notificationOptions = [
-                            `${randomEmoji} new challenge in ${targetGroupName}`,
-                            `${randomEmoji} bro ur late the challenge is here! ${targetGroupName}`,
-                            `${randomEmoji} wait wait wait... new challenge? hell yeah! ${targetGroupName}`,
-                            languageNotification
-                                ? `${languageNotification} (${targetGroupName})`
-                                : `${randomEmoji} new challenge in ${targetGroupName}` // Fallback if language not in database
-                        ];
-
-                        // 3. Send via Expo API with random notification
-                        const pushMessages = tokens.map(t => {
-                            const randomBody = notificationOptions[Math.floor(Math.random() * notificationOptions.length)];
-                            return {
-                                to: t.expo_push_token,
-                                sound: 'default',
-                                title: 'mmm goood soup!',
-                                body: randomBody,
-                                data: {
-                                    type: 'challenge',
-                                    groupId: selectedGroup,
-                                    challengeId: challenge.id
-                                },
-                            };
-                        });
-
-                        await fetch('https://exp.host/--/api/v2/push/send', {
-                            method: 'POST',
-                            headers: {
-                                'Accept': 'application/json',
-                                'Accept-encoding': 'gzip, deflate',
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify(pushMessages),
-                        });
-                        console.log(`Pushed to ${tokens.length} devices!`);
                     }
+
+                    successCount++;
+                } catch (groupError) {
+                    console.error(`Error sending to ${group.name}:`, groupError);
+                    failCount++;
                 }
             }
-            // -------------------------------
 
-            Alert.alert('Success!', 'Challenge sent to the group', [
-                { text: 'OK', onPress: () => router.back() }
-            ]);
+            // Show results
+            if (broadcastToAll) {
+                Alert.alert(
+                    '🎄 Broadcast Complete!',
+                    `Successfully sent to ${successCount} group(s)${failCount > 0 ? `\n${failCount} failed` : ''}`,
+                    [{ text: 'OK', onPress: () => router.back() }]
+                );
+            } else {
+                Alert.alert('Success!', 'Challenge sent to the group', [
+                    { text: 'OK', onPress: () => router.back() }
+                ]);
+            }
         } catch (error) {
             console.error('Error sending challenge:', error);
-            console.error('Error details:', JSON.stringify(error, null, 2));
-            console.error('Error message:', error.message);
-            console.error('Error hint:', error.hint);
-            console.error('Error details:', error.details);
             Alert.alert('Error', `Failed to send challenge: ${error.message || 'Unknown error'}`);
         } finally {
             setSending(false);
@@ -217,33 +256,56 @@ export default function SendChallengeScreen() {
             </View>
 
             <ScrollView style={styles.content}>
-                <View style={styles.section}>
-                    <Text style={styles.label}>Select Group</Text>
-                    {groups.map(group => (
-                        <Pressable
-                            key={group.id}
-                            style={[
-                                styles.groupOption,
-                                selectedGroup === group.id && styles.groupOptionSelected
-                            ]}
-                            onPress={() => setSelectedGroup(group.id)}
-                        >
-                            <View style={styles.radioOuter}>
-                                {selectedGroup === group.id && <View style={styles.radioInner} />}
-                            </View>
-                            <View style={styles.groupInfo}>
-                                <Text style={styles.groupName}>{group.name}</Text>
-                                <Text style={styles.groupMeta}>
-                                    {group.member_count} members • {group.language}
-                                </Text>
-                            </View>
-                        </Pressable>
-                    ))}
+                {/* Broadcast Toggle */}
+                <Pressable
+                    style={[styles.broadcastCard, broadcastToAll && styles.broadcastCardActive]}
+                    onPress={() => setBroadcastToAll(!broadcastToAll)}
+                >
+                    <View style={styles.broadcastHeader}>
+                        <Text style={styles.broadcastEmoji}>🎄</Text>
+                        <View style={styles.broadcastTextContainer}>
+                            <Text style={styles.broadcastTitle}>Holiday Broadcast Mode</Text>
+                            <Text style={styles.broadcastSubtitle}>
+                                {broadcastToAll
+                                    ? `Sending to ALL ${groups.length} groups`
+                                    : 'Tap to send to all groups'}
+                            </Text>
+                        </View>
+                    </View>
+                    <View style={[styles.broadcastToggle, broadcastToAll && styles.broadcastToggleActive]}>
+                        <View style={[styles.broadcastToggleKnob, broadcastToAll && styles.broadcastToggleKnobActive]} />
+                    </View>
+                </Pressable>
 
-                    {groups.length === 0 && (
-                        <Text style={styles.noGroups}>No groups available</Text>
-                    )}
-                </View>
+                {!broadcastToAll && (
+                    <View style={styles.section}>
+                        <Text style={styles.label}>Select Group</Text>
+                        {groups.map(group => (
+                            <Pressable
+                                key={group.id}
+                                style={[
+                                    styles.groupOption,
+                                    selectedGroup === group.id && styles.groupOptionSelected
+                                ]}
+                                onPress={() => setSelectedGroup(group.id)}
+                            >
+                                <View style={styles.radioOuter}>
+                                    {selectedGroup === group.id && <View style={styles.radioInner} />}
+                                </View>
+                                <View style={styles.groupInfo}>
+                                    <Text style={styles.groupName}>{group.name}</Text>
+                                    <Text style={styles.groupMeta}>
+                                        {group.member_count} members • {group.language}
+                                    </Text>
+                                </View>
+                            </Pressable>
+                        ))}
+
+                        {groups.length === 0 && (
+                            <Text style={styles.noGroups}>No groups available</Text>
+                        )}
+                    </View>
+                )}
 
                 <View style={styles.section}>
                     <Text style={styles.label}>English Version</Text>
@@ -276,10 +338,10 @@ export default function SendChallengeScreen() {
                 <Pressable
                     style={[
                         styles.sendButton,
-                        (!selectedGroup || !englishVersion.trim() || !nativeVersion.trim() || sending) && styles.sendButtonDisabled
+                        ((!selectedGroup && !broadcastToAll) || !englishVersion.trim() || !nativeVersion.trim() || sending) && styles.sendButtonDisabled
                     ]}
                     onPress={sendChallenge}
-                    disabled={!selectedGroup || !englishVersion.trim() || !nativeVersion.trim() || sending}
+                    disabled={(!selectedGroup && !broadcastToAll) || !englishVersion.trim() || !nativeVersion.trim() || sending}
                 >
                     {sending ? (
                         <ActivityIndicator size="small" color="#fff" />
@@ -447,5 +509,67 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: SOUP_COLORS.blue,
         lineHeight: 18,
+    },
+    broadcastCard: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 24,
+        borderWidth: 2,
+        borderColor: 'rgba(0,0,0,0.1)',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    broadcastCardActive: {
+        borderColor: SOUP_COLORS.green,
+        backgroundColor: `${SOUP_COLORS.green}10`,
+    },
+    broadcastHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+        gap: 12,
+    },
+    broadcastEmoji: {
+        fontSize: 32,
+    },
+    broadcastTextContainer: {
+        flex: 1,
+    },
+    broadcastTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#000',
+        marginBottom: 4,
+    },
+    broadcastSubtitle: {
+        fontSize: 13,
+        color: SOUP_COLORS.subtext,
+    },
+    broadcastToggle: {
+        width: 50,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: '#E0E0E0',
+        padding: 2,
+        justifyContent: 'center',
+    },
+    broadcastToggleActive: {
+        backgroundColor: SOUP_COLORS.green,
+    },
+    broadcastToggleKnob: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: '#fff',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    broadcastToggleKnobActive: {
+        transform: [{ translateX: 22 }],
     },
 });

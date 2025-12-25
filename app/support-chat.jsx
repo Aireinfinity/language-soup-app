@@ -210,14 +210,8 @@ export default function SupportChatScreen() {
                 message_type: 'text'
             });
 
-            // Complete quest for sending bug report
+            // Complete quest for sending any message to support
             await completeQuest('send_bug');
-
-            // Check if message contains language request keywords
-            const lowerMessage = messageText.toLowerCase();
-            if (lowerMessage.includes('language') && (lowerMessage.includes('request') || lowerMessage.includes('add') || lowerMessage.includes('new'))) {
-                await completeQuest('request_language');
-            }
         } catch (error) {
             console.error('Error sending message:', error);
             setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
@@ -261,6 +255,9 @@ export default function SupportChatScreen() {
                 media_url: publicUrl,
                 duration_seconds: Math.round(duration / 1000)
             });
+
+            // Complete quest for sending audio
+            await completeQuest('first_audio');
         } catch (error) {
             console.error('Error uploading voice message:', error);
         }

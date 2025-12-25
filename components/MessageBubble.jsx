@@ -191,6 +191,8 @@ export function MessageBubble({
                                 source={{ uri: message.media_url || message.content }}
                                 style={ChatStyles.messageImage}
                                 resizeMode="cover"
+                                // Enable GIF animation
+                                {...(Platform.OS === 'android' && { fadeDuration: 0 })}
                             />
                         </Pressable>
                     ) : (

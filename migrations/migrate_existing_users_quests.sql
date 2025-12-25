@@ -61,7 +61,7 @@ BEGIN
         -- Auto-complete if user has sent any community message
         IF EXISTS (
             SELECT 1 FROM app_community_messages 
-            WHERE sender_id = user_record.id
+            WHERE user_id = user_record.id
         ) THEN
             INSERT INTO app_user_quests (user_id, quest_id, seen_celebration)
             VALUES (user_record.id, 'community_chat', TRUE)

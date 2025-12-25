@@ -5,6 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft, LogOut, Users, Image as ImageIcon, Volume2, VolumeX } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { useQuests } from '../contexts/QuestContext';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -16,6 +17,7 @@ const SOUP_COLORS = {
 export default function GroupInfoScreen() {
     const { id: groupId } = useLocalSearchParams();
     const { user } = useAuth();
+    const { completeQuest } = useQuests();
     const router = useRouter();
 
     const [loading, setLoading] = useState(true);

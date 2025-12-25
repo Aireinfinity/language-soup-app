@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { Camera, Edit2, LogOut, MapPin, Globe, Award, Share2, Sparkles, Flag, Clock, Crown, X, Download, ArrowRight, MessageCircle } from 'lucide-react-native';
+import { Camera, Edit2, LogOut, MapPin, Globe, Award, Share2, Sparkles, Flag, Clock, Crown, X, Download, ArrowRight, MessageCircle, Bell } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -77,6 +77,8 @@ export default function ProfileScreen() {
     const [showLevelsInfo, setShowLevelsInfo] = useState(false);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [selectedSoupId, setSelectedSoupId] = useState(null);
+    const [learningExpanded, setLearningExpanded] = useState(false);
+    const [fluentExpanded, setFluentExpanded] = useState(false);
     const wrappedRef = useRef();
     const { completeQuest } = useQuests();
 
@@ -321,63 +323,151 @@ export default function ProfileScreen() {
     };
 
     const renderIdentity = () => (
-        <View style={styles.identitySection}>
-            <Pressable onPress={showAvatarOptions} style={styles.avatarContainer}>
-                {user?.avatar_url ? (
-                    <Image source={{ uri: user.avatar_url }} style={styles.avatar} />
-                ) : (
-                    <View style={styles.avatarPlaceholder}>
-                        <Text style={styles.avatarInitial}>{user?.display_name?.[0]?.toUpperCase() || '?'}</Text>
-                    </View>
-                )}
-                <View style={styles.editBadge}>
-                    <Camera size={14} color="#fff" />
-                </View>
-            </Pressable>
-
-            {/* Always show profile info, edit button opens modal */}
-            {(
-                <View style={styles.infoCenter}>
-                    <View style={styles.nameRow}>
-                        <Text style={styles.name}>{user?.display_name || 'Anonymous Souper'}</Text>
-                        <Pressable onPress={() => setEditing(true)} hitSlop={10}>
-                            <Edit2 size={18} color={SOUP_COLORS.blue} />
-                        </Pressable>
-                    </View>
-
-                    {user.status_text ? <Text style={styles.bio}>"{user.status_text}"</Text> : null}
-
-                    {/* Conversational Languages */}
-                    {user.fluent_languages && user.fluent_languages.length > 0 && (
-                        <View style={styles.langRow}>
-                            <Text style={styles.labelSmall}>I speak conversationally:</Text>
-                            <View style={styles.langChips}>
-                                {user.fluent_languages.map((lang, i) => (
-                                    <View key={i} style={styles.chip}>
-                                        <Text style={styles.chipText}>{lang}</Text>
-                                    </View>
-                                ))}
-                            </View>
-                        </View>
-                    )}
-
-                    {/* Learning Languages */}
+        <View style={styles.heroSection}>
+            {/* Hero Layout: Flags | Photo | Flags */}
+            <View style={styles.heroPhotoRow}>
+                {/* Left Column - Learning Languages */}
+                <View style={styles.flagColumn}>
                     {user.learning_languages && user.learning_languages.length > 0 && (
-                        <View style={[styles.langRow, { marginTop: 12 }]}>
-                            <Text style={styles.labelSmall}>Cooking up:</Text>
-                            <View style={styles.langChips}>
-                                {user.learning_languages.map((lang, i) => (
-                                    <View key={i} style={[styles.chip, styles.chipYellow]}>
-                                        <Text style={styles.chipText}>{lang}</Text>
-                                    </View>
+                        <>
+                            <Text style={styles.flagColumnTitle} numberOfLines={1}>LEARNING 🌱</Text>
+                            <View style={styles.flagList}>
+                                {(learningExpanded ? user.learning_languages : user.learning_languages.slice(0, 3)).map((lang, i) => (
+                                    <Text key={`learning-${i}`} style={styles.flagEmoji}>
+                                        {getLanguageFlag(lang)}
+                                    </Text>
                                 ))}
+                                {user.learning_languages.length > 3 && (
+                                    <Pressable onPress={() => setLearningExpanded(!learningExpanded)}>
+                                        <Text style={styles.expandButton}>
+                                            {learningExpanded ? '- Less' : `+${user.learning_languages.length - 3} more`}
+                                        </Text>
+                                    </Pressable>
+                                )}
                             </View>
-                        </View>
+                        </>
                     )}
                 </View>
+
+                {/* Center - Profile Photo */}
+                <Pressable onPress={showAvatarOptions} style={styles.heroAvatarContainer}>
+                    {user?.avatar_url ? (
+                        <Image source={{ uri: user.avatar_url }} style={styles.heroAvatar} />
+                    ) : (
+                        <View style={styles.heroAvatarPlaceholder}>
+                            <Text style={styles.heroAvatarInitial}>{user?.display_name?.[0]?.toUpperCase() || '?'}</Text>
+                        </View>
+                    )}
+                    <View style={styles.heroEditBadge}>
+                        <Camera size={16} color="#fff" />
+                    </View>
+                </Pressable>
+
+                {/* Right Column - Conversational Languages */}
+                <View style={styles.flagColumn}>
+                    {user.fluent_languages && user.fluent_languages.length > 0 && (
+                        <>
+                            <Text style={styles.flagColumnTitle} numberOfLines={1}>CONVERSATIONAL 💬</Text>
+                            <View style={styles.flagList}>
+                                {(fluentExpanded ? user.fluent_languages : user.fluent_languages.slice(0, 3)).map((lang, i) => (
+                                    <Text key={`fluent-${i}`} style={styles.flagEmoji}>
+                                        {getLanguageFlag(lang)}
+                                    </Text>
+                                ))}
+                                {user.fluent_languages.length > 3 && (
+                                    <Pressable onPress={() => setFluentExpanded(!fluentExpanded)}>
+                                        <Text style={styles.expandButton}>
+                                            {fluentExpanded ? '- Less' : `+${user.fluent_languages.length - 3} more`}
+                                        </Text>
+                                    </Pressable>
+                                )}
+                            </View>
+                        </>
+                    )}
+                </View>
+            </View>
+
+            {/* Name */}
+            <View style={styles.heroNameRow}>
+                <Text style={styles.heroName}>{user?.display_name || 'Anonymous Souper'}</Text>
+                <Pressable onPress={() => setEditing(true)} hitSlop={10}>
+                    <Edit2 size={20} color={SOUP_COLORS.blue} />
+                </Pressable>
+            </View>
+
+            {/* Tagline - right under name */}
+            {user?.status_text && (
+                <Text style={styles.heroTagline}>"{user.status_text}"</Text>
             )}
         </View>
     );
+
+    // Helper to get left side positions (learning languages)
+    const getLeftFlagPosition = (index) => {
+        const baseTop = 85;
+        const spacing = 40;
+        return {
+            top: baseTop + (index * spacing),
+            left: -80,
+        };
+    };
+
+    // Helper to get right side positions (fluent languages)
+    const getRightFlagPosition = (index) => {
+        const baseTop = 85;
+        const spacing = 40;
+        return {
+            top: baseTop + (index * spacing),
+            right: -80,
+        };
+    };
+
+    // Helper function to get flag emoji from language name
+    const getLanguageFlag = (language) => {
+        if (!language) return '🌍';
+
+        // Extract base language name (before / or parentheses)
+        const baseLang = language.split('/')[0].split('(')[0].trim().toLowerCase();
+
+        const flags = {
+            'spanish': '🇪🇸',
+            'french': '🇫🇷',
+            'italian': '🇮🇹',
+            'german': '🇩🇪',
+            'portuguese': '🇵🇹',
+            'english': '🇬🇧',
+            'chinese': '🇨🇳',
+            'japanese': '🇯🇵',
+            'korean': '🇰🇷',
+            'arabic': '🇸🇦',
+            'russian': '🇷🇺',
+            'hindi': '🇮🇳',
+            'dutch': '🇳🇱',
+            'swedish': '🇸🇪',
+            'norwegian': '🇳🇴',
+            'danish': '🇩🇰',
+            'finnish': '🇫🇮',
+            'polish': '🇵🇱',
+            'turkish': '🇹🇷',
+            'greek': '🇬🇷',
+            'hebrew': '🇮🇱',
+            'thai': '🇹🇭',
+            'vietnamese': '🇻🇳',
+            'indonesian': '🇮🇩',
+            'malay': '🇲🇾',
+            'tagalog': '🇵🇭',
+            'swahili': '🇰🇪',
+            'ukrainian': '🇺🇦',
+            'czech': '🇨🇿',
+            'romanian': '🇷🇴',
+            'hungarian': '🇭🇺',
+            'bulgarian': '🇧🇬',
+            'croatian': '🇭🇷',
+            'serbian': '🇷🇸',
+        };
+
+        return flags[baseLang] || '🌍';
+    };
 
     // --- HELPERS ---
 
@@ -488,11 +578,26 @@ export default function ProfileScreen() {
 
         return (
             <View style={styles.statsSection}>
-                <View style={styles.bigStatCard}>
-                    <Text style={styles.bigStatLabel}>Total Voice Memos Sent</Text>
-                    <Text style={styles.bigStatNumber}>
-                        {Math.floor((stats?.total_speaking_seconds || 0) / 20)}
-                    </Text>
+                {/* Compact Stats Grid */}
+                <View style={styles.statsGrid}>
+                    <View style={styles.statGridItem}>
+                        <Text style={styles.statGridNumber}>
+                            {Math.floor((stats?.total_speaking_seconds || 0) / 20)}
+                        </Text>
+                        <Text style={styles.statGridLabel}>Messages</Text>
+                    </View>
+                    <View style={styles.statGridDivider} />
+                    <View style={styles.statGridItem}>
+                        <Text style={styles.statGridNumber}>{groups.length}</Text>
+                        <Text style={styles.statGridLabel}>Groups</Text>
+                    </View>
+                    <View style={styles.statGridDivider} />
+                    <View style={styles.statGridItem}>
+                        <Text style={styles.statGridNumber}>
+                            {stats?.days_active || 0}
+                        </Text>
+                        <Text style={styles.statGridLabel}>Days</Text>
+                    </View>
                 </View>
 
                 {/* COMPREHENSIBLE Card */}
@@ -650,13 +755,6 @@ export default function ProfileScreen() {
                 onRequestClose={() => setShowWrappedModal(false)}
             >
                 <View style={styles.modalOverlay}>
-                    <Pressable
-                        style={styles.closeButton}
-                        onPress={() => setShowWrappedModal(false)}
-                    >
-                        <X size={28} color="#fff" />
-                    </Pressable>
-
                     <ViewShot ref={wrappedRef} options={{ format: 'png', quality: 1 }}>
                         <LinearGradient
                             colors={['#0a0a1a', '#1a1a2e', '#16213e', '#0f3460']}
@@ -664,6 +762,14 @@ export default function ProfileScreen() {
                             end={{ x: 1, y: 1 }}
                             style={styles.fullWrappedCard}
                         >
+                            {/* Close Button - Inside Card */}
+                            <Pressable
+                                style={styles.closeButton}
+                                onPress={() => setShowWrappedModal(false)}
+                            >
+                                <X size={28} color="#fff" />
+                            </Pressable>
+
                             {/* Decorative glowing orbs */}
                             <View style={[styles.wrappedGlow, { top: -60, right: -60, backgroundColor: SOUP_COLORS.pink }]} />
                             <View style={[styles.wrappedGlow, { bottom: 100, left: -40, backgroundColor: SOUP_COLORS.blue, width: 100, height: 100 }]} />
@@ -757,21 +863,59 @@ export default function ProfileScreen() {
         );
     };
 
+    // Groups Section
+    const renderGroups = () => {
+        if (groups.length === 0) return null;
+
+        return (
+            <View style={styles.groupsSection}>
+                <Text style={styles.groupsSectionTitle}>Your Groups ({groups.length})</Text>
+                {groups.map((group) => (
+                    <Pressable
+                        key={group.id}
+                        style={styles.groupItem}
+                        onPress={() => router.push(`/chat/${group.id}`)}
+                    >
+                        <Text style={styles.groupName}>{group.name}</Text>
+                        <Text style={styles.groupMeta}>{group.member_count} members</Text>
+                    </Pressable>
+                ))}
+            </View>
+        );
+    };
+
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <View />
+                {/* Wrapped Button (Left) */}
+                <Pressable
+                    style={styles.wrappedButton}
+                    onPress={() => setShowWrappedModal(true)}
+                >
+                    <Text style={styles.wrappedButtonText}>Wrapped</Text>
+                </Pressable>
+
+                {/* Notifications Bell (Right) */}
+                <Pressable
+                    onPress={() => {
+                        // TODO: Navigate to notifications
+                        Alert.alert('Notifications', 'Coming soon!');
+                    }}
+                >
+                    <Bell size={24} color={SOUP_COLORS.blue} />
+                </Pressable>
             </View>
 
             <ScrollView
+                style={styles.scrollView}
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
             >
                 {/* Content */}
 
                 {renderIdentity()}
                 {renderStats()}
-                {renderWrapped()}
             </ScrollView>
             {renderWrappedModal()}
 
@@ -1146,9 +1290,21 @@ const styles = StyleSheet.create({
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
+        alignItems: 'center',
         paddingHorizontal: 20,
         paddingVertical: 10,
-        backgroundColor: SOUP_COLORS.cream, // Cream header
+        backgroundColor: SOUP_COLORS.cream,
+    },
+    wrappedButton: {
+        backgroundColor: SOUP_COLORS.blue,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+    },
+    wrappedButtonText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#fff',
     },
     signOutBtn: {
         padding: 8,
@@ -1192,6 +1348,9 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: SOUP_COLORS.green,
     },
+    scrollView: {
+        flex: 1,
+    },
     scrollContent: {
         paddingHorizontal: 20,
         backgroundColor: SOUP_COLORS.cream,
@@ -1199,46 +1358,153 @@ const styles = StyleSheet.create({
         borderTopRightRadius: 24,
         paddingTop: 20,
         marginTop: -10,
-        paddingBottom: 150,
+        paddingBottom: 120, // Extra padding to clear tab bar
     },
-    // IDENTITY
-    identitySection: {
+    // HERO SECTION (Spotify-style)
+    heroSection: {
         alignItems: 'center',
+        paddingVertical: 20,
+        paddingHorizontal: 20,
+        paddingBottom: 30,
+        backgroundColor: SOUP_COLORS.cream,
+    },
+    heroPhotoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        width: '100%',
+        marginBottom: 20,
+        paddingHorizontal: 10,
+    },
+    flagColumn: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+    },
+    photoCenterContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    flagColumnTitle: {
+        fontSize: 8,
+        fontWeight: '800',
+        color: SOUP_COLORS.blue,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        opacity: 0.8,
+        marginBottom: 8,
+        textAlign: 'center',
+        numberOfLines: 1,
+        flexWrap: 'nowrap',
+    },
+    flagList: {
+        alignItems: 'center',
+        gap: 8,
+    },
+    flagEmoji: {
+        fontSize: 32,
+        textShadowColor: 'rgba(0, 0, 0, 0.1)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
+    },
+    expandButton: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: SOUP_COLORS.blue,
+        marginTop: 4,
+    },
+    heroAvatarWrapper: {
+        position: 'relative',
         marginBottom: 30,
     },
-    avatarContainer: {
+    heroAvatarContainer: {
         position: 'relative',
-        marginBottom: 16,
     },
-    avatar: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        borderWidth: 3,
+    heroAvatar: {
+        width: 150,
+        height: 150,
+        borderRadius: 75,
+        borderWidth: 4,
         borderColor: SOUP_COLORS.blue,
     },
-    avatarPlaceholder: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
+    heroAvatarPlaceholder: {
+        width: 150,
+        height: 150,
+        borderRadius: 75,
         backgroundColor: SOUP_COLORS.blue,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    avatarInitial: {
-        fontSize: 40,
+    heroAvatarInitial: {
+        fontSize: 60,
         color: '#fff',
-        fontWeight: 'bold',
+        fontWeight: '900',
     },
-    editBadge: {
+    heroEditBadge: {
         position: 'absolute',
-        bottom: 0,
-        right: 0,
+        bottom: 5,
+        right: 5,
         backgroundColor: SOUP_COLORS.pink,
-        padding: 6,
-        borderRadius: 15,
-        borderWidth: 2,
+        padding: 10,
+        borderRadius: 25,
+        borderWidth: 3,
         borderColor: SOUP_COLORS.cream,
+    },
+    heroNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        marginBottom: 8,
+    },
+    heroName: {
+        fontSize: 28,
+        fontWeight: '900',
+        color: SOUP_COLORS.text,
+        textAlign: 'center',
+    },
+    heroTagline: {
+        fontSize: 15,
+        color: SOUP_COLORS.subtext,
+        fontStyle: 'italic',
+        textAlign: 'center',
+        marginTop: 4,
+    },
+    heroLanguagesRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        marginTop: 8,
+    },
+    heroLangGroup: {
+        flexDirection: 'row',
+        gap: 6,
+    },
+    heroLangFlag: {
+        fontSize: 28,
+    },
+    heroLangSeparator: {
+        fontSize: 20,
+        color: SOUP_COLORS.subtext,
+        fontWeight: '300',
+    },
+    scatteredFlag: {
+        position: 'absolute',
+        fontSize: 36,
+        textShadowColor: 'rgba(0, 0, 0, 0.1)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
+    },
+    flagSection: {
+        position: 'absolute',
+    },
+    flagSectionTitle: {
+        position: 'absolute',
+        fontSize: 9,
+        fontWeight: '800',
+        color: SOUP_COLORS.blue,
+        textTransform: 'uppercase',
+        letterSpacing: 0.8,
+        opacity: 0.8,
     },
     infoCenter: {
         alignItems: 'center',
@@ -1251,10 +1517,10 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     name: {
-        fontSize: 26,
-        fontWeight: '800',
+        fontSize: 30,
+        fontWeight: '900',
         color: SOUP_COLORS.text,
-        letterSpacing: -0.5,
+        letterSpacing: -0.8,
     },
     pillRow: {
         flexDirection: 'row',
@@ -1265,9 +1531,9 @@ const styles = StyleSheet.create({
     },
     pill: {
         backgroundColor: 'rgba(0,0,0,0.05)',
-        paddingHorizontal: 12,
-        paddingVertical: 4,
-        borderRadius: 12,
+        paddingHorizontal: 14,
+        paddingVertical: 6,
+        borderRadius: 16,
         flexDirection: 'row',
         alignItems: 'center',
         gap: 4,
@@ -1277,16 +1543,17 @@ const styles = StyleSheet.create({
     },
     pillText: {
         fontSize: 13,
-        fontWeight: '600',
+        fontWeight: '700',
         color: SOUP_COLORS.text,
     },
     bio: {
-        fontSize: 14,
-        color: SOUP_COLORS.subtext,
+        fontSize: 16,
+        color: SOUP_COLORS.text,
         fontStyle: 'italic',
         textAlign: 'center',
-        marginBottom: 16,
+        marginBottom: 20,
         marginHorizontal: 20,
+        fontWeight: '500',
     },
     langRow: {
         flexDirection: 'column', // Changed to column to allow wrapping children properly
@@ -1300,49 +1567,80 @@ const styles = StyleSheet.create({
     },
     langChips: {
         flexDirection: 'row',
-        flexWrap: 'wrap', // Allow chips to wrap to next line
-        gap: 6,
+        flexWrap: 'wrap',
+        gap: 8,
     },
     chip: {
         backgroundColor: SOUP_COLORS.green,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 8,
+        paddingHorizontal: 14,
+        paddingVertical: 6,
+        borderRadius: 16,
     },
     chipYellow: {
-        backgroundColor: '#FFC107', // Amber/Yellow for learning
+        backgroundColor: SOUP_COLORS.pink,
     },
     chipText: {
         color: '#fff',
-        fontSize: 12,
-        fontWeight: '700',
+        fontSize: 13,
+        fontWeight: '800',
     },
     // STATS
     statsSection: {
-        marginBottom: 30,
-    },
-    bigStatCard: {
-        backgroundColor: '#fff',
-        borderRadius: 20,
-        padding: 20,
-        alignItems: 'center',
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
-        elevation: 2,
         marginBottom: 24,
     },
-    bigStatLabel: {
-        fontSize: 14,
-        color: SOUP_COLORS.subtext,
+    statsGrid: {
+        flexDirection: 'row',
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 20,
+        marginHorizontal: 20,
+        marginBottom: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    statGridItem: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    statGridNumber: {
+        fontSize: 32,
+        fontWeight: '900',
+        color: SOUP_COLORS.blue,
+        marginBottom: 4,
+    },
+    statGridLabel: {
+        fontSize: 12,
         fontWeight: '600',
+        color: SOUP_COLORS.subtext,
         textTransform: 'uppercase',
-        letterSpacing: 1,
-        marginBottom: 8,
+        letterSpacing: 0.5,
+    },
+    statGridDivider: {
+        width: 1,
+        backgroundColor: '#E0E0E0',
+        marginHorizontal: 12,
+    },
+    bigStatCard: {
+        backgroundColor: 'rgba(0, 173, 239, 0.12)',
+        borderRadius: 24,
+        padding: 24,
+        alignItems: 'center',
+        marginBottom: 24,
+        borderWidth: 0,
+    },
+    bigStatLabel: {
+        fontSize: 13,
+        color: SOUP_COLORS.text,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 1.2,
+        marginBottom: 12,
     },
     bigStatNumber: {
-        fontSize: 42,
+        fontSize: 52,
         fontWeight: '900',
         color: SOUP_COLORS.blue,
     },
@@ -1350,45 +1648,45 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'flex-start',
         paddingRight: 10,
-        marginBottom: 8,
+        marginBottom: 12,
     },
     sectionTitle: {
-        fontSize: 20,
-        fontWeight: '800',
+        fontSize: 24,
+        fontWeight: '900',
         color: SOUP_COLORS.text,
-        marginBottom: 2,
+        marginBottom: 4,
         marginLeft: 4,
     },
     sectionSubtitle: {
-        fontSize: 13,
+        fontSize: 14,
         color: SOUP_COLORS.subtext,
-        marginBottom: 16,
+        marginBottom: 20,
         marginLeft: 4,
         maxWidth: '95%',
-        lineHeight: 18,
+        lineHeight: 20,
+        fontWeight: '500',
     },
     infoButton: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: '#f0f0f0',
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        backgroundColor: 'rgba(0, 173, 239, 0.1)',
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#e0e0e0',
+        borderWidth: 0,
     },
     infoButtonText: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: SOUP_COLORS.subtext,
+        fontSize: 15,
+        fontWeight: '800',
+        color: SOUP_COLORS.blue,
     },
     subSectionTitle: {
-        fontSize: 15,
-        fontWeight: '700',
+        fontSize: 16,
+        fontWeight: '800',
         color: SOUP_COLORS.text,
-        marginBottom: 8,
+        marginBottom: 10,
         marginLeft: 4,
-        marginTop: 8,
+        marginTop: 12,
     },
     emptyText: {
         fontSize: 14,
@@ -1539,7 +1837,39 @@ const styles = StyleSheet.create({
     },
     wrappedSubtitleSmall: {
         fontSize: 12,
-        color: 'rgba(255,255,255,0.7)',
+        color: 'rgba(255,255,255,0.9)',
+    },
+    // GROUPS SECTION
+    groupsSection: {
+        paddingHorizontal: 20,
+        paddingVertical: 20,
+    },
+    groupsSectionTitle: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: SOUP_COLORS.text,
+        marginBottom: 16,
+    },
+    groupItem: {
+        backgroundColor: '#fff',
+        padding: 16,
+        borderRadius: 12,
+        marginBottom: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 1,
+    },
+    groupName: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: SOUP_COLORS.text,
+        marginBottom: 4,
+    },
+    groupMeta: {
+        fontSize: 13,
+        color: SOUP_COLORS.subtext,
         fontWeight: '500',
     },
     // Old styles kept for modal
@@ -1702,11 +2032,11 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 16,
         right: 16,
-        zIndex: 10,
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: 'rgba(0,0,0,0.1)',
+        zIndex: 9999,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(0,0,0,0.3)',
         justifyContent: 'center',
         alignItems: 'center',
     },

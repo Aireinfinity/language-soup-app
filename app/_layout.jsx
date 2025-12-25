@@ -6,6 +6,7 @@ import { NotificationProvider } from '../contexts/NotificationContext';
 import { AudioPlayerProvider } from '../contexts/AudioPlayerContext';
 import { MiniAudioPlayer } from '../components/MiniAudioPlayer';
 import { Colors } from '../constants/Colors';
+import { QuestProvider } from '../contexts/QuestContext';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -56,7 +57,9 @@ export default function RootLayout() {
         <AuthProvider>
             <NotificationProvider>
                 <AudioPlayerProvider>
-                    <RootLayoutNav />
+                    <QuestProvider>
+                        <RootLayoutNav />
+                    </QuestProvider>
                 </AudioPlayerProvider>
             </NotificationProvider>
         </AuthProvider>

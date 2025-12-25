@@ -33,9 +33,13 @@ export default function CreateChallenge() {
             .select('id, name, language')
             .order('name');
 
-        setGroups(data || []);
-        if (data?.length > 0) {
-            setFormData(prev => ({ ...prev, groupId: data[0].id }));
+        // Add "All Groups" option at the top
+        const allGroupsOption = { id: 'ALL', name: 'All Groups (Broadcast)', language: '🎄 Holiday Mode' };
+        const groupsWithBroadcast = data ? [allGroupsOption, ...data] : [allGroupsOption];
+
+        setGroups(groupsWithBroadcast);
+        if (groupsWithBroadcast.length > 0) {
+            setFormData(prev => ({ ...prev, groupId: groupsWithBroadcast[0].id }));
         }
     };
 
@@ -50,12 +54,31 @@ export default function CreateChallenge() {
             return;
         }
 
+        const combinedPrompt = `${formData.englishVersion.trim()}\n${formData.nativeVersion.trim()}`;
+
+        // Handle broadcast mode
+        if (formData.groupId === 'ALL') {
+            const realGroups = groups.filter(g => g.id !== 'ALL');
+
+            Alert.alert(
+                '🎄 Broadcast to All Groups',
+                `Send this challenge to ALL ${realGroups.length} groups?`,
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: `Send to ${realGroups.length} Groups`,
+                        style: 'destructive',
+                        onPress: () => executeBroadcast(combinedPrompt, realGroups)
+                    }
+                ]
+            );
+            return;
+        }
+
+        // Single group mode
         setLoading(true);
         Keyboard.dismiss();
         try {
-            // Combine English and native versions with newline
-            const combinedPrompt = `${formData.englishVersion.trim()}\n${formData.nativeVersion.trim()}`;
-
             const { error } = await supabase
                 .from('app_challenges')
                 .insert({
@@ -71,6 +94,44 @@ export default function CreateChallenge() {
         } catch (error) {
             console.error('Error creating challenge:', error);
             Alert.alert('Error', 'Failed to create challenge');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const executeBroadcast = async (combinedPrompt, targetGroups) => {
+        setLoading(true);
+        Keyboard.dismiss();
+        let successCount = 0;
+        let failCount = 0;
+
+        try {
+            for (const group of targetGroups) {
+                try {
+                    const { error } = await supabase
+                        .from('app_challenges')
+                        .insert({
+                            prompt_text: combinedPrompt,
+                            group_id: group.id,
+                            created_by: user.id
+                        });
+
+                    if (error) throw error;
+                    successCount++;
+                } catch (err) {
+                    console.error(`Failed to send to ${group.name}:`, err);
+                    failCount++;
+                }
+            }
+
+            Alert.alert(
+                '🎄 Broadcast Complete',
+                `Sent to ${successCount} group(s)${failCount > 0 ? `\n${failCount} failed` : ''}`,
+                [{ text: 'OK', onPress: () => router.back() }]
+            );
+        } catch (error) {
+            console.error('Broadcast error:', error);
+            Alert.alert('Error', 'Failed to complete broadcast');
         } finally {
             setLoading(false);
         }

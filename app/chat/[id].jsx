@@ -421,6 +421,11 @@ export default function ChatScreen() {
 
             // Complete quest for first text message
             await completeQuest('first_text');
+
+            // Complete quest for replying to challenge if this message is part of a challenge
+            if (currentChallenge?.id) {
+                await completeQuest('reply_challenge');
+            }
         } catch (error) {
             console.error('Send failed:', error);
             Alert.alert('Message Failed', 'Could not send message. Please check your connection and try again.', [{ text: 'OK' }]);

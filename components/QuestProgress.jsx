@@ -44,7 +44,26 @@ export default function QuestProgress() {
         }
     };
 
-    if (hidden || totalCompleted === totalQuests) {
+    // Show small restore button if hidden
+    if (hidden) {
+        return (
+            <View style={styles.container}>
+                <Pressable
+                    style={styles.restoreButton}
+                    onPress={async () => {
+                        await AsyncStorage.removeItem(HIDDEN_KEY);
+                        setHidden(false);
+                    }}
+                >
+                    <Text style={styles.restoreEmoji}>🎯</Text>
+                    <Text style={styles.restoreText}>Show Quests</Text>
+                </Pressable>
+            </View>
+        );
+    }
+
+    // Hide completely if all quests are done
+    if (totalCompleted === totalQuests) {
         return null;
     }
 
@@ -58,21 +77,39 @@ export default function QuestProgress() {
         outputRange: [0, 1],
     });
 
+    const progressPercentage = (totalCompleted / totalQuests) * 100;
+
     return (
         <View style={styles.container}>
-            {/* Collapsed Pill Button */}
+            {/* Soup Bowl Progress Bar */}
             <Pressable
-                style={styles.pill}
+                style={styles.bowlContainer}
                 onPress={() => setExpanded(!expanded)}
             >
-                <Text style={styles.pillEmoji}>🎯</Text>
-                <Text style={styles.pillText}>
-                    {totalCompleted}/{totalQuests} quests
-                </Text>
+                {/* Bowl Background */}
+                <View style={styles.bowl}>
+                    {/* Progress Fill */}
+                    <View style={[styles.bowlFill, { height: `${progressPercentage}%` }]} />
+
+                    {/* Bowl Emoji */}
+                    <Text style={styles.bowlEmoji}>🍲</Text>
+                </View>
+
+                {/* Progress Text */}
+                <View style={styles.progressTextContainer}>
+                    <Text style={styles.progressText}>
+                        {totalCompleted}/{totalQuests} ingredients
+                    </Text>
+                    <Text style={styles.progressSubtext}>
+                        {totalCompleted === totalQuests ? '🎉 Soup complete!' : 'Keep cooking!'}
+                    </Text>
+                </View>
+
+                {/* Expand Icon */}
                 {expanded ? (
-                    <ChevronDown size={16} color={Colors.primary} />
+                    <ChevronDown size={20} color={Colors.primary} />
                 ) : (
-                    <ChevronUp size={16} color={Colors.primary} />
+                    <ChevronUp size={20} color={Colors.primary} />
                 )}
             </Pressable>
 
@@ -153,14 +190,14 @@ const styles = StyleSheet.create({
         right: 16,
         zIndex: 100,
     },
-    pill: {
+    bowlContainer: {
         backgroundColor: '#fff',
         borderRadius: 24,
         paddingVertical: 12,
-        paddingHorizontal: 20,
+        paddingHorizontal: 16,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: 12,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.15,
@@ -168,13 +205,65 @@ const styles = StyleSheet.create({
         elevation: 5,
         alignSelf: 'center',
     },
-    pillEmoji: {
-        fontSize: 18,
+    bowl: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: '#F5F5F5',
+        overflow: 'hidden',
+        position: 'relative',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#E0E0E0',
     },
-    pillText: {
+    bowlFill: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        backgroundColor: '#00adef',
+        opacity: 0.3,
+    },
+    bowlEmoji: {
+        fontSize: 28,
+        zIndex: 1,
+    },
+    progressTextContainer: {
+        flex: 1,
+    },
+    progressText: {
         fontSize: 15,
-        fontWeight: '600',
+        fontWeight: '700',
         color: Colors.text,
+    },
+    progressSubtext: {
+        fontSize: 12,
+        color: Colors.textLight,
+        marginTop: 2,
+    },
+    restoreButton: {
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        borderRadius: 20,
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+        alignSelf: 'center',
+    },
+    restoreEmoji: {
+        fontSize: 14,
+    },
+    restoreText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: Colors.primary,
     },
     expandedContainer: {
         backgroundColor: '#fff',

@@ -101,12 +101,12 @@ export const QuestProvider = ({ children }) => {
                 // Haptic feedback
                 await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-                // Show celebration
+                // Immediately reload progress to update UI
+                await loadQuestProgress();
+
+                // Show celebration after reload
                 const quest = QUESTS.find(q => q.id === questId);
                 showCelebration(quest);
-
-                // Reload progress
-                await loadQuestProgress();
 
                 return true;
             }
@@ -121,22 +121,42 @@ export const QuestProvider = ({ children }) => {
     const showCelebration = (quest) => {
         if (!quest) return;
 
-        Alert.alert(
-            `${quest.emoji} Quest Complete!`,
-            `${quest.title}\n\n${quest.description}`,
-            [
-                {
-                    text: 'Nice! 🎉',
-                    onPress: async () => {
-                        // Mark celebration as seen
-                        await supabase.rpc('mark_celebration_seen', {
-                            uid: user.id,
-                            qid: quest.id,
-                        });
+        // Check if this was the last quest
+        const allCompleted = Object.keys(questProgress).length + 1 === QUESTS.length;
+
+        if (allCompleted) {
+            Alert.alert(
+                `🎉 ALL QUESTS COMPLETE! 🎉`,
+                `You've completed every quest!\n\nYou're officially a Language Soup master! 🥣✨`,
+                [
+                    {
+                        text: 'Amazing! 🔥',
+                        onPress: async () => {
+                            await supabase.rpc('mark_celebration_seen', {
+                                uid: user.id,
+                                qid: quest.id,
+                            });
+                        },
                     },
-                },
-            ]
-        );
+                ]
+            );
+        } else {
+            Alert.alert(
+                `${quest.emoji} Quest Complete!`,
+                `${quest.title}\n\n${quest.description}`,
+                [
+                    {
+                        text: 'Nice! 🎉',
+                        onPress: async () => {
+                            await supabase.rpc('mark_celebration_seen', {
+                                uid: user.id,
+                                qid: quest.id,
+                            });
+                        },
+                    },
+                ]
+            );
+        }
     };
 
     const isQuestCompleted = (questId) => {
