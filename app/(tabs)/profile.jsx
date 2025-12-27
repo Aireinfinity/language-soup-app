@@ -264,7 +264,26 @@ export default function ProfileScreen() {
     const uploadAvatar = async (uri, isCustomPhoto = true) => {
         setUploading(true);
         try {
-            const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+            let base64;
+
+            // For soup avatars (asset URIs), use fetch instead of FileSystem on Android
+            if (!isCustomPhoto && Platform.OS === 'android') {
+                const response = await fetch(uri);
+                const blob = await response.blob();
+                const reader = new FileReader();
+                base64 = await new Promise((resolve, reject) => {
+                    reader.onloadend = () => {
+                        const base64data = reader.result.split(',')[1];
+                        resolve(base64data);
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+            } else {
+                // For custom photos or iOS, use FileSystem
+                base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+            }
+
             const ext = isCustomPhoto ? 'jpg' : 'png';
             const mimeType = isCustomPhoto ? 'image/jpeg' : 'image/png';
             const filePath = `${authUser.id}/avatar-${Date.now()}.${ext}`;
@@ -307,25 +326,19 @@ export default function ProfileScreen() {
     // --- RENDER HELPERS ---
 
     const showAvatarOptions = () => {
-        if (Platform.OS === 'android') {
-            // Android: Only allow photo uploads (soup avatars causing issues)
-            pickImage();
-        } else {
-            // iOS: Show full menu with soup avatars
-            Alert.alert(
-                'Choose Avatar',
-                'Select a photo or pick a soup',
-                [
-                    { text: 'Upload Photo', onPress: pickImage },
-                    ...SOUP_AVATARS.map(soup => ({
-                        text: soup.name,
-                        onPress: () => handleSelectSoup(soup)
-                    })),
-                    { text: 'Cancel', style: 'cancel' }
-                ],
-                { cancelable: true }
-            );
-        }
+        Alert.alert(
+            'Choose Avatar',
+            'Select a photo or pick a soup',
+            [
+                { text: 'Upload Photo', onPress: pickImage },
+                ...SOUP_AVATARS.map(soup => ({
+                    text: soup.name,
+                    onPress: () => handleSelectSoup(soup)
+                })),
+                { text: 'Cancel', style: 'cancel' }
+            ],
+            { cancelable: true }
+        );
     };
 
     const renderIdentity = () => (
