@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, ActivityIndicator, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, ActivityIndicator, Alert, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -82,16 +82,29 @@ export default function AvatarScreen() {
                 });
                 mimeType = 'image/jpeg';
             } else {
-                // Handle local asset resource
-                // Need to download it to cache first or use manipulation to get base64
-                // A reliable way for Expo assets:
+                // Handle soup avatars
                 const selectedSoup = SOUP_AVATARS.find(s => s.id === selectedSoupId);
                 const asset = Asset.fromModule(selectedSoup.source);
                 await asset.downloadAsync();
 
-                base64 = await FileSystem.readAsStringAsync(asset.localUri, {
-                    encoding: 'base64',
-                });
+                // Use fetch for Android, FileSystem for iOS
+                if (Platform.OS === 'android') {
+                    const response = await fetch(asset.localUri);
+                    const blob = await response.blob();
+                    const reader = new FileReader();
+                    base64 = await new Promise((resolve, reject) => {
+                        reader.onloadend = () => {
+                            const base64data = reader.result.split(',')[1];
+                            resolve(base64data);
+                        };
+                        reader.onerror = reject;
+                        reader.readAsDataURL(blob);
+                    });
+                } else {
+                    base64 = await FileSystem.readAsStringAsync(asset.localUri, {
+                        encoding: 'base64',
+                    });
+                }
                 mimeType = 'image/png';
             }
 
