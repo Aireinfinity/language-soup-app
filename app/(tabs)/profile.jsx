@@ -307,19 +307,25 @@ export default function ProfileScreen() {
     // --- RENDER HELPERS ---
 
     const showAvatarOptions = () => {
-        Alert.alert(
-            'Choose Avatar',
-            'Select a photo or pick a soup',
-            [
-                { text: 'Upload Photo', onPress: pickImage },
-                ...SOUP_AVATARS.map(soup => ({
-                    text: soup.name,
-                    onPress: () => handleSelectSoup(soup)
-                })),
-                { text: 'Cancel', style: 'cancel' }
-            ],
-            { cancelable: true }
-        );
+        if (Platform.OS === 'android') {
+            // Android: Only allow photo uploads (soup avatars causing issues)
+            pickImage();
+        } else {
+            // iOS: Show full menu with soup avatars
+            Alert.alert(
+                'Choose Avatar',
+                'Select a photo or pick a soup',
+                [
+                    { text: 'Upload Photo', onPress: pickImage },
+                    ...SOUP_AVATARS.map(soup => ({
+                        text: soup.name,
+                        onPress: () => handleSelectSoup(soup)
+                    })),
+                    { text: 'Cancel', style: 'cancel' }
+                ],
+                { cancelable: true }
+            );
+        }
     };
 
     const renderIdentity = () => (

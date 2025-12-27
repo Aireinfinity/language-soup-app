@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "language-soup-mobile",
+    "name": "Language Soup",
     "slug": "language-soup-mobile",
     "version": "1.0.0",
     "scheme": "languagesoup",
@@ -24,13 +24,18 @@
       }
     },
     "android": {
-      "package": "com.aireinfinity.languagesoup",
-      "versionCode": 11,
-      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.aireinfinity.languagesoup",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
