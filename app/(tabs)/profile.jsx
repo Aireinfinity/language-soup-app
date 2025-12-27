@@ -944,28 +944,6 @@ export default function ProfileScreen() {
                 {/* Wrapped Banner */}
                 {renderWrapped()}
 
-                {/* Logout Button */}
-                <Pressable
-                    onPress={() => {
-                        Alert.alert(
-                            'Logout',
-                            'Are you sure you want to logout?',
-                            [
-                                { text: 'Cancel', style: 'cancel' },
-                                {
-                                    text: 'Logout',
-                                    style: 'destructive',
-                                    onPress: handleSignOut
-                                }
-                            ]
-                        );
-                    }}
-                    style={styles.logoutButton}
-                >
-                    <LogOut size={20} color={SOUP_COLORS.pink} />
-                    <Text style={styles.logoutText}>Logout</Text>
-                </Pressable>
-
                 <View style={{ height: 40 }} />
             </ScrollView>
             {renderWrappedModal()}
@@ -2648,25 +2626,6 @@ const styles = StyleSheet.create({
     },
     soupNameSelected: {
         color: SOUP_COLORS.blue,
-    },
-    logoutButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        backgroundColor: '#FFF5F5',
-        paddingVertical: 16,
-        paddingHorizontal: 24,
-        borderRadius: 12,
-        marginHorizontal: 20,
-        marginTop: 20,
-        borderWidth: 1,
-        borderColor: '#FFE5E5',
-    },
-    logoutText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: SOUP_COLORS.pink,
     },
     photoUploadIcon: {
         width: '80%',
