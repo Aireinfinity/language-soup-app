@@ -35,7 +35,11 @@
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE"
       ],
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "notification": {
+        "icon": "./assets/icon.png",
+        "color": "#FF6B35"
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -61,7 +65,8 @@
       ]
     ],
     "platforms": [
-      "ios"
+      "ios",
+      "android"
     ],
     "extra": {
       "router": {},
