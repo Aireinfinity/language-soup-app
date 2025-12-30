@@ -292,6 +292,10 @@ export default function HowItWorksScreen() {
                 <ArrowLeft size={24} color={Colors.text} />
             </TouchableOpacity>
 
+            <TouchableOpacity onPress={() => router.replace('/login')} style={styles.loginButton}>
+                <ThemedText style={styles.loginText}>Login</ThemedText>
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.content} onPress={handlePress} activeOpacity={1}>
 
                 {STEPS[currentStep].id === 0 ? (
@@ -348,6 +352,21 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         justifyContent: 'center',
+    },
+    loginButton: {
+        position: 'absolute',
+        top: 60,
+        right: 24,
+        zIndex: 10,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        backgroundColor: Colors.primary,
+        borderRadius: 20,
+    },
+    loginText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
     },
     content: {
         flex: 1,

@@ -114,8 +114,6 @@ export default function CommunityScreen() {
                 .select('id, display_name, avatar_url, status_text, fluent_languages, learning_languages')
                 .neq('id', user?.id) // Exclude current user
                 .not('display_name', 'is', null)
-                .neq('display_name', 'User') // Exclude test users
-                .neq('display_name', 'user') // Exclude test users (lowercase)
                 .limit(30);
 
             // Sort: 1) Photos, 2) Soup avatars, 3) Everyone else, then alphabetically
