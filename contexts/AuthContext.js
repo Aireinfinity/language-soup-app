@@ -343,9 +343,10 @@ export const AuthProvider = ({ children }) => {
             console.log('[Auth] SignIn Result:', { user: data.user?.id, error: error?.message });
 
             // SUCCESSFUL LOGIN: Run Vacuum just in case
-            if (!error && data?.user) {
-                await performDataVacuum(data.user.id, targetName);
-            }
+            // DISABLED: This was deleting accounts - RPC doesn't exist
+            // if (!error && data?.user) {
+            //     await performDataVacuum(data.user.id, targetName);
+            // }
 
             // If user doesn't exist, create them!
             if (error && (error.status === 400 || error.message.includes('Invalid login credentials'))) {
@@ -375,9 +376,10 @@ export const AuthProvider = ({ children }) => {
                 data = authResult.data;
 
                 // NEW SIGNUP: Run Vacuum to merge legacy data
-                if (data?.user) {
-                    await performDataVacuum(data.user.id, targetName);
-                }
+                // DISABLED: This was deleting accounts - RPC doesn't exist
+                // if (data?.user) {
+                //     await performDataVacuum(data.user.id, targetName);
+                // }
 
                 // Create/Update the profile in app_users
                 const isAdmin = targetName === 'Noah :)';
