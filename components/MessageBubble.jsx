@@ -5,6 +5,8 @@ import { ChatStyles } from '../constants/ChatStyles';
 import { AudioMessage } from './AudioMessage';
 import { MessageActionMenu } from './MessageActionMenu';
 import { ReactionViewerModal } from "./ReactionViewerModal";
+import { shareChallenge } from '../lib/shareChallenge';
+import { Share2 } from 'lucide-react-native';
 
 import { getLanguageFlag } from '../utils/languageFlags';
 import { ReactionPicker } from './ReactionPicker';
@@ -173,16 +175,37 @@ export function MessageBubble({
             })()}
 
             {message.message_type === 'voice' ? (
-                <AudioMessage
-                    audioUrl={message.media_url || message.content}
-                    duration={message.duration_seconds}
-                    senderName={sender?.display_name}
-                    isMe={isMe}
-                    messageId={message.id}
-                    senderAvatar={sender?.avatar_url}
-                    senderStatus={sender?.status_text}
-                    groupName={groupName}
-                />
+                <View>
+                    <AudioMessage
+                        audioUrl={message.media_url || message.content}
+                        duration={message.duration_seconds}
+                        senderName={sender?.display_name}
+                        isMe={isMe}
+                        messageId={message.id}
+                        senderAvatar={sender?.avatar_url}
+                        senderStatus={sender?.status_text}
+                        groupName={groupName}
+                    />
+                    {/* Share button for own voice messages */}
+                    {isMe && (
+                        <Pressable
+                            style={styles.shareButton}
+                            onPress={async () => {
+                                const { haptics } = require('../utils/haptics');
+                                haptics.light();
+                                await shareChallenge(
+                                    message.sender_id,
+                                    message.group_id,
+                                    message.id,
+                                    'your language' // You can pass actual language from group context
+                                );
+                            }}
+                        >
+                            <Share2 size={14} color="#00aedf" />
+                            <Text style={styles.shareButtonText}>Share Challenge</Text>
+                        </Pressable>
+                    )}
+                </View>
             ) : message.message_type === 'image' || message.message_type === 'video' ? (
                 <View>
                     {message.message_type === 'image' ? (
