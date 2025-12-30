@@ -67,19 +67,13 @@ export default function GroupSelectionScreen() {
                 .single();
 
             if (userCheckError && userCheckError.code === 'PGRST116') {
-                // User doesn't exist, create them
-                const { error: createError } = await supabase
-                    .from('app_users')
-                    .insert({
-                        id: user.id,
-                        display_name: user.user_metadata?.display_name || user.email?.split('@')[0] || 'User',
-                        created_at: new Date().toISOString()
-                    });
-
-                if (createError) {
-                    console.error('Error creating user:', createError);
-                    throw new Error('Failed to create user profile');
-                }
+                // User doesn't exist, they must pick a name and emoji password first
+                Alert.alert(
+                    'Secure Your Profile 🔒',
+                    'Please set a name and emoji password to save your progress!',
+                    [{ text: 'OK', onPress: () => router.push('/login') }]
+                );
+                return;
             }
 
             // Join selected groups

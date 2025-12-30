@@ -16,6 +16,7 @@ import AdminLoginModal from '../../components/AdminLoginModal';
 import FounderWelcomeModal from '../../components/FounderWelcomeModal';
 import WaveformQuestBar from '../../components/WaveformQuestBar';
 import ContextualTooltip from '../../components/ContextualTooltip';
+import { SecurityBanner } from '../../components/SecurityBanner';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -404,6 +405,9 @@ export default function HomeScreen() {
 
             {/* Waveform Quest Progress Bar */}
             <WaveformQuestBar />
+
+            {/* Security Migration Banner */}
+            <SecurityBanner />
 
             <FlatList
                 data={groups.filter(g => !g.name.toLowerCase().includes('support'))}

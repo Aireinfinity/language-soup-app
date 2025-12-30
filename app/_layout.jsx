@@ -46,6 +46,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="onboarding/conversational" />
                 <Stack.Screen name="onboarding/learning" />
                 <Stack.Screen name="onboarding/tagline" />
+                <Stack.Screen name="onboarding/notifications" />
             </Stack>
             <MiniAudioPlayer />
         </>

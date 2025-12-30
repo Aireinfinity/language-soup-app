@@ -99,6 +99,7 @@ export const AuthProvider = ({ children }) => {
         const isPublicRoute = publicRoutes.includes(currentRoute) || !currentRoute;
 
         if (!user && !isPublicRoute) {
+            console.log('[Auth] Redirecting to login. User:', user, 'Route:', currentRoute);
             // Redirect to login if not authenticated and trying to access protected route
             router.replace('/login');
         } else if (user) {
@@ -183,8 +184,7 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // GOOGLE AUTH - Commented out until Apple Developer account is approved
-    // Uncomment when ready to use with TestFlight/Production builds
+    // APPLE & GOOGLE AUTH - Now enabled for production builds
     const signInWithGoogle = async () => {
         try {
             const redirectUrl = Linking.createURL('login-callback', { scheme: 'languagesoup' });
@@ -296,44 +296,97 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const signInWithName = async (displayName) => {
+    const signInWithName = async (displayName, emojiPassword) => {
         try {
-            // Sign in anonymously (device-based auth)
-            const { data, error } = await supabase.auth.signInAnonymously();
-            if (error) throw error;
+            const targetName = displayName.trim();
+            console.log('[Auth] Attempting login for:', targetName);
 
-            // Create user profile with display name
-            if (data.user) {
-                const targetName = displayName.trim();
-                // STRICT check for Founder Daddy
-                const isAdmin = targetName === 'Noah :)';
+            // DATA MIGRATION HELPER
+            const performDataVacuum = async (currentUserId, currentName) => {
+                console.log('[Auth] Running Vacuum RPC for:', currentName);
 
-                // 1. Check if this username already exists (to handle re-linking)
-                const { data: existingUser } = await supabase
+                const { data: result, error } = await supabase
+                    .rpc('execute_identity_migration', {
+                        target_display_name: currentName
+                    });
+
+                if (error) {
+                    console.error('[Auth] Vacuum RPC failed:', error);
+                } else {
+                    console.log('[Auth] Vacuum RPC result:', result);
+                }
+            };
+
+            // Helper to generate a stable, safe internal email from any name
+            const generateSafeEmail = (name) => {
+                const clean = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+                // Simple stable hash
+                let hash = 0;
+                for (let i = 0; i < name.length; i++) {
+                    const char = name.charCodeAt(i);
+                    hash = ((hash << 5) - hash) + char;
+                    hash |= 0;
+                }
+                const hashStr = Math.abs(hash).toString(16);
+                return `${clean || 'user'}_${hashStr}@internal.languagesoup.com`;
+            };
+
+            const internalEmail = generateSafeEmail(targetName);
+            const internalPassword = `soup_${emojiPassword}_${targetName.length}`;
+            console.log('[Auth] Generated Safe Email:', internalEmail);
+
+            // Try to sign in with this identity
+            let { data, error } = await supabase.auth.signInWithPassword({
+                email: internalEmail,
+                password: internalPassword,
+            });
+            console.log('[Auth] SignIn Result:', { user: data.user?.id, error: error?.message });
+
+            // SUCCESSFUL LOGIN: Run Vacuum just in case
+            if (!error && data?.user) {
+                await performDataVacuum(data.user.id, targetName);
+            }
+
+            // If user doesn't exist, create them!
+            if (error && (error.status === 400 || error.message.includes('Invalid login credentials'))) {
+                // Check if the display name is already taken by someone WITH a password
+                const { data: existingProfiles } = await supabase
                     .from('app_users')
-                    .select('id')
-                    .eq('display_name', targetName)
-                    .single();
+                    .select('id, emoji_password')
+                    .ilike('display_name', targetName);
 
-                if (existingUser && isAdmin) {
-                    // RE-LINKING LOGIC:
-                    // If 'Noah :)' exists, we assume it's YOU trying to get back in.
-                    // We need to update the OLD record to point to your NEW anonymous ID.
-                    // Note: This requires RLS policies to allow updating "other" users or service role usage.
-                    // Since we are client-side, we might hit RLS issues unless we are careful.
-                    // HACK: For now, we unfortunately can't swap IDs easily without backend logic.
-                    // ALTERNATIVE: We delete the old row first so the new upsert works.
-                    await supabase
-                        .from('app_users')
-                        .delete()
-                        .eq('display_name', targetName);
+                // If ANY matching name has a DIFFERENT password, it's taken!
+                const passwordConflict = existingProfiles?.find(m => m.emoji_password && m.emoji_password !== emojiPassword);
+                if (passwordConflict) {
+                    throw new Error('Name already taken!');
                 }
 
+                // Sign up as a new stable user
+                const authResult = await supabase.auth.signUp({
+                    email: internalEmail,
+                    password: internalPassword,
+                });
+
+                if (authResult.error) throw authResult.error;
+                data = authResult.data;
+
+
+                if (authResult.error) throw authResult.error;
+                data = authResult.data;
+
+                // NEW SIGNUP: Run Vacuum to merge legacy data
+                if (data?.user) {
+                    await performDataVacuum(data.user.id, targetName);
+                }
+
+                // Create/Update the profile in app_users
+                const isAdmin = targetName === 'Noah :)';
                 const { error: profileError } = await supabase
                     .from('app_users')
                     .upsert({
                         id: data.user.id,
                         display_name: targetName,
+                        emoji_password: emojiPassword,
                         is_admin: isAdmin,
                         is_community_manager: isAdmin,
                         avatar_url: `https://api.dicebear.com/7.x/avataaars/png?seed=${data.user.id}`,
@@ -342,14 +395,14 @@ export const AuthProvider = ({ children }) => {
                         updated_at: new Date().toISOString(),
                     });
 
-                if (profileError) {
-                    console.warn('Profile creation error:', profileError);
-                }
+                if (profileError) console.warn('Profile sync error:', profileError);
+            } else if (error) {
+                throw error;
             }
 
             return data;
         } catch (error) {
-            console.error('Name login failed:', error);
+            console.error('Stable login failed:', error);
             throw error;
         }
     };

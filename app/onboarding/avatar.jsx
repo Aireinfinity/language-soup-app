@@ -130,7 +130,8 @@ export default function AvatarScreen() {
                 .update({ avatar_url: publicUrl })
                 .eq('id', user.id);
 
-            router.replace('/(tabs)');
+            // router.replace('/(tabs)');
+            router.push('/onboarding/notifications');
 
         } catch (error) {
             console.error('Avatar upload error:', error);

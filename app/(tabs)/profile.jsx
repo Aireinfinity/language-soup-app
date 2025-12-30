@@ -920,15 +920,26 @@ export default function ProfileScreen() {
                     <Text style={styles.wrappedButtonText}>Wrapped</Text>
                 </Pressable>
 
-                {/* Notifications Bell (Right) */}
-                <Pressable
-                    onPress={() => {
-                        // TODO: Navigate to notifications
-                        Alert.alert('Notifications', 'Coming soon!');
-                    }}
-                >
-                    <Bell size={24} color={SOUP_COLORS.blue} />
-                </Pressable>
+                {/* Right Side Icons */}
+                <View style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
+                    {/* Logout Button */}
+                    <Pressable
+                        onPress={handleSignOut}
+                        hitSlop={10}
+                    >
+                        <LogOut size={22} color={SOUP_COLORS.pink} />
+                    </Pressable>
+
+                    {/* Notifications Bell */}
+                    <Pressable
+                        onPress={() => {
+                            // TODO: Navigate to notifications
+                            Alert.alert('Notifications', 'Coming soon!');
+                        }}
+                    >
+                        <Bell size={24} color={SOUP_COLORS.blue} />
+                    </Pressable>
+                </View>
             </View>
 
             <ScrollView
