@@ -38,6 +38,17 @@ export default function LoginScreen() {
                 .eq('display_name', name.trim())
                 .maybeSingle();
 
+            // Determine user type for UX messaging
+            if (existing) {
+                if (existing.emoji_password) {
+                    setUserType('existing_with_password');
+                } else {
+                    setUserType('existing_no_password');
+                }
+            } else {
+                setUserType('new');
+            }
+
             setIsNewUser(!existing);
             setStep('password');
         } catch (err) {
@@ -163,11 +174,30 @@ export default function LoginScreen() {
                             : "looks like you've been here! set a 3-emoji password to save your progress forever."}
                     </Text>
 
-                    {isNewUser || !password.length ? (
-                        <View style={styles.screenshotWarning}>
-                            <Text style={styles.screenshotText}>📸 Take a screenshot of your 3 emojis! You'll need them to log back in.</Text>
+                    {/* Info banner based on user type */}
+                    {userType && (
+                        <View style={styles.infoBanner}>
+                            <Text style={styles.infoBannerEmoji}>
+                                {userType === 'new' ? '🤪' : userType === 'existing_no_password' ? '🤩' : '👋🏾'}
+                            </Text>
+                            <View style={styles.infoBannerTextContainer}>
+                                <Text style={styles.infoBannerTitle}>
+                                    {userType === 'new'
+                                        ? 'Welcome to Language Soup!'
+                                        : userType === 'existing_no_password'
+                                            ? 'Set Your Emoji Password'
+                                            : 'Welcome Back!'}
+                                </Text>
+                                <Text style={styles.infoBannerText}>
+                                    {userType === 'new'
+                                        ? 'We use emoji passwords. Pick 3 emojis and screenshot this screen so you don\'t forget!'
+                                        : userType === 'existing_no_password'
+                                            ? 'Use the same username and screenshot your password in case you need to log out and back in again!'
+                                            : 'Enter your emoji password to log in.'}
+                                </Text>
+                            </View>
                         </View>
-                    ) : null}
+                    )}
                 </View>
 
                 <View style={styles.passwordDisplay}>
@@ -250,19 +280,33 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginTop: 8,
     },
-    screenshotWarning: {
-        backgroundColor: '#FFF3CD',
-        padding: 12,
-        borderRadius: 12,
+    infoBanner: {
+        flexDirection: 'row',
+        backgroundColor: Colors.cream,
+        borderRadius: 16,
+        padding: 16,
         marginTop: 16,
-        borderWidth: 1,
-        borderColor: '#FFEEBA',
+        marginHorizontal: 4,
+        borderWidth: 2,
+        borderColor: Colors.primary,
     },
-    screenshotText: {
-        color: '#856404',
+    infoBannerEmoji: {
+        fontSize: 32,
+        marginRight: 12,
+    },
+    infoBannerTextContainer: {
+        flex: 1,
+    },
+    infoBannerTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: Colors.text,
+        marginBottom: 4,
+    },
+    infoBannerText: {
         fontSize: 14,
-        textAlign: 'center',
-        fontWeight: '600',
+        color: Colors.subtext,
+        lineHeight: 20,
     },
     inputContainer: { marginBottom: 24 },
     input: { backgroundColor: '#fff', borderRadius: 12, padding: 16, fontSize: 18, color: Colors.text, borderWidth: 2, borderColor: Colors.primary },
