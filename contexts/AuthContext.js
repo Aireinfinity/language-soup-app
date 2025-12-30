@@ -161,7 +161,7 @@ export const AuthProvider = ({ children }) => {
             if (!hasProfile) {
                 // If no profile, force onboarding
                 if (!inOnboarding) {
-                    router.replace('/onboarding');
+                    router.replace('/login');
                 }
             } else {
                 setProfileChecked(true);
