@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
+import * as Linking from 'expo-linking';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
@@ -20,6 +21,7 @@ export function NotificationProvider({ children }) {
     const { user } = useAuth();
     const [expoPushToken, setExpoPushToken] = useState(null);
     const [notification, setNotification] = useState(null);
+    const [permissionStatus, setPermissionStatus] = useState(null); // 'granted' | 'denied' | 'undetermined'
     const notificationListener = useRef();
     const responseListener = useRef();
 
@@ -32,6 +34,8 @@ export function NotificationProvider({ children }) {
                 }
             });
 
+            checkPermissions();
+
             // Listen for notifications
             notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
                 setNotification(notification);
@@ -43,6 +47,11 @@ export function NotificationProvider({ children }) {
                 handleNotificationResponse(data);
             });
 
+            // Re-check permissions when app comes to foreground
+            const subscription = Linking.addEventListener('url', () => {
+                checkPermissions();
+            });
+
             return () => {
                 if (notificationListener.current && typeof Notifications.removeNotificationSubscription === 'function') {
                     Notifications.removeNotificationSubscription(notificationListener.current);
@@ -50,9 +59,24 @@ export function NotificationProvider({ children }) {
                 if (responseListener.current && typeof Notifications.removeNotificationSubscription === 'function') {
                     Notifications.removeNotificationSubscription(responseListener.current);
                 }
+                subscription.remove();
             };
         }
     }, [user]);
+
+    const checkPermissions = async () => {
+        const { status } = await Notifications.getPermissionsAsync();
+        setPermissionStatus(status);
+        return status;
+    };
+
+    const openSettings = () => {
+        if (Platform.OS === 'ios') {
+            Linking.openURL('app-settings:');
+        } else {
+            Linking.openSettings();
+        }
+    };
 
     const registerForPushNotificationsAsync = async () => {
         let token;
@@ -167,6 +191,9 @@ export function NotificationProvider({ children }) {
             value={{
                 expoPushToken,
                 notification,
+                permissionStatus,
+                checkPermissions,
+                openSettings,
                 sendLocalNotification,
                 clearNotifications,
                 clearGroupNotifications,

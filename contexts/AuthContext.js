@@ -112,13 +112,16 @@ export const AuthProvider = ({ children }) => {
             const inOnboardingFlow = currentRoute?.includes('onboarding') || currentRoute?.includes('login');
 
             // Only check profile and redirect from initial load, NOT from login/onboarding screens
-            if (!currentRoute && !bootScreenShown && !inOnboardingFlow) {
+            const isInitialLoad = !segments || segments.length === 0 || (segments.length === 1 && segments[0] === '');
+
+            if (isInitialLoad && !bootScreenShown && !inOnboardingFlow) {
+                console.log('[Auth] Initial authenticated load, checking profile...');
                 checkProfileAndRedirect(user, true, false, currentRoute);
             }
         }
     }, [user, loading, segments, profileChecked]);
 
-    const checkProfileAndRedirect = async (currentUser, inAuthGroup, inOnboarding, currentRoute) => {
+    const checkProfileAndRedirect = async (currentUser, inAuthGroup, inOnboarding, currentSegment) => {
         // For anonymous users (our new flow), check if they have groups
         if (currentUser.is_anonymous) {
             try {
@@ -168,12 +171,14 @@ export const AuthProvider = ({ children }) => {
                 // If profile exists, show boot screen once, then go to tabs
                 if (inAuthGroup || inOnboarding) {
                     if (!bootScreenShown) {
-                        setBootScreenShown(true);
-                        // Only navigate to boot screen if not already there
-                        if (currentRoute !== 'index') {
+                        // Mark as checked so we don't re-run this
+                        setProfileChecked(true);
+                        // If we're not at the boot screen (/), go there
+                        if (currentSegment !== undefined && currentSegment !== '' && currentSegment !== 'index') {
                             router.replace('/');
                         }
                     } else {
+                        setProfileChecked(true);
                         router.replace('/(tabs)');
                     }
                 }

@@ -24,31 +24,28 @@ export default function BootScreen() {
     const router = useRouter();
     const { setBootScreenShown, user } = useAuth();
     const insets = useSafeAreaInsets();
-    const [ready, setReady] = useState(false);
+    const [ready, setReady] = useState(true);
 
     // Button Pulse Animation
     const scale = useSharedValue(1);
 
     useEffect(() => {
-        // Start pulse after initial load
-        setTimeout(() => {
-            setReady(true);
-            scale.value = withRepeat(
-                withSequence(
-                    withTiming(1.1, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
-                    withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.ease) })
-                ),
-                -1, // Infinite
-                true // Reverse
-            );
-        }, 100);
+        // Initial pulse setup
+        scale.value = withRepeat(
+            withSequence(
+                withTiming(1.1, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
+                withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.ease) })
+            ),
+            -1, // Infinite
+            true // Reverse
+        );
 
-        // FAST PASS: If user is already logged in (e.g. redirected from Login), auto-advance
+        // FAST PASS: If user is already logged in, auto-advance
         if (user) {
-            console.log('User found, auto-advancing boot screen...');
+            console.log('[Boot] User found, showing minimalist splash and auto-advancing in 500ms...');
             const timer = setTimeout(() => {
                 handleSkip();
-            }, 1500); // 1.5s delay to enjoy the soup
+            }, 500); // super snappy 500ms splash for existing users
             return () => clearTimeout(timer);
         }
     }, [user]);
@@ -101,45 +98,55 @@ export default function BootScreen() {
             activeOpacity={1}
             onPress={handleSkip}
         >
-            <View style={styles.textBlock}>
-                {/* Title - Fast Enry */}
-                <Animated.View entering={FadeInUp.delay(200).springify()}>
-                    <ThemedText style={styles.headword}>language soup</ThemedText>
-                </Animated.View>
+            {/* Conditional Content: Logo only for existing users, full definition for new ones */}
+            <View style={styles.contentWrapper}>
+                {!user ? (
+                    <View style={styles.textBlock}>
+                        {/* Title - Fast Entry */}
+                        <Animated.View entering={FadeInUp.delay(200).springify()}>
+                            <ThemedText style={styles.headword}>language soup</ThemedText>
+                        </Animated.View>
 
-                {/* Phonetic - Slight Delay */}
-                <Animated.View entering={FadeInUp.delay(600).springify()}>
-                    <ThemedText style={styles.phonetic}>/ˈlæŋɡwɪdʒ suːp/</ThemedText>
-                </Animated.View>
+                        {/* Phonetic - Slight Delay */}
+                        <Animated.View entering={FadeInUp.delay(600).springify()}>
+                            <ThemedText style={styles.phonetic}>/ˈlæŋɡwɪdʒ suːp/</ThemedText>
+                        </Animated.View>
 
-                {/* Noun */}
-                <Animated.View entering={FadeInUp.delay(1000).springify()}>
-                    <ThemedText style={styles.partOfSpeech}>noun</ThemedText>
-                </Animated.View>
+                        {/* Noun */}
+                        <Animated.View entering={FadeInUp.delay(1000).springify()}>
+                            <ThemedText style={styles.partOfSpeech}>noun</ThemedText>
+                        </Animated.View>
 
-                {/* Definition - The Punchline */}
-                <Animated.View style={styles.definitionBlock} entering={FadeInUp.delay(1500).duration(800)}>
-                    <ThemedText style={styles.definitionText}>
-                        <ThemedText style={{ fontWeight: 'bold' }}>Definition: </ThemedText>
-                        that thing that happens in your head when u mix up multiple languages
-                    </ThemedText>
-                </Animated.View>
+                        {/* Definition - The Punchline */}
+                        <Animated.View style={styles.definitionBlock} entering={FadeInUp.delay(1500).duration(800)}>
+                            <ThemedText style={styles.definitionText}>
+                                <ThemedText style={{ fontWeight: 'bold' }}>Definition: </ThemedText>
+                                that thing that happens in your head when u mix up multiple languages
+                            </ThemedText>
+                        </Animated.View>
 
-                {/* Example - The Lore */}
-                <Animated.View style={{ marginTop: 24 }} entering={FadeInUp.delay(2500).duration(800)}>
-                    <ThemedText style={styles.exampleText}>
-                        <ThemedText style={styles.exampleLabel}>Example: </ThemedText>
-                        "my head feels like language soup right now 😭"
-                    </ThemedText>
-                </Animated.View>
-            </View>
+                        {/* Example - The Lore */}
+                        <Animated.View style={{ marginTop: 24 }} entering={FadeInUp.delay(2500).duration(800)}>
+                            <ThemedText style={styles.exampleText}>
+                                <ThemedText style={styles.exampleLabel}>Example: </ThemedText>
+                                "my head feels like language soup right now 😭"
+                            </ThemedText>
+                        </Animated.View>
+                    </View>
+                ) : (
+                    /* Minimal splash for existing users - showing only animated bowl */
+                    <View style={styles.minimalSplash} />
+                )}
 
-            {/* Button - The Call to Action */}
-            <View style={styles.buttonContainer}>
-                <SoupBowlAnimation onPress={handleSkip} />
-                <Animated.View entering={FadeIn.delay(4000)}>
-                    <ThemedText style={styles.tapHint}>tap to continue</ThemedText>
-                </Animated.View>
+                {/* Button - The Call to Action / Animation */}
+                <View style={[styles.buttonContainer, user && styles.buttonContainerMinimal]}>
+                    <SoupBowlAnimation onPress={handleSkip} />
+                    {!user && (
+                        <Animated.View entering={FadeIn.delay(4000)}>
+                            <ThemedText style={styles.tapHint}>tap to continue</ThemedText>
+                        </Animated.View>
+                    )}
+                </View>
             </View>
         </TouchableOpacity>
     );
@@ -149,6 +156,20 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: Colors.bg,
+    },
+    contentWrapper: {
+        flex: 1,
+    },
+    minimalSplash: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: -40, // offset for visual balance with bowl
+    },
+    logoSplash: {
+        width: 120,
+        height: 120,
+        resizeMode: 'contain',
     },
     textBlock: {
         width: '100%',
@@ -207,6 +228,9 @@ const styles = StyleSheet.create({
         right: 0,
         alignItems: 'center',
         zIndex: 1,
+    },
+    buttonContainerMinimal: {
+        bottom: height / 2 - 120, // Center it more for minimal view
     },
     tapHint: {
         fontSize: 14,

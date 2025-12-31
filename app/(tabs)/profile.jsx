@@ -14,6 +14,7 @@ import * as Sharing from 'expo-sharing';
 import * as MediaLibrary from 'expo-media-library';
 import { Asset } from 'expo-asset';
 import { useQuests } from '../../contexts/QuestContext';
+import { useNotifications } from '../../contexts/NotificationContext';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -52,6 +53,7 @@ const SOUP_AVATARS = [
 
 export default function ProfileScreen() {
     const { user: authUser, signOut } = useAuth();
+    const { permissionStatus, openSettings, checkPermissions } = useNotifications();
     const router = useRouter();
     const [user, setUser] = useState(null);
     const [groups, setGroups] = useState([]);
@@ -933,11 +935,25 @@ export default function ProfileScreen() {
                     {/* Notifications Bell */}
                     <Pressable
                         onPress={() => {
-                            // TODO: Navigate to notifications
-                            Alert.alert('Notifications', 'Coming soon!');
+                            if (permissionStatus !== 'granted') {
+                                Alert.alert(
+                                    'Notifications Off 🔕',
+                                    'Turn on notifications to never miss a challenge! 🍜',
+                                    [
+                                        { text: 'Cancel', style: 'cancel' },
+                                        { text: 'Turn On ✨', onPress: openSettings }
+                                    ]
+                                );
+                            } else {
+                                Alert.alert('Notifications ON ✅', "You're all set! We'll ping you when soup is served. 🍜💨");
+                            }
                         }}
+                        style={styles.bellButton}
                     >
-                        <Bell size={24} color={SOUP_COLORS.blue} />
+                        <Bell size={24} color={permissionStatus === 'granted' ? SOUP_COLORS.blue : SOUP_COLORS.pink} />
+                        {permissionStatus !== 'granted' && (
+                            <View style={styles.bellBadge} />
+                        )}
                     </Pressable>
                 </View>
             </View>
@@ -1446,6 +1462,21 @@ const styles = StyleSheet.create({
         textShadowColor: 'rgba(0, 0, 0, 0.1)',
         textShadowOffset: { width: 0, height: 2 },
         textShadowRadius: 4,
+    },
+    bellButton: {
+        position: 'relative',
+        padding: 4,
+    },
+    bellBadge: {
+        position: 'absolute',
+        top: 2,
+        right: 2,
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: SOUP_COLORS.pink,
+        borderWidth: 2,
+        borderColor: SOUP_COLORS.cream,
     },
     expandButton: {
         fontSize: 11,

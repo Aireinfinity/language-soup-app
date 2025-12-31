@@ -1,6 +1,7 @@
 // Chat screen with language flag badges and admin toggle
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Text, TextInput, KeyboardAvoidingView, Platform, StatusBar, Image, Alert } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { ArrowLeft, Send, Mic, X, Trash2, Square, ChevronLeft, MoreVertical, Check, Clock, Globe } from 'lucide-react-native';
@@ -62,6 +63,7 @@ export default function ChatScreen() {
     const channelRef = useRef(null);
     const lastTypingSent = useRef(0);
     const { completeQuest } = useQuests();
+    const { permissionStatus, openSettings } = useNotifications();
 
     const [messages, setMessages] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -77,6 +79,7 @@ export default function ChatScreen() {
     const [recordingUsers, setRecordingUsers] = useState({});
     const [userProfile, setUserProfile] = useState(null);
     const [reactions, setReactions] = useState({}); // { messageId: [{ user_id, reaction, created_at }] }
+    const [showNotificationCTA, setShowNotificationCTA] = useState(false);
     // Note: reply, edit, delete, reaction viewer are now handled internally by SharedChatUI
 
     // Clear notifications and mark as read when chat opens
@@ -425,6 +428,10 @@ export default function ChatScreen() {
             // Complete quest for replying to challenge if this message is part of a challenge
             if (currentChallenge?.id) {
                 await completeQuest('reply_challenge');
+                // Nudge to turn on notifications if they are off
+                if (permissionStatus !== 'granted') {
+                    setShowNotificationCTA(true);
+                }
             }
         } catch (error) {
             console.error('Send failed:', error);
@@ -542,6 +549,11 @@ export default function ChatScreen() {
 
             // Complete quest for first audio message
             await completeQuest('first_audio');
+
+            // Nudge to turn on notifications if they are off
+            if (currentChallenge?.id && permissionStatus !== 'granted') {
+                setShowNotificationCTA(true);
+            }
         } catch (error) {
             console.error('❌ [VOICE] Complete error:', error);
             console.error('❌ [VOICE] Error details:', JSON.stringify(error, null, 2));
@@ -735,16 +747,39 @@ export default function ChatScreen() {
                     </BlurView>
                 }
                 bannerComponent={
-                    visibleChallenge && (
-                        <BlurView intensity={95} tint="light" style={[styles.challengeBanner, { top: insets.top + 65 }]}>
-                            <View style={styles.challengeContent}>
-                                <Text style={styles.challengeHashtag}>#challenge</Text>
-                                {visibleChallenge.prompt_text.split('\n').map((line, index) => (
-                                    <Text key={index} style={styles.challengeText}>{line}</Text>
-                                ))}
-                            </View>
-                        </BlurView>
-                    )
+                    <View style={{ width: '100%' }}>
+                        {visibleChallenge && (
+                            <BlurView intensity={95} tint="light" style={[styles.challengeBanner, { top: insets.top + 65, marginBottom: 12 }]}>
+                                <View style={styles.challengeContent}>
+                                    <Text style={styles.challengeHashtag}>#challenge</Text>
+                                    {visibleChallenge.prompt_text.split('\n').map((line, index) => (
+                                        <Text key={index} style={styles.challengeText}>{line}</Text>
+                                    ))}
+                                </View>
+                            </BlurView>
+                        )}
+                        {showNotificationCTA && (
+                            <Pressable
+                                style={[styles.ctaBanner, { top: insets.top + (visibleChallenge ? 150 : 65) }]}
+                                onPress={openSettings}
+                            >
+                                <LinearGradient
+                                    colors={[SOUP_COLORS.blue, SOUP_COLORS.pink]}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                    style={styles.ctaGradient}
+                                >
+                                    <View style={styles.ctaContent}>
+                                        <Text style={styles.ctaEmoji}>🤪</Text>
+                                        <Text style={styles.ctaText}>Don't miss the next challenge! Turn on notifications ✨</Text>
+                                        <Pressable onPress={() => setShowNotificationCTA(false)} hitSlop={10}>
+                                            <X size={16} color="#fff" />
+                                        </Pressable>
+                                    </View>
+                                </LinearGradient>
+                            </Pressable>
+                        )}
+                    </View>
                 }
                 placeholderText="Message..."
                 showLanguageFlags={true}
@@ -785,5 +820,36 @@ const styles = StyleSheet.create({
     challengeContent: { backgroundColor: 'rgba(255,255,255,0.85)', paddingHorizontal: 18, paddingVertical: 16, minHeight: 70 },
     challengeHashtag: { fontSize: 11, fontWeight: '800', color: SOUP_COLORS.pink, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 },
     challengeText: { fontSize: 15, lineHeight: 21, color: '#000', fontWeight: '600', flexWrap: 'wrap' },
+    ctaBanner: {
+        position: 'absolute',
+        left: 12,
+        right: 12,
+        zIndex: 1000,
+        borderRadius: 16,
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 12,
+    },
+    ctaGradient: {
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+    },
+    ctaContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    ctaEmoji: {
+        fontSize: 20,
+    },
+    ctaText: {
+        flex: 1,
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#fff',
+    },
     keyboardView: { flex: 1 },
 });
