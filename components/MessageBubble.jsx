@@ -248,15 +248,17 @@ export function MessageBubble({
                                 <Pressable
                                     style={styles.shareNowButton}
                                     onPress={async () => {
-                                        setShowSharePreview(false);
                                         const { haptics } = require('../utils/haptics');
                                         haptics.light();
+                                        // Call share FIRST while modal is still open
                                         await shareChallenge(
                                             message.sender_id,
                                             message.group_id,
                                             message.id,
                                             groupLanguage || 'Language Soup'
                                         );
+                                        // Then close modal after share sheet appears
+                                        setShowSharePreview(false);
                                     }}
                                 >
                                     <Text style={styles.shareNowText}>Share Challenge 🚀</Text>
