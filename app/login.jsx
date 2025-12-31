@@ -22,6 +22,7 @@ export default function LoginScreen() {
     const [password, setPassword] = useState([]);
     const [loading, setLoading] = useState(false);
     const [isNewUser, setIsNewUser] = useState(false);
+    const [userType, setUserType] = useState(null);
 
     const handleNameSubmit = async () => {
         if (!name.trim()) {
