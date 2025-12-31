@@ -108,36 +108,45 @@ export default function CommunityScreen() {
 
     const loadActiveUsers = async () => {
         try {
-            // Fetch all users (not just photos/soup avatars)
+            // Fetch a larger pool for the dynamic "hub" feel
             const { data: usersData } = await supabase
                 .from('app_users')
                 .select('id, display_name, avatar_url, status_text, fluent_languages, learning_languages')
                 .neq('id', user?.id) // Exclude current user
                 .not('display_name', 'is', null)
-                .limit(30);
+                .limit(300);
 
-            // Sort: 1) Photos, 2) Soup avatars, 3) Everyone else, then alphabetically
-            const sorted = (usersData || [])
-                .sort((a, b) => {
-                    const aIsPhoto = a.avatar_url?.startsWith('http');
-                    const bIsPhoto = b.avatar_url?.startsWith('http');
-                    const aIsSoup = a.avatar_url?.includes('avatars/');
-                    const bIsSoup = b.avatar_url?.includes('avatars/');
+            if (!usersData) return;
 
-                    // Photos first
-                    if (aIsPhoto && !bIsPhoto) return -1;
-                    if (!aIsPhoto && bIsPhoto) return 1;
+            // 1. Split into tiers based on file extension (APP LOGIC: Photos=.jpg, Soup=.png)
+            const photos = usersData.filter(u => {
+                if (!u.avatar_url) return false;
+                const url = u.avatar_url.toLowerCase();
+                return url.includes('.jpg') || url.includes('.jpeg') || url.includes('googleusercontent');
+            });
 
-                    // Then soup avatars
-                    if (aIsSoup && !bIsSoup) return -1;
-                    if (!aIsSoup && bIsSoup) return 1;
+            const soupAndAvatars = usersData.filter(u => {
+                if (!u.avatar_url) return false;
+                const url = u.avatar_url.toLowerCase();
+                // Everything else with a URL is likely a Soup Avatar (.png) or DiceBear
+                return !url.includes('.jpg') && !url.includes('.jpeg') && !url.includes('googleusercontent');
+            });
 
-                    // Then alphabetically
-                    return (a.display_name || '').localeCompare(b.display_name || '');
-                })
-                .slice(0, 15);
+            const rest = usersData.filter(u => !u.avatar_url);
 
-            setActiveUsers(sorted);
+            // 2. Shuffle each tier individually
+            const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
+
+            const randomizedPhotos = shuffle(photos);
+            const randomizedSoup = shuffle(soupAndAvatars);
+            const randomizedRest = shuffle(rest);
+
+            // 3. Combine in order: Photos -> Soup/Avatars -> Rest
+            // User request: "show all the users with photos" and make it a "party"
+            // We show everyone we fetched (up to 300) sorted by priority
+            const finalSelection = [...randomizedPhotos, ...randomizedSoup, ...randomizedRest];
+
+            setActiveUsers(finalSelection);
         } catch (error) {
             console.error('Error loading active users:', error);
         }

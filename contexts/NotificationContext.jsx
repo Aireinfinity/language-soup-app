@@ -2,18 +2,25 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import * as Notifications from 'expo-notifications';
 import * as Linking from 'expo-linking';
 import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
 
-// Configure notifications
-Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-    }),
-});
+// Configure notifications - Guarded for Expo Go Android
+if (Platform.OS === 'ios' || !Device.isDevice || (Platform.OS === 'android' && Constants?.appOwnership !== 'expo')) {
+    try {
+        Notifications.setNotificationHandler({
+            handleNotification: async () => ({
+                shouldShowAlert: true,
+                shouldPlaySound: true,
+                shouldSetBadge: true,
+            }),
+        });
+    } catch (e) {
+        console.warn('Notification handler setup failed:', e);
+    }
+}
 
 const NotificationContext = createContext({});
 

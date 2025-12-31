@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ThemedText } from '../components/ThemedText';
@@ -25,6 +25,11 @@ export default function BootScreen() {
     const { setBootScreenShown, user } = useAuth();
     const insets = useSafeAreaInsets();
     const [ready, setReady] = useState(true);
+    const isMounted = useRef(true);
+
+    useEffect(() => {
+        return () => { isMounted.current = false; };
+    }, []);
 
     // Button Pulse Animation
     const scale = useSharedValue(1);
@@ -55,38 +60,20 @@ export default function BootScreen() {
     }));
 
     const handleSkip = async () => {
+        if (!isMounted.current) return;
         setBootScreenShown(true);
 
-        // Check if user has a real profile in app_users (not just an auth session)
-        if (!user) {
-            router.replace('/how-it-works');
-        } else {
-            // User has auth session, but do they have an app_users profile?
-            const { data: userProfile } = await supabase
-                .from('app_users')
-                .select('id')
-                .eq('id', user.id)
-                .single();
-
-            if (!userProfile) {
-                // Auth session exists but no profile = ghost user
-                // Send to onboarding
+        try {
+            if (!user) {
                 router.replace('/how-it-works');
-                return;
-            }
-
-            // Check if user has joined groups
-            const { data: groups } = await supabase
-                .from('app_group_members')
-                .select('group_id')
-                .eq('user_id', user.id)
-                .limit(1);
-
-            if (groups && groups.length > 0) {
-                router.replace('/(tabs)');
             } else {
-                router.replace('/group-selection'); // New users go here
+                // User found? Send 'em home! Skip language/group selection checks for veterans.
+                router.replace('/(tabs)');
             }
+        } catch (err) {
+            console.error('[Boot] Critical navigation error:', err);
+            // Panic button: if everything fails, send back to home/intro
+            if (isMounted.current) router.replace('/');
         }
     };
 

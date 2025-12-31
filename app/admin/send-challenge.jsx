@@ -37,7 +37,7 @@ export default function SendChallengeScreen() {
             // Check if user is admin or community manager from app_users table
             const { data: userProfile } = await supabase
                 .from('app_users')
-                .select('is_admin, is_community_manager')
+                .select('is_admin')
                 .eq('id', user.id)
                 .single();
 
@@ -45,26 +45,6 @@ export default function SendChallengeScreen() {
                 .from('app_groups')
                 .select('id, name, language, member_count');
 
-            // If community manager (but NOT admin), only show assigned groups
-            if (userProfile?.is_community_manager && !userProfile?.is_admin) {
-                const { data: assignments } = await supabase
-                    .from('app_community_managers')
-                    .select('group_id')
-                    .eq('user_id', user.id);
-
-                const groupIds = assignments?.map(a => a.group_id) || [];
-
-                // Only apply filter if there are assigned groups
-                if (groupIds.length > 0) {
-                    query = query.in('id', groupIds);
-                } else {
-                    // Community manager with no assignments - show no groups
-                    setGroups([]);
-                    setLoading(false);
-                    return;
-                }
-            }
-            // If admin, show all groups (no filter applied)
 
             const { data, error } = await query.order('name');
 

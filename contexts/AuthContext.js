@@ -112,14 +112,14 @@ export const AuthProvider = ({ children }) => {
             const inOnboardingFlow = currentRoute?.includes('onboarding') || currentRoute?.includes('login');
 
             // Only check profile and redirect from initial load, NOT from login/onboarding screens
-            const isInitialLoad = !segments || segments.length === 0 || (segments.length === 1 && segments[0] === '');
+            const isInitialLoad = !segments || segments.length === 0 || (segments.length === 1 && (segments[0] === '' || segments[0] === 'index'));
 
             if (isInitialLoad && !bootScreenShown && !inOnboardingFlow) {
                 console.log('[Auth] Initial authenticated load, checking profile...');
-                checkProfileAndRedirect(user, true, false, currentRoute);
+                checkProfileAndRedirect(user, true, false, segments[0]);
             }
         }
-    }, [user, loading, segments, profileChecked]);
+    }, [user, loading, segments, profileChecked, bootScreenShown]);
 
     const checkProfileAndRedirect = async (currentUser, inAuthGroup, inOnboarding, currentSegment) => {
         // For anonymous users (our new flow), check if they have groups

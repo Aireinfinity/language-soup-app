@@ -172,12 +172,6 @@ export default function AdminDashboard() {
                             onPress={() => router.push('/admin/manage-groups')}
                         />
                         <MenuItem
-                            icon={UserPlus}
-                            label="Community Managers"
-                            color={SOUP_COLORS.pink}
-                            onPress={() => router.push('/admin/manage-community-managers')}
-                        />
-                        <MenuItem
                             icon={Bell}
                             label="Language Requests"
                             color="#FF7675"

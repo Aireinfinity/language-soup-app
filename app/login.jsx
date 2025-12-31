@@ -79,29 +79,14 @@ export default function LoginScreen() {
         try {
             const emojiPass = password.join('');
 
+            await signInWithName(name.trim(), emojiPass);
+
             if (isNewUser) {
-                // Create new account
-                await signInWithName(name.trim(), emojiPass);
+                // New users go through the onboarding flow
                 router.replace('/onboarding/conversational');
             } else {
-                // Login - check password
-                const { data: userProfile } = await supabase
-                    .from('app_users')
-                    .select('id, emoji_password')
-                    .eq('display_name', name.trim())
-                    .single();
-
-                if (userProfile?.emoji_password === emojiPass) {
-                    await signInWithName(name.trim(), emojiPass);
-                    router.replace('/(tabs)');
-                } else if (!userProfile?.emoji_password) {
-                    // MIGRATION: User has no password set yet
-                    await signInWithName(name.trim(), emojiPass);
-                    router.replace('/(tabs)');
-                } else {
-                    Alert.alert('Wrong password! 😬', 'Try again');
-                    setPassword([]);
-                }
+                // Existing users go straight home
+                router.replace('/(tabs)');
             }
         } catch (error) {
             console.error('Error:', error);

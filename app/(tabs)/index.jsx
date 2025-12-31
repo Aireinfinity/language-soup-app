@@ -33,7 +33,6 @@ export default function HomeScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [showRequestModal, setShowRequestModal] = useState(false);
     const [isAdmin, setIsAdmin] = useState(false);
-    const [isCommunityManager, setIsCommunityManager] = useState(false);
     const [unreadSupportCount, setUnreadSupportCount] = useState(0);
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
     const [showAdminModal, setShowAdminModal] = useState(false);
@@ -100,7 +99,6 @@ export default function HomeScreen() {
 
                 if (!updateError) {
                     setIsAdmin(true);
-                    setIsCommunityManager(true);
                     fetchAdminStats();
                     return;
                 }
@@ -109,7 +107,6 @@ export default function HomeScreen() {
             console.log('Admin check:', data);
             if (data) {
                 setIsAdmin(data.is_admin || false);
-                setIsCommunityManager(data.is_community_manager || false);
                 if (data.is_admin) {
                     fetchAdminStats();
                 }
@@ -439,22 +436,6 @@ export default function HomeScreen() {
                                         <Text style={styles.adminCardSmallTitle}>Fuck It's Not Working</Text>
                                     </Pressable>
                                 </View>
-                            )}
-
-                            {/* Community Manager Dashboard - Only for community managers */}
-                            {isCommunityManager && (
-                                <Pressable
-                                    style={styles.adminCard}
-                                    onPress={() => router.push('/admin/community-dashboard')}
-                                >
-                                    <View style={[styles.adminCardIcon, { backgroundColor: SOUP_COLORS.green }]}>
-                                        <Sparkles size={24} color="#fff" />
-                                    </View>
-                                    <View style={styles.adminCardInfo}>
-                                        <Text style={[styles.adminCardTitle, { color: SOUP_COLORS.green }]}>Community Manager</Text>
-                                        <Text style={styles.adminCardSubtitle}>Send challenges to your groups</Text>
-                                    </View>
-                                </Pressable>
                             )}
                         </View>
                     ) : null
