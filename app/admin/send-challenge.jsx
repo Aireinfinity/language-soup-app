@@ -197,7 +197,9 @@ export default function SendChallengeScreen() {
                                     };
                                 });
 
-                                await fetch('https://exp.host/--/api/v2/push/send', {
+                                console.log(`📤 Sending ${pushMessages.length} notifications for group ${group.name}`);
+
+                                const response = await fetch('https://exp.host/--/api/v2/push/send', {
                                     method: 'POST',
                                     headers: {
                                         'Accept': 'application/json',
@@ -206,8 +208,17 @@ export default function SendChallengeScreen() {
                                     },
                                     body: JSON.stringify(pushMessages),
                                 });
+
+                                const result = await response.json();
+                                console.log('📬 Notification response:', result);
+                            } else {
+                                console.log(`⚠️ No push tokens found for ${userIds.length} users`);
                             }
+                        } else {
+                            console.log(`⚠️ No other users in group ${group.name} (only sender)`);
                         }
+                    } else {
+                        console.log(`⚠️ No members found in group ${group.name}`);
                     }
 
                     successCount++;
