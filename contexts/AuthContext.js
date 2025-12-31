@@ -391,7 +391,7 @@ export const AuthProvider = ({ children }) => {
                         emoji_password: emojiPassword,
                         is_admin: isAdmin,
                         is_community_manager: isAdmin,
-                        avatar_url: `https://api.dicebear.com/7.x/avataaars/png?seed=${data.user.id}`,
+                        // avatar_url: null, // User hates dicebear, leaving null for now
                         status_text: 'Hey there! I am using Language Soup',
                         created_at: new Date().toISOString(),
                         updated_at: new Date().toISOString(),
