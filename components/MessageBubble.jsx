@@ -32,6 +32,7 @@ export function MessageBubble({
     onEdit,
     onDelete,
     groupName = null,
+    groupLanguage = null,
     isSpotlight = false
 }) {
     const [showActionMenu, setShowActionMenu] = useState(false);
@@ -186,7 +187,6 @@ export function MessageBubble({
                         senderStatus={sender?.status_text}
                         groupName={groupName}
                     />
-                    {/* Share button for own voice messages */}
                     {isMe && (
                         <Pressable
                             style={styles.shareButton}
@@ -197,7 +197,7 @@ export function MessageBubble({
                                     message.sender_id,
                                     message.group_id,
                                     message.id,
-                                    'your language' // You can pass actual language from group context
+                                    groupLanguage || 'Language Soup'
                                 );
                             }}
                         >

@@ -83,6 +83,7 @@ export function SharedChatUI({
     reactions = {},
     onReact,
     groupName = null,
+    groupLanguage = null,
 }) {
     // ========== INTERNAL STATE (Self-Contained) ==========
     const [replyTo, setReplyTo] = useState(null); // { messageId, content, senderName }
@@ -137,9 +138,11 @@ export function SharedChatUI({
         const { haptics } = require('../utils/haptics');
         haptics.light();
 
-        if (!messageReactions || messageReactions.length === 0) return;
+        // Ensure messageReactions is an array
+        const reactionsArray = Array.isArray(messageReactions) ? messageReactions : [];
+        if (reactionsArray.length === 0) return;
 
-        const userIds = [...new Set(messageReactions.map(r => r.user_id))];
+        const userIds = [...new Set(reactionsArray.map(r => r.user_id))];
         const { data: users, error } = await supabase
             .from('app_users')
             .select('id, display_name, avatar_url')
@@ -295,6 +298,7 @@ export function SharedChatUI({
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 groupName={groupName}
+                groupLanguage={groupLanguage}
             />
         );
     };

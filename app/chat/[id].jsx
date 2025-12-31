@@ -762,6 +762,7 @@ export default function ChatScreen() {
                 reactions={reactions}
                 onReact={handleReact}
                 groupName={groupName}
+                groupLanguage={groupLanguage}
             />
         </View>
     );
