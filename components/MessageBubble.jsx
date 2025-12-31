@@ -259,14 +259,14 @@ export function MessageBubble({
                                         );
                                     }}
                                 >
-                                    <Text style={styles.shareNowText}>Share Now 🚀</Text>
+                                    <Text style={styles.shareNowText}>Share Challenge 🚀</Text>
                                 </Pressable>
 
                                 <Pressable
                                     style={styles.cancelButton}
                                     onPress={() => setShowSharePreview(false)}
                                 >
-                                    <Text style={styles.cancelText}>Maybe Later</Text>
+                                    <Text style={styles.cancelText}>Cancel</Text>
                                 </Pressable>
                             </Pressable>
                         </Pressable>
@@ -687,6 +687,21 @@ const styles = StyleSheet.create({
         fontSize: 17,
         fontWeight: '800',
         color: '#fff',
+        letterSpacing: 0.5,
+    },
+    copyButton: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        paddingVertical: 16,
+        alignItems: 'center',
+        marginBottom: 12,
+        borderWidth: 2,
+        borderColor: '#00aedf',
+    },
+    copyText: {
+        fontSize: 17,
+        fontWeight: '800',
+        color: '#00aedf',
         letterSpacing: 0.5,
     },
     cancelButton: {
