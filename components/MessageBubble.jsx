@@ -36,6 +36,8 @@ export function MessageBubble({
     isSpotlight = false
 }) {
     const [showActionMenu, setShowActionMenu] = useState(false);
+    const [showSharePreview, setShowSharePreview] = useState(false);
+    const menuMountedTime = useRef(0);
     const [showReactionDetails, setShowReactionDetails] = useState(null); // Which emoji is expanded
     const [reactionViewerData, setReactionViewerData] = useState(null);
     const [messageLayout, setMessageLayout] = useState(null);
@@ -190,21 +192,85 @@ export function MessageBubble({
                     {isMe && (
                         <Pressable
                             style={styles.shareButton}
-                            onPress={async () => {
+                            onPress={() => {
                                 const { haptics } = require('../utils/haptics');
-                                haptics.light();
-                                await shareChallenge(
-                                    message.sender_id,
-                                    message.group_id,
-                                    message.id,
-                                    groupLanguage || 'Language Soup'
-                                );
+                                haptics.medium();
+                                setShowSharePreview(true);
                             }}
                         >
-                            <Share2 size={14} color="#00aedf" />
-                            <Text style={styles.shareButtonText}>Share Challenge</Text>
+                            <View style={styles.newBadge}>
+                                <Text style={styles.newBadgeText}>NEW!</Text>
+                            </View>
+                            <Text style={styles.shareButtonEmoji}>🔥</Text>
+                            <Text style={styles.shareButtonText}>Challenge a Friend?</Text>
                         </Pressable>
                     )}
+
+                    {/* Share Preview Modal */}
+                    <Modal
+                        visible={showSharePreview}
+                        transparent
+                        animationType="slide"
+                        onRequestClose={() => setShowSharePreview(false)}
+                    >
+                        <Pressable
+                            style={styles.modalOverlay}
+                            onPress={() => setShowSharePreview(false)}
+                        >
+                            <Pressable style={styles.sharePreviewCard} onPress={(e) => e.stopPropagation()}>
+                                <Text style={styles.previewTitle}>🔥 Challenge Your Friends!</Text>
+                                <Text style={styles.previewSubtitle}>Share your voice message and dare them to respond</Text>
+
+                                <View style={styles.previewExample}>
+                                    <Text style={styles.previewLabel}>📱 Text they get:</Text>
+                                    <View style={styles.previewBubble}>
+                                        <Text style={styles.previewText}>"just did the {groupLanguage || 'Language'} daily challenge. wanna join or still scared to speak? 🤪"</Text>
+                                    </View>
+                                    <Text style={styles.previewExpiry}>⏰ Link expires in 24 hours</Text>
+                                </View>
+
+                                <View style={styles.previewExample}>
+                                    <Text style={styles.previewLabel}>🌐 What they'll see:</Text>
+                                    <View style={styles.websitePreview}>
+                                        <View style={styles.websiteHeader}>
+                                            <Text style={styles.websiteTitle}>🔥 {message.sender?.display_name || 'You'} challenged you!</Text>
+                                        </View>
+                                        <View style={styles.websiteAudio}>
+                                            <Text style={styles.websiteAudioIcon}>🎵</Text>
+                                            <Text style={styles.websiteAudioText}>Your voice message</Text>
+                                        </View>
+                                        <View style={styles.websiteDownload}>
+                                            <Text style={styles.websiteDownloadText}>📲 Download app to respond</Text>
+                                        </View>
+                                    </View>
+                                </View>
+
+                                <Pressable
+                                    style={styles.shareNowButton}
+                                    onPress={async () => {
+                                        setShowSharePreview(false);
+                                        const { haptics } = require('../utils/haptics');
+                                        haptics.light();
+                                        await shareChallenge(
+                                            message.sender_id,
+                                            message.group_id,
+                                            message.id,
+                                            groupLanguage || 'Language Soup'
+                                        );
+                                    }}
+                                >
+                                    <Text style={styles.shareNowText}>Share Now 🚀</Text>
+                                </Pressable>
+
+                                <Pressable
+                                    style={styles.cancelButton}
+                                    onPress={() => setShowSharePreview(false)}
+                                >
+                                    <Text style={styles.cancelText}>Maybe Later</Text>
+                                </Pressable>
+                            </Pressable>
+                        </Pressable>
+                    </Modal>
                 </View>
             ) : message.message_type === 'image' || message.message_type === 'video' ? (
                 <View>
@@ -462,6 +528,175 @@ const styles = StyleSheet.create({
     reactionsContainerThem: {
         left: 8,
         right: 'auto',
+    },
+    shareButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingVertical: 12,
+        paddingHorizontal: 18,
+        marginTop: 8,
+        alignSelf: 'flex-end',
+        borderRadius: 24,
+        backgroundColor: '#ec008b',
+        shadowColor: '#ec008b',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.4,
+        shadowRadius: 6,
+        elevation: 5,
+        position: 'relative',
+    },
+    newBadge: {
+        position: 'absolute',
+        top: -6,
+        left: -6,
+        backgroundColor: '#00aedf',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 8,
+        borderWidth: 2,
+        borderColor: '#fff',
+    },
+    newBadgeText: {
+        fontSize: 9,
+        fontWeight: '900',
+        color: '#fff',
+        letterSpacing: 0.5,
+    },
+    shareButtonEmoji: {
+        fontSize: 18,
+    },
+    shareButtonText: {
+        fontSize: 15,
+        color: '#fff',
+        fontWeight: '800',
+        letterSpacing: 0.3,
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        justifyContent: 'flex-end',
+    },
+    sharePreviewCard: {
+        backgroundColor: '#fef6e4',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        padding: 24,
+        paddingBottom: 40,
+    },
+    previewTitle: {
+        fontSize: 24,
+        fontWeight: '800',
+        color: '#2c2c3e',
+        textAlign: 'center',
+        marginBottom: 8,
+    },
+    previewSubtitle: {
+        fontSize: 15,
+        color: '#666',
+        textAlign: 'center',
+        marginBottom: 24,
+    },
+    previewExample: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 20,
+    },
+    previewLabel: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#666',
+        marginBottom: 8,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    previewBubble: {
+        backgroundColor: '#f0f0f0',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 8,
+    },
+    previewText: {
+        fontSize: 14,
+        color: '#2c2c3e',
+        lineHeight: 20,
+    },
+    previewExpiry: {
+        fontSize: 12,
+        color: '#ec008b',
+        fontWeight: '600',
+    },
+    websitePreview: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: '#e0e0e0',
+    },
+    websiteHeader: {
+        backgroundColor: '#fef6e4',
+        padding: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: '#e0e0e0',
+    },
+    websiteTitle: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#2c2c3e',
+        textAlign: 'center',
+    },
+    websiteAudio: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        padding: 16,
+        backgroundColor: '#f8f8f8',
+    },
+    websiteAudioIcon: {
+        fontSize: 20,
+    },
+    websiteAudioText: {
+        fontSize: 13,
+        color: '#666',
+        fontWeight: '600',
+    },
+    websiteDownload: {
+        backgroundColor: '#00aedf',
+        padding: 12,
+    },
+    websiteDownloadText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#fff',
+        textAlign: 'center',
+    },
+    shareNowButton: {
+        backgroundColor: '#00aedf',
+        borderRadius: 16,
+        paddingVertical: 16,
+        alignItems: 'center',
+        marginBottom: 12,
+        shadowColor: '#00aedf',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    shareNowText: {
+        fontSize: 17,
+        fontWeight: '800',
+        color: '#fff',
+        letterSpacing: 0.5,
+    },
+    cancelButton: {
+        paddingVertical: 12,
+        alignItems: 'center',
+    },
+    cancelText: {
+        fontSize: 15,
+        color: '#666',
+        fontWeight: '600',
     },
     reactionBadge: {
         flexDirection: 'row',
