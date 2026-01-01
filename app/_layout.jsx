@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
@@ -7,6 +7,9 @@ import { AudioPlayerProvider } from '../contexts/AudioPlayerContext';
 import { MiniAudioPlayer } from '../components/MiniAudioPlayer';
 import { Colors } from '../constants/Colors';
 import { QuestProvider } from '../contexts/QuestContext';
+import WhatsNewModal from '../components/WhatsNewModal';
+import { shouldShowWhatsNew, markWhatsNewAsSeen } from '../utils/versionTracking';
+
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -15,13 +18,30 @@ SplashScreen.preventAutoHideAsync();
 // It will be automatically initialized via app.json plugins in production builds
 
 function RootLayoutNav() {
-    const { loading } = useAuth();
+    const { loading, user } = useAuth();
+    const [showWhatsNew, setShowWhatsNew] = useState(false);
 
     useEffect(() => {
         if (!loading) {
             SplashScreen.hideAsync();
+
+            // Check if we should show What's New modal (only for logged-in users)
+            if (user) {
+                shouldShowWhatsNew().then((shouldShow) => {
+                    if (shouldShow) {
+                        // Small delay to let the app settle
+                        setTimeout(() => setShowWhatsNew(true), 1000);
+                    }
+                });
+            }
         }
-    }, [loading]);
+    }, [loading, user]);
+
+    const handleCloseWhatsNew = () => {
+        setShowWhatsNew(false);
+        markWhatsNewAsSeen();
+    };
+
 
     return (
         <>
@@ -49,6 +69,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="onboarding/notifications" />
             </Stack>
             <MiniAudioPlayer />
+            <WhatsNewModal visible={showWhatsNew} onClose={handleCloseWhatsNew} />
         </>
     );
 }

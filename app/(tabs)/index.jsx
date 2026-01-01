@@ -34,6 +34,7 @@ export default function HomeScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [showRequestModal, setShowRequestModal] = useState(false);
     const [isAdmin, setIsAdmin] = useState(false);
+    const [isCommunityManager, setIsCommunityManager] = useState(false);
     const [unreadSupportCount, setUnreadSupportCount] = useState(0);
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
     const [showAdminModal, setShowAdminModal] = useState(false);
@@ -100,6 +101,7 @@ export default function HomeScreen() {
 
                 if (!updateError) {
                     setIsAdmin(true);
+                    setIsCommunityManager(true);
                     fetchAdminStats();
                     return;
                 }
@@ -108,6 +110,7 @@ export default function HomeScreen() {
             console.log('Admin check:', data);
             if (data) {
                 setIsAdmin(data.is_admin || false);
+                setIsCommunityManager(data.is_community_manager || false);
                 if (data.is_admin) {
                     fetchAdminStats();
                 }
