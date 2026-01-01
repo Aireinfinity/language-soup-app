@@ -84,6 +84,7 @@ export function SharedChatUI({
     onReact,
     groupName = null,
     groupLanguage = null,
+    onAvatarPress,
 }) {
     // ========== INTERNAL STATE (Self-Contained) ==========
     const [replyTo, setReplyTo] = useState(null); // { messageId, content, senderName }
@@ -134,29 +135,46 @@ export function SharedChatUI({
         }
     };
 
-    const handleReactionPress = async (messageId, messageReactions) => {
+    const handleReactionPress = async (message, emojiClicked, userIdsOfEmoji) => {
+        console.log('[SharedChatUI] handleReactionPress TRIGGERED', {
+            messageId: message?.id,
+            emojiClicked,
+            userIdsCount: userIdsOfEmoji?.length
+        });
+
         const { haptics } = require('../utils/haptics');
         haptics.light();
 
-        // Ensure messageReactions is an array
-        const reactionsArray = Array.isArray(messageReactions) ? messageReactions : [];
-        if (reactionsArray.length === 0) return;
+        // Get ALL reactions for this message to populate the modal fully
+        const allMessageReactions = reactions[message.id] || [];
+        console.log('[SharedChatUI] allMessageReactions found:', allMessageReactions.length);
 
-        const userIds = [...new Set(reactionsArray.map(r => r.user_id))];
+        if (allMessageReactions.length === 0) {
+            console.warn('[SharedChatUI] No reactions found for message', message.id);
+            return;
+        }
+
+        // Get all unique user IDs involved in any reaction to this message
+        const allUserIds = [...new Set(allMessageReactions.map(r => r.user_id))];
+        console.log('[SharedChatUI] Fetching profiles for User IDs:', allUserIds);
+
         const { data: users, error } = await supabase
             .from('app_users')
             .select('id, display_name, avatar_url')
-            .in('id', userIds);
+            .in('id', allUserIds);
 
         if (error) {
             console.error('[SharedChatUI] Error fetching reaction users:', error);
             return;
         }
 
+        console.log('[SharedChatUI] Users fetched:', users?.length);
+        console.log('[SharedChatUI] Setting ReactionViewer visible NOW');
+
         setTimeout(() => {
             setReactionViewer({
                 visible: true,
-                reactions: messageReactions,
+                reactions: allMessageReactions,
                 users: users || []
             });
         }, 100);
@@ -299,13 +317,14 @@ export function SharedChatUI({
                 onDelete={handleDelete}
                 groupName={groupName}
                 groupLanguage={groupLanguage}
+                onAvatarPress={onAvatarPress}
             />
         );
     };
 
     return (
         <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={{ flex: 1 }}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >

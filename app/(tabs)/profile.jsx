@@ -1930,7 +1930,7 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.05,
         shadowRadius: 4,
-        elevation: 1,
+        elevation: 2,
     },
     groupName: {
         fontSize: 16,

@@ -146,7 +146,9 @@ export function MessageBubble({
     };
 
     const avatarElement = sender && !isMe && sender.avatar_url ? (
-        <Image source={{ uri: sender.avatar_url }} style={ChatStyles.avatar} />
+        <Pressable onPress={() => onAvatarPress && onAvatarPress(sender)}>
+            <Image source={{ uri: sender.avatar_url }} style={ChatStyles.avatar} />
+        </Pressable>
     ) : null;
 
     const bubbleContent = (

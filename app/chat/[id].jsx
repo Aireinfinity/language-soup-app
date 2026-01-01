@@ -1,5 +1,6 @@
 // Chat screen with language flag badges and admin toggle
 import React, { useState, useEffect, useRef } from 'react';
+import { UserPreviewModal } from '../../components/UserPreviewModal';
 import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Text, TextInput, KeyboardAvoidingView, Platform, StatusBar, Image, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -65,6 +66,7 @@ export default function ChatScreen() {
     const { completeQuest } = useQuests();
     const { permissionStatus, openSettings } = useNotifications();
 
+    const [selectedUser, setSelectedUser] = useState(null);
     const [messages, setMessages] = useState([]);
     const [loading, setLoading] = useState(true);
     const [textInput, setTextInput] = useState('');
@@ -726,37 +728,71 @@ export default function ChatScreen() {
                 onTextChange={handleTextChange}
                 sending={sending}
                 headerComponent={
-                    <BlurView intensity={95} tint="light" style={[styles.header, { paddingTop: insets.top }]}>
-                        <View style={styles.headerContent}>
-                            <Pressable onPress={() => router.back()} style={styles.backButton}>
-                                <ChevronLeft size={30} color={Colors.primary} />
-                            </Pressable>
-                            <View style={styles.headerInfo}>
-                                <Text style={styles.headerTitle}>{groupName}</Text>
-                                <Text style={styles.headerSubtitle}>{memberCount} members</Text>
-                            </View>
-                            {groupLanguage?.toLowerCase() === 'french' && (
-                                <Pressable style={styles.nativeButton} onPress={() => router.push('/native-speakers?language=French')}>
-                                    <Text style={styles.nativeButtonText}>💬 Chat with a Native</Text>
+                    Platform.OS === 'ios' ? (
+                        <BlurView intensity={95} tint="light" style={[styles.header, { paddingTop: insets.top }]}>
+                            <View style={styles.headerContent}>
+                                <Pressable onPress={() => router.back()} style={styles.backButton}>
+                                    <ChevronLeft size={30} color={Colors.primary} />
                                 </Pressable>
-                            )}
-                            <Pressable style={styles.headerAction} onPress={() => router.push(`/group-info?id=${groupId}`)}>
-                                <MoreVertical size={24} color={Colors.primary} />
-                            </Pressable>
+                                <View style={styles.headerInfo}>
+                                    <Text style={styles.headerTitle}>{groupName}</Text>
+                                    <Text style={styles.headerSubtitle}>{memberCount} members</Text>
+                                </View>
+                                {groupLanguage?.toLowerCase() === 'french' && (
+                                    <Pressable style={styles.nativeButton} onPress={() => router.push('/native-speakers?language=French')}>
+                                        <Text style={styles.nativeButtonText}>💬 Chat with a Native</Text>
+                                    </Pressable>
+                                )}
+                                <Pressable style={styles.headerAction} onPress={() => router.push(`/group-info?id=${groupId}`)}>
+                                    <MoreVertical size={24} color={Colors.primary} />
+                                </Pressable>
+                            </View>
+                        </BlurView>
+                    ) : (
+                        <View style={[styles.header, { paddingTop: insets.top, backgroundColor: '#fff' }]}>
+                            <View style={styles.headerContent}>
+                                <Pressable onPress={() => router.back()} style={styles.backButton}>
+                                    <ChevronLeft size={30} color={Colors.primary} />
+                                </Pressable>
+                                <View style={styles.headerInfo}>
+                                    <Text style={styles.headerTitle}>{groupName}</Text>
+                                    <Text style={styles.headerSubtitle}>{memberCount} members</Text>
+                                </View>
+                                {groupLanguage?.toLowerCase() === 'french' && (
+                                    <Pressable style={styles.nativeButton} onPress={() => router.push('/native-speakers?language=French')}>
+                                        <Text style={styles.nativeButtonText}>💬 Chat with a Native</Text>
+                                    </Pressable>
+                                )}
+                                <Pressable style={styles.headerAction} onPress={() => router.push(`/group-info?id=${groupId}`)}>
+                                    <MoreVertical size={24} color={Colors.primary} />
+                                </Pressable>
+                            </View>
                         </View>
-                    </BlurView>
+                    )
                 }
+
                 bannerComponent={
                     <View style={{ width: '100%' }}>
                         {visibleChallenge && (
-                            <BlurView intensity={95} tint="light" style={[styles.challengeBanner, { top: insets.top + 65, marginBottom: 12 }]}>
-                                <View style={styles.challengeContent}>
-                                    <Text style={styles.challengeHashtag}>#challenge</Text>
-                                    {visibleChallenge.prompt_text.split('\n').map((line, index) => (
-                                        <Text key={index} style={styles.challengeText}>{line}</Text>
-                                    ))}
+                            Platform.OS === 'ios' ? (
+                                <BlurView intensity={95} tint="light" style={[styles.challengeBanner, { top: insets.top + 65, marginBottom: 12 }]}>
+                                    <View style={styles.challengeContent}>
+                                        <Text style={styles.challengeHashtag}>#challenge</Text>
+                                        {visibleChallenge.prompt_text.split('\n').map((line, index) => (
+                                            <Text key={index} style={styles.challengeText}>{line}</Text>
+                                        ))}
+                                    </View>
+                                </BlurView>
+                            ) : (
+                                <View style={[styles.challengeBanner, { top: insets.top + 65, marginBottom: 12, backgroundColor: '#fff' }]}>
+                                    <View style={styles.challengeContent}>
+                                        <Text style={styles.challengeHashtag}>#challenge</Text>
+                                        {visibleChallenge.prompt_text.split('\n').map((line, index) => (
+                                            <Text key={index} style={styles.challengeText}>{line}</Text>
+                                        ))}
+                                    </View>
                                 </View>
-                            </BlurView>
+                            )
                         )}
                         {showNotificationCTA && (
                             <Pressable
@@ -798,6 +834,13 @@ export default function ChatScreen() {
                 onReact={handleReact}
                 groupName={groupName}
                 groupLanguage={groupLanguage}
+                onAvatarPress={setSelectedUser}
+            />
+
+            <UserPreviewModal
+                visible={!!selectedUser}
+                user={selectedUser}
+                onClose={() => setSelectedUser(null)}
             />
         </View>
     );

@@ -73,7 +73,7 @@ export const ChatStyles = StyleSheet.create({
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.06,
         shadowRadius: 3,
-        elevation: 1
+        elevation: 2
     },
     bubbleVoice: {
         paddingVertical: 4,

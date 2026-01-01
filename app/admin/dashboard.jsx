@@ -23,7 +23,7 @@ export default function AdminDashboard() {
         totalUsers: 0,
         activeUsers7d: 0,
         voiceMemosThisWeek: 0,
-        unreadSupport: 0,
+        pendingRequests: 0,
         groupStats: []
     });
 
@@ -33,7 +33,6 @@ export default function AdminDashboard() {
 
     const loadStats = async () => {
         try {
-            // ... (keep existing stats queries) ...
             // Total users
             const { count: totalUsers } = await supabase
                 .from('app_users')
@@ -62,26 +61,6 @@ export default function AdminDashboard() {
                 .select('id, name, member_count')
                 .order('member_count', { ascending: false });
 
-            // Unread Support Threads
-            // Logic: Count unique users where the LAST message is NOT from admin (needs reply)
-            const { data: supportMessages } = await supabase
-                .from('app_support_messages')
-                .select('user_id, from_admin, created_at')
-                .order('created_at', { ascending: false }); // Newest first
-
-            const unreadThreads = new Set();
-            const checkedUsers = new Set();
-
-            supportMessages?.forEach(msg => {
-                if (!checkedUsers.has(msg.user_id)) {
-                    // Check the very first message encountered for this user (which is the newest)
-                    checkedUsers.add(msg.user_id);
-                    if (!msg.from_admin) {
-                        unreadThreads.add(msg.user_id);
-                    }
-                }
-            });
-
             // Pending Language Requests
             const { count: pendingRequests } = await supabase
                 .from('app_language_requests')
@@ -92,7 +71,6 @@ export default function AdminDashboard() {
                 totalUsers: totalUsers || 0,
                 activeUsers7d: uniqueActiveUsers.size,
                 voiceMemosThisWeek: voiceMemos || 0,
-                unreadSupport: unreadThreads.size,
                 pendingRequests: pendingRequests || 0,
                 groupStats: groups || []
             });

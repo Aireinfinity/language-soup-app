@@ -417,26 +417,7 @@ export default function HomeScreen() {
                 ListHeaderComponent={
                     (isAdmin || isCommunityManager) ? (
                         <View style={styles.adminSection}>
-                            {/* Admin Cards Row - Side by side */}
-                            {isAdmin && (
-                                <View style={styles.adminCardRow}>
-                                    <Pressable
-                                        style={[styles.adminCardSmall, { backgroundColor: SOUP_COLORS.blue }]}
-                                        onPress={() => router.push('/admin/dashboard')}
-                                    >
-                                        <Sparkles size={24} color="#fff" />
-                                        <Text style={styles.adminCardSmallTitle}>Founder Daddy</Text>
-                                    </Pressable>
 
-                                    <Pressable
-                                        style={[styles.adminCardSmall, { backgroundColor: SOUP_COLORS.pink }]}
-                                        onPress={() => router.push('/admin/support')}
-                                    >
-                                        <MessageCircle size={24} color="#fff" />
-                                        <Text style={styles.adminCardSmallTitle}>Fuck It's Not Working</Text>
-                                    </Pressable>
-                                </View>
-                            )}
                         </View>
                     ) : null
                 }

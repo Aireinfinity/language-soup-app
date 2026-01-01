@@ -112,7 +112,6 @@ export default function CommunityScreen() {
             const { data: usersData } = await supabase
                 .from('app_users')
                 .select('id, display_name, avatar_url, status_text, fluent_languages, learning_languages')
-                .neq('id', user?.id) // Exclude current user
                 .not('display_name', 'is', null)
                 .limit(300);
 
@@ -473,6 +472,11 @@ const styles = StyleSheet.create({
         marginRight: 12,
         maxWidth: 280,
         gap: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
     },
     announcementIcon: {
         width: 32,
@@ -501,6 +505,11 @@ const styles = StyleSheet.create({
         borderRadius: 18,
         alignItems: 'center',
         marginRight: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
     },
     groupAvatar: {
         width: 52,
@@ -541,6 +550,11 @@ const styles = StyleSheet.create({
         padding: 16,
         borderRadius: 16,
         gap: 14,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
     },
     announcementIconLarge: {
         width: 40,
@@ -581,6 +595,11 @@ const styles = StyleSheet.create({
         marginRight: 12,
         justifyContent: 'space-between',
         height: 110,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
     },
     issueBadge: {
         alignSelf: 'flex-start',
