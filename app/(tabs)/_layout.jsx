@@ -1,9 +1,106 @@
 import { Tabs } from 'expo-router';
 import { Globe, User } from 'lucide-react-native';
 import { Colors } from '../../constants/Colors';
-import { View, Image } from 'react-native';
+import { View, Image, Text } from 'react-native';
+import { useState, useEffect } from 'react';
+import { supabase } from '../../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function TabLayout() {
+    const [unreadCommunity, setUnreadCommunity] = useState(0);
+    const [unreadSupport, setUnreadSupport] = useState(0);
+
+    useEffect(() => {
+        loadUnreadCounts();
+
+        // Subscribe to new messages
+        const communityChannel = supabase
+            .channel('community-messages')
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'app_messages',
+                filter: 'group_id=eq.00000000-0000-0000-0000-000000000000'
+            }, () => {
+                loadUnreadCounts();
+            })
+            .subscribe();
+
+        const supportChannel = supabase
+            .channel('support-messages')
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'app_support_messages'
+            }, () => {
+                loadUnreadCounts();
+            })
+            .subscribe();
+
+        return () => {
+            communityChannel.unsubscribe();
+            supportChannel.unsubscribe();
+        };
+    }, []);
+
+    const loadUnreadCounts = async () => {
+        try {
+            const userId = await AsyncStorage.getItem('userId');
+            if (!userId) return;
+
+            // Get last seen timestamps
+            const lastSeenCommunity = await AsyncStorage.getItem('lastSeenCommunity') || new Date(0).toISOString();
+            const lastSeenSupport = await AsyncStorage.getItem('lastSeenSupport') || new Date(0).toISOString();
+
+            // Count unread community messages
+            const { count: communityCount } = await supabase
+                .from('app_messages')
+                .select('*', { count: 'exact', head: true })
+                .eq('group_id', '00000000-0000-0000-0000-000000000000')
+                .neq('sender_id', userId)
+                .gt('created_at', lastSeenCommunity);
+
+            // Count unread support messages
+            const { count: supportCount } = await supabase
+                .from('app_support_messages')
+                .select('*', { count: 'exact', head: true })
+                .eq('from_admin', true)
+                .gt('created_at', lastSeenSupport);
+
+            setUnreadCommunity(communityCount || 0);
+            setUnreadSupport(supportCount || 0);
+        } catch (error) {
+            console.error('Error loading unread counts:', error);
+        }
+    };
+
+    const Badge = ({ count }) => {
+        if (count === 0) return null;
+        return (
+            <View style={{
+                position: 'absolute',
+                top: -4,
+                right: -8,
+                backgroundColor: '#ec008b',
+                borderRadius: 10,
+                minWidth: 20,
+                height: 20,
+                justifyContent: 'center',
+                alignItems: 'center',
+                borderWidth: 2,
+                borderColor: '#19b091',
+            }}>
+                <Text style={{
+                    color: '#fff',
+                    fontSize: 11,
+                    fontWeight: 'bold',
+                }}>
+                    {count > 99 ? '99+' : count}
+                </Text>
+            </View>
+        );
+    };
+
     return (
         <View style={{ flex: 1 }}>
             <Tabs
@@ -42,7 +139,18 @@ export default function TabLayout() {
                     name="community"
                     options={{
                         title: 'Community',
-                        tabBarIcon: ({ color }) => <Globe size={24} color={color} />,
+                        tabBarIcon: ({ color }) => (
+                            <View>
+                                <Globe size={24} color={color} />
+                                <Badge count={unreadCommunity} />
+                            </View>
+                        ),
+                    }}
+                    listeners={{
+                        tabPress: () => {
+                            AsyncStorage.setItem('lastSeenCommunity', new Date().toISOString());
+                            setUnreadCommunity(0);
+                        }
                     }}
                 />
                 <Tabs.Screen
