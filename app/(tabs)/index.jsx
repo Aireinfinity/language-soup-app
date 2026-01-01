@@ -17,6 +17,7 @@ import FounderWelcomeModal from '../../components/FounderWelcomeModal';
 import WaveformQuestBar from '../../components/WaveformQuestBar';
 import ContextualTooltip from '../../components/ContextualTooltip';
 import { SecurityBanner } from '../../components/SecurityBanner';
+import GroupAvatar from '../../components/GroupAvatar';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -294,11 +295,7 @@ export default function HomeScreen() {
         >
             {/* Group Avatar with Members Badge */}
             <View style={styles.groupAvatarWrapper}>
-                <View style={styles.groupAvatar}>
-                    <Text style={styles.groupAvatarText}>
-                        {item.name.charAt(0).toUpperCase()}
-                    </Text>
-                </View>
+                <GroupAvatar language={item.language} size={60} />
                 {/* Small group icon overlay */}
                 <View style={styles.groupBadge}>
                     <Users size={12} color="#fff" />

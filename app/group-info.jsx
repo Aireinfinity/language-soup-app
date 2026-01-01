@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Image, Alert, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Image, Alert, FlatList, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronLeft, LogOut, Users, Image as ImageIcon, Volume2, VolumeX } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useQuests } from '../contexts/QuestContext';
+import GroupAvatar from '../components/GroupAvatar';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -153,11 +154,7 @@ export default function GroupInfoScreen() {
             <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
                 {/* Group Card */}
                 <View style={styles.groupCard}>
-                    <View style={styles.groupAvatar}>
-                        <Text style={styles.groupAvatarText}>
-                            {group?.name?.charAt(0).toUpperCase() || '?'}
-                        </Text>
-                    </View>
+                    <GroupAvatar language={group?.language} size={80} />
                     <Text style={styles.groupName}>{group?.name}</Text>
                     <Text style={styles.groupMeta}>
                         {group?.language} • {members.length} members
@@ -186,6 +183,20 @@ export default function GroupInfoScreen() {
                             Leave Group
                         </Text>
                     </Pressable>
+
+                    {group?.spotify_playlist_url && (
+                        <Pressable
+                            style={styles.actionRow}
+                            onPress={() => {
+                                Linking.openURL(group.spotify_playlist_url);
+                            }}
+                        >
+                            <Text style={{ fontSize: 22 }}>🎵</Text>
+                            <Text style={[styles.actionText, { color: SOUP_COLORS.green }]}>
+                                {group.language} Playlist
+                            </Text>
+                        </Pressable>
+                    )}
                 </View>
 
                 {/* Members */}

@@ -15,6 +15,7 @@ import * as MediaLibrary from 'expo-media-library';
 import { Asset } from 'expo-asset';
 import { useQuests } from '../../contexts/QuestContext';
 import { useNotifications } from '../../contexts/NotificationContext';
+import GroupAvatar from '../../components/GroupAvatar';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -892,21 +893,28 @@ export default function ProfileScreen() {
 
     // Groups Section
     const renderGroups = () => {
+        console.log('🔍 renderGroups called, groups count:', groups.length);
         if (groups.length === 0) return null;
 
         return (
             <View style={styles.groupsSection}>
                 <Text style={styles.groupsSectionTitle}>Your Groups ({groups.length})</Text>
-                {groups.map((group) => (
-                    <Pressable
-                        key={group.id}
-                        style={styles.groupItem}
-                        onPress={() => router.push(`/chat/${group.id}`)}
-                    >
-                        <Text style={styles.groupName}>{group.name}</Text>
-                        <Text style={styles.groupMeta}>{group.member_count} members</Text>
-                    </Pressable>
-                ))}
+                {groups.map((group) => {
+                    console.log('🎯 Rendering group:', group.name, 'language:', group.language);
+                    return (
+                        <Pressable
+                            key={group.id}
+                            style={styles.groupItem}
+                            onPress={() => router.push(`/chat/${group.id}`)}
+                        >
+                            <GroupAvatar language={group.language} size={50} />
+                            <View style={{ flex: 1, marginLeft: 12 }}>
+                                <Text style={styles.groupName}>{group.name}</Text>
+                                <Text style={styles.groupMeta}>{group.member_count} members</Text>
+                            </View>
+                        </Pressable>
+                    );
+                })}
             </View>
         );
     };
@@ -1922,6 +1930,8 @@ const styles = StyleSheet.create({
         marginBottom: 16,
     },
     groupItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
         backgroundColor: '#fff',
         padding: 16,
         borderRadius: 12,
