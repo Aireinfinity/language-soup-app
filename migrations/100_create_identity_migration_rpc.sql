@@ -70,6 +70,13 @@ BEGIN
 
     -- Challenges
     UPDATE app_challenges SET created_by = new_user_id WHERE created_by = old_user_id;
+
+    -- Quests (preserve quest progress)
+    INSERT INTO app_user_quests (user_id, quest_id, completed_at, seen_celebration)
+    SELECT new_user_id, quest_id, completed_at, seen_celebration
+    FROM app_user_quests
+    WHERE user_id = old_user_id
+    ON CONFLICT (user_id, quest_id) DO NOTHING;
   END IF;
 
   RETURN jsonb_build_object(

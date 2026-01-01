@@ -81,12 +81,24 @@ export default function LoginScreen() {
 
             await signInWithName(name.trim(), emojiPass);
 
-            if (isNewUser) {
-                // New users go through the onboarding flow
-                router.replace('/onboarding/conversational');
-            } else {
-                // Existing users go straight home
+            // Check if user has completed onboarding (has fluent or learning languages set)
+            const { data: profile } = await supabase
+                .from('app_users')
+                .select('fluent_languages, learning_languages')
+                .eq('display_name', name.trim())
+                .single();
+
+            const hasCompletedOnboarding = profile && (
+                (profile.fluent_languages && profile.fluent_languages.length > 0) ||
+                (profile.learning_languages && profile.learning_languages.length > 0)
+            );
+
+            if (hasCompletedOnboarding) {
+                // Existing users with profile data go straight home
                 router.replace('/(tabs)');
+            } else {
+                // New users or users without language data go through onboarding
+                router.replace('/onboarding/conversational');
             }
         } catch (error) {
             console.error('Error:', error);
