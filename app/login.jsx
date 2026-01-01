@@ -81,23 +81,16 @@ export default function LoginScreen() {
 
             await signInWithName(name.trim(), emojiPass);
 
-            // Check if user has completed onboarding (has fluent or learning languages set)
-            const { data: profile } = await supabase
-                .from('app_users')
-                .select('fluent_languages, learning_languages')
-                .eq('display_name', name.trim())
-                .single();
+            // Three-flow logic based on user type:
+            // 1. New user -> onboarding
+            // 2. Existing user WITH password -> home (returning user)
+            // 3. Existing user WITHOUT password -> onboarding (claiming ghost profile)
 
-            const hasCompletedOnboarding = profile && (
-                (profile.fluent_languages && profile.fluent_languages.length > 0) ||
-                (profile.learning_languages && profile.learning_languages.length > 0)
-            );
-
-            if (hasCompletedOnboarding) {
-                // Existing users with profile data go straight home
+            if (userType === 'existing_with_password') {
+                // Returning user with password - go straight home
                 router.replace('/(tabs)');
             } else {
-                // New users or users without language data go through onboarding
+                // New user OR claiming a ghost profile - go through onboarding
                 router.replace('/onboarding/conversational');
             }
         } catch (error) {
