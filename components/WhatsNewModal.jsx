@@ -53,6 +53,11 @@ const FEATURES = [
         title: 'Emoji Passwords',
         description: 'Secure your account with a fun emoji password (screenshot it!)',
     },
+    {
+        image: require('../assets/whats-new/features-notifications.png'),
+        title: 'Smart Notifications',
+        description: 'Get notified when your friends complete a challenge!',
+    },
 ];
 
 export default function WhatsNewModal({ visible, onClose }) {

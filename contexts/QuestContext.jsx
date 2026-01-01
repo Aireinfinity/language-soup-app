@@ -20,17 +20,17 @@ export const QUESTS = [
 ];
 
 export const QuestProvider = ({ children }) => {
-    const { user } = useAuth();
+    const { user, profileChecked } = useAuth();
     const [questProgress, setQuestProgress] = useState({});
     const [loading, setLoading] = useState(true);
     const [totalCompleted, setTotalCompleted] = useState(0);
 
     useEffect(() => {
-        if (user) {
+        if (user && profileChecked) {
             loadQuestProgress();
             subscribeToQuestUpdates();
         }
-    }, [user]);
+    }, [user, profileChecked]);
 
     const loadQuestProgress = async () => {
         try {
@@ -82,7 +82,7 @@ export const QuestProvider = ({ children }) => {
     };
 
     const completeQuest = async (questId) => {
-        if (!user) return false;
+        if (!user || !profileChecked) return false;
 
         // Check if already completed
         if (questProgress[questId]?.completed) {

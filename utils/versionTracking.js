@@ -1,7 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
 const VERSION_KEY = '@app_version';
-const CURRENT_VERSION = '1.0.2'; // Update this when you release new features
+
+// Get version from app.json (expo config)
+const CURRENT_VERSION = Constants.expoConfig?.version || Constants.manifest?.version || '1.0.0';
 
 export async function shouldShowWhatsNew() {
     try {

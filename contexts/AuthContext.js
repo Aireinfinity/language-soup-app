@@ -347,11 +347,27 @@ export const AuthProvider = ({ children }) => {
             });
             console.log('[Auth] SignIn Result:', { user: data.user?.id, error: error?.message });
 
-            // SUCCESSFUL LOGIN: Run Vacuum just in case
-            // DISABLED: This was deleting accounts - RPC doesn't exist
-            // if (!error && data?.user) {
-            //     await performDataVacuum(data.user.id, targetName);
-            // }
+            // SUCCESSFUL LOGIN: Check if profile exists (Handle Zombie Auth)
+            if (!error && data?.user) {
+                const { data: profile } = await supabase
+                    .from('app_users')
+                    .select('id')
+                    .eq('id', data.user.id)
+                    .single();
+
+                if (profile) {
+                    await performDataVacuum(data.user.id, targetName);
+                } else {
+                    console.log('[Auth] 🧟 Zombie Auth (Auth exists, Profile missing). Claiming...', data.user.id);
+                    // Re-create/Claim via RPC
+                    const { data: claimResult, error: claimError } = await supabase
+                        .rpc('claim_user_identity', {
+                            target_display_name: targetName,
+                            target_password: emojiPassword
+                        });
+                    if (claimError) console.error('[Auth] ❌ Claim RPC Error (Zombie):', claimError);
+                }
+            }
 
             // If user doesn't exist, create them!
             if (error && (error.status === 400 || error.message.includes('Invalid login credentials'))) {
@@ -376,33 +392,22 @@ export const AuthProvider = ({ children }) => {
                 if (authResult.error) throw authResult.error;
                 data = authResult.data;
 
-
-                if (authResult.error) throw authResult.error;
-                data = authResult.data;
-
-                // NEW SIGNUP: Run Vacuum to merge legacy data
-                // DISABLED: This was deleting accounts - RPC doesn't exist
-                // if (data?.user) {
-                //     await performDataVacuum(data.user.id, targetName);
-                // }
-
-                // Create/Update the profile in app_users
-                const isAdmin = targetName === 'Noah :)';
-                const { error: profileError } = await supabase
-                    .from('app_users')
-                    .upsert({
-                        id: data.user.id,
-                        display_name: targetName,
-                        emoji_password: emojiPassword,
-                        is_admin: isAdmin,
-                        is_community_manager: isAdmin,
-                        // avatar_url: null, // User hates dicebear, leaving null for now
-                        status_text: 'Hey there! I am using Language Soup',
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString(),
+                // NEW SIGNUP: Call Atomic Claim/Create RPC
+                const { data: claimResult, error: claimError } = await supabase
+                    .rpc('claim_user_identity', {
+                        target_display_name: targetName,
+                        target_password: emojiPassword
                     });
 
-                if (profileError) console.warn('Profile sync error:', profileError);
+                if (claimError) {
+                    console.error('[Auth] Claim RPC Error:', claimError);
+                } else {
+                    console.log('[Auth] Identity Claim Result:', claimResult);
+                }
+
+                // Profile is definitely ready now
+                setProfileChecked(true);
+
             } else if (error) {
                 throw error;
             }

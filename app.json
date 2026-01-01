@@ -2,7 +2,7 @@
   "expo": {
     "name": "Language Soup",
     "slug": "language-soup-mobile",
-    "version": "1.0.0",
+    "version": "1.0.4",
     "scheme": "languagesoup",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.aireinfinity.languagesoup",
-      "buildNumber": "20",
+      "buildNumber": "23",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "This app needs access to your microphone to record voice memos for language practice.",
@@ -28,7 +28,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.aireinfinity.languagesoup",
-      "versionCode": 20,
+      "versionCode": 23,
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",

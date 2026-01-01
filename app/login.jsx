@@ -36,7 +36,7 @@ export default function LoginScreen() {
             const { data: existing } = await supabase
                 .from('app_users')
                 .select('id, emoji_password')
-                .eq('display_name', name.trim())
+                .ilike('display_name', name.trim())
                 .maybeSingle();
 
             // Determine user type for UX messaging
@@ -139,7 +139,7 @@ export default function LoginScreen() {
                     </Pressable>
 
                     <Text style={styles.disclaimer}>
-                        {loading ? "searching for your soup profile..." : "choose wisely—you can't change it later ✨"}
+                        {loading ? "searching for your soup profile..." : "choose wisely—it's case sensitive & permanent ✨"}
                     </Text>
                 </KeyboardAvoidingView>
             </SafeAreaView>
@@ -216,7 +216,7 @@ export default function LoginScreen() {
                     onPress={handlePasswordSubmit}
                     disabled={password.length !== 3 || loading}
                 >
-                    {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{isNewUser ? 'create account' : 'claim & secure'}</Text>}
+                    {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{userType === 'existing_with_password' ? 'log in' : (isNewUser ? 'create account' : 'claim & secure')}</Text>}
                 </Pressable>
             </ScrollView>
         </SafeAreaView>
