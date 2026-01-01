@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.aireinfinity.languagesoup",
-      "buildNumber": "19",
+      "buildNumber": "20",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "This app needs access to your microphone to record voice memos for language practice.",
@@ -29,6 +29,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.aireinfinity.languagesoup",
+      "versionCode": 20,
       "permissions": [
         "CAMERA",
         "RECORD_AUDIO",
