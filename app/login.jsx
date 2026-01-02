@@ -76,7 +76,17 @@ export default function LoginScreen() {
         } catch (error) {
             console.error('Error:', error);
             if (error.message === 'Name already taken!') {
-                Alert.alert('Name Taken 🙅', 'Someone else is using that name with a different password.');
+                Alert.alert(
+                    'Name Taken 🙅',
+                    'Someone else is using that name with a different password. Try a different name!',
+                    [{
+                        text: 'OK',
+                        onPress: () => {
+                            setPassword([]);
+                            setStep('name');
+                        }
+                    }]
+                );
             } else {
                 Alert.alert('Oops!', 'Something went wrong. Try again?');
             }
