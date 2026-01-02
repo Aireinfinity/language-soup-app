@@ -21,42 +21,13 @@ export default function LoginScreen() {
     const [name, setName] = useState('');
     const [password, setPassword] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [isNewUser, setIsNewUser] = useState(false);
-    const [userType, setUserType] = useState(null);
 
     const handleNameSubmit = async () => {
         if (!name.trim()) {
             Alert.alert('Hey! 👋', 'We need to know what to call you');
             return;
         }
-
-        setLoading(true);
-        try {
-            // Check if user exists
-            const { data: existing } = await supabase
-                .from('app_users')
-                .select('id, emoji_password')
-                .ilike('display_name', name.trim())
-                .maybeSingle();
-
-            // Determine user type for UX messaging
-            if (existing) {
-                if (existing.emoji_password) {
-                    setUserType('existing_with_password');
-                } else {
-                    setUserType('existing_no_password');
-                }
-            } else {
-                setUserType('new');
-            }
-
-            setIsNewUser(!existing);
-            setStep('password');
-        } catch (err) {
-            console.error('Error:', err);
-        } finally {
-            setLoading(false);
-        }
+        setStep('password');
     };
 
     const addEmoji = (emoji) => {
@@ -79,20 +50,29 @@ export default function LoginScreen() {
         try {
             const emojiPass = password.join('');
 
+            // 1. Sign in
             await signInWithName(name.trim(), emojiPass);
 
-            // Three-flow logic based on user type:
-            // 1. New user -> onboarding
-            // 2. Existing user WITH password -> home (returning user)
-            // 3. Existing user WITHOUT password -> onboarding (claiming ghost profile)
+            // 2. Ensure profile exists NOW (prevents crash)
+            await supabase.rpc('claim_user_identity', {
+                target_display_name: name.trim(),
+                target_password: emojiPass
+            });
 
-            if (userType === 'existing_with_password') {
-                // Returning user with password - go straight home
+            // 3. Check if they've completed onboarding (have groups?)
+            const { data: groups } = await supabase
+                .from('app_group_members')
+                .select('group_id')
+                .eq('user_id', user.id)
+                .limit(1);
+
+            // 4. Simple routing: has groups = returning user, no groups = new user
+            if (groups?.length > 0) {
                 router.replace('/(tabs)');
             } else {
-                // New user OR claiming a ghost profile - go through onboarding
                 router.replace('/onboarding/conversational');
             }
+
         } catch (error) {
             console.error('Error:', error);
             if (error.message === 'Name already taken!') {
@@ -166,29 +146,15 @@ export default function LoginScreen() {
                     </Text>
 
                     {/* Info banner based on user type */}
-                    {userType && (
-                        <View style={styles.infoBanner}>
-                            <Text style={styles.infoBannerEmoji}>
-                                {userType === 'new' ? '🤪' : userType === 'existing_no_password' ? '🤩' : '👋🏾'}
+                    <View style={styles.infoBanner}>
+                        <Text style={styles.infoBannerEmoji}>🔒</Text>
+                        <View style={styles.infoBannerTextContainer}>
+                            <Text style={styles.infoBannerTitle}>Secure Your Profile</Text>
+                            <Text style={styles.infoBannerText}>
+                                Pick 3 emojis and screenshot this screen so you don't forget!
                             </Text>
-                            <View style={styles.infoBannerTextContainer}>
-                                <Text style={styles.infoBannerTitle}>
-                                    {userType === 'new'
-                                        ? 'Welcome to Language Soup!'
-                                        : userType === 'existing_no_password'
-                                            ? 'Set Your Emoji Password'
-                                            : 'Welcome Back!'}
-                                </Text>
-                                <Text style={styles.infoBannerText}>
-                                    {userType === 'new'
-                                        ? 'We use emoji passwords. Pick 3 emojis and screenshot this screen so you don\'t forget!'
-                                        : userType === 'existing_no_password'
-                                            ? 'Use the same username and screenshot your password in case you need to log out and back in again!'
-                                            : 'Enter your emoji password to log in.'}
-                                </Text>
-                            </View>
                         </View>
-                    )}
+                    </View>
                 </View>
 
                 <View style={styles.passwordDisplay}>
@@ -221,7 +187,7 @@ export default function LoginScreen() {
                     onPress={handlePasswordSubmit}
                     disabled={password.length !== 3 || loading}
                 >
-                    {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{userType === 'existing_with_password' ? 'log in' : (isNewUser ? 'create account' : 'claim & secure')}</Text>}
+                    {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>continue</Text>}
                 </Pressable>
             </ScrollView>
         </SafeAreaView>
