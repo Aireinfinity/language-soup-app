@@ -95,9 +95,7 @@ export default function LoginScreen() {
                             <Image source={require('../assets/images/logo.png')} style={styles.logoImage} resizeMode="contain" />
                         </View>
                         <Text style={styles.title}>language soup</Text>
-                        <Text style={styles.subtitle}>
-                            {isNewUser ? "what should we call you?" : "welcome back! what's your name?"}
-                        </Text>
+                        <Text style={styles.subtitle}>what should we call you?</Text>
                     </View>
 
                     <View style={styles.inputContainer}>
