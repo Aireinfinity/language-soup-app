@@ -124,19 +124,18 @@ export default function ConversationalScreen() {
                     onChangeText={setSearch}
                 />
 
-                {/* Available Languages */}
+                {/* Available Languages - Optimized List (No individual entering animations) */}
                 <ScrollView style={styles.languageList} contentContainerStyle={styles.languageListContent}>
                     {(search ? filteredLanguages : ALL_LANGUAGES.filter(l => !selectedLanguages.includes(l)))
-                        .slice(0, 30)
+                        .slice(0, 50) // Limit initial render if needed, but removing animation helps most
                         .map((lang, index) => (
-                            <Animated.View key={lang} entering={FadeInDown.delay(index * 30).springify()}>
-                                <Pressable
-                                    style={styles.languageChip}
-                                    onPress={() => toggleLanguage(lang)}
-                                >
-                                    <Text style={styles.languageChipText}>{lang}</Text>
-                                </Pressable>
-                            </Animated.View>
+                            <Pressable
+                                key={lang}
+                                style={styles.languageChip}
+                                onPress={() => toggleLanguage(lang)}
+                            >
+                                <Text style={styles.languageChipText}>{lang}</Text>
+                            </Pressable>
                         ))}
                 </ScrollView>
             </View>

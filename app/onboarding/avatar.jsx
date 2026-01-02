@@ -1,11 +1,9 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, ActivityIndicator, Alert, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Camera } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import { Asset } from 'expo-asset';
 import { decode } from 'base64-arraybuffer';
 import { Colors } from '../../constants/Colors';
@@ -77,8 +75,17 @@ export default function AvatarScreen() {
 
             if (isCustomPhoto) {
                 // Read from local file system
-                base64 = await FileSystem.readAsStringAsync(avatarUri, {
-                    encoding: 'base64',
+                // Use fetch for reliable base64 conversion on iOS 18
+                const response = await fetch(avatarUri);
+                const blob = await response.blob();
+                const reader = new FileReader();
+                base64 = await new Promise((resolve, reject) => {
+                    reader.onloadend = () => {
+                        const base64data = reader.result.split(',')[1];
+                        resolve(base64data);
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
                 });
                 mimeType = 'image/jpeg';
             } else {
@@ -87,24 +94,19 @@ export default function AvatarScreen() {
                 const asset = Asset.fromModule(selectedSoup.source);
                 await asset.downloadAsync();
 
-                // Use fetch for Android, FileSystem for iOS
-                if (Platform.OS === 'android') {
-                    const response = await fetch(asset.localUri);
-                    const blob = await response.blob();
-                    const reader = new FileReader();
-                    base64 = await new Promise((resolve, reject) => {
-                        reader.onloadend = () => {
-                            const base64data = reader.result.split(',')[1];
-                            resolve(base64data);
-                        };
-                        reader.onerror = reject;
-                        reader.readAsDataURL(blob);
-                    });
-                } else {
-                    base64 = await FileSystem.readAsStringAsync(asset.localUri, {
-                        encoding: 'base64',
-                    });
-                }
+                // Unified stable approach for both platforms
+                const response = await fetch(asset.localUri || asset.uri);
+                const blob = await response.blob();
+                const reader = new FileReader();
+                base64 = await new Promise((resolve, reject) => {
+                    reader.onloadend = () => {
+                        const base64data = reader.result.split(',')[1];
+                        resolve(base64data);
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+
                 mimeType = 'image/png';
             }
 

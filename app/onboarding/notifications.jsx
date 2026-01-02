@@ -45,8 +45,8 @@ export default function NotificationScreen() {
     };
 
     const handleContinue = () => {
-        // Final destination: The App!
-        router.replace('/(tabs)');
+        // Must go to group selection!
+        router.replace('/group-selection');
     };
 
     return (
