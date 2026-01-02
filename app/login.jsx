@@ -134,14 +134,8 @@ export default function LoginScreen() {
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <View style={styles.logoContainer}>
-                    <Text style={styles.title}>
-                        {isNewUser ? "secure your soup 🍲" : "secure your profile 🔒"}
-                    </Text>
-                    <Text style={styles.subtitle}>
-                        {isNewUser
-                            ? "pick 3 emojis to create your password"
-                            : "looks like you've been here! set a 3-emoji password to save your progress forever."}
-                    </Text>
+                    <Text style={styles.title}>secure your soup 🍲</Text>
+                    <Text style={styles.subtitle}>pick 3 emojis to create your password</Text>
 
                     {/* Info banner based on user type */}
                     <View style={styles.infoBanner}>
