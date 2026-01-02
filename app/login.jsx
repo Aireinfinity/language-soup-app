@@ -50,8 +50,8 @@ export default function LoginScreen() {
         try {
             const emojiPass = password.join('');
 
-            // 1. Sign in
-            await signInWithName(name.trim(), emojiPass);
+            // 1. Sign in and get the user
+            const authData = await signInWithName(name.trim(), emojiPass);
 
             // 2. Ensure profile exists NOW (prevents crash)
             await supabase.rpc('claim_user_identity', {
@@ -63,7 +63,7 @@ export default function LoginScreen() {
             const { data: groups } = await supabase
                 .from('app_group_members')
                 .select('group_id')
-                .eq('user_id', user.id)
+                .eq('user_id', authData.user.id)
                 .limit(1);
 
             // 4. Simple routing: has groups = returning user, no groups = new user
