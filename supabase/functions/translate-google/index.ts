@@ -30,8 +30,9 @@ serve(async (req) => {
         const response = await fetch(url)
         const result = await response.json()
 
-        // Google Translate returns: [[[translated_text, original_text, ...]]]
-        const translatedText = result[0][0][0]
+        // Google Translate returns: [[[translated_text, original_text, ...], [next_segment, ...]], ...]
+        // Combine all segments to get the full translation
+        const translatedText = result[0].map((segment: any[]) => segment[0]).join('')
 
         return new Response(
             JSON.stringify({ translatedText }),
