@@ -74,6 +74,16 @@ export default function AddNativeSpeakerScreen() {
         setSubmitting(true);
 
         try {
+            // Fetch latest user details from app_users to ensure we don't use stale metadata
+            const { data: userData } = await supabase
+                .from('app_users')
+                .select('display_name, avatar_url')
+                .eq('id', user.id)
+                .single();
+
+            const displayName = userData?.display_name || user.user_metadata?.display_name || 'Anonymous';
+            const photoUrl = userData?.avatar_url || user.user_metadata?.avatar_url || null;
+
             if (isEditMode) {
                 // Update existing profile
                 const { error } = await supabase
@@ -82,6 +92,8 @@ export default function AddNativeSpeakerScreen() {
                         bio: bio.trim(),
                         availability: availability.trim(),
                         whatsapp_number: whatsappNumber.trim(),
+                        display_name: displayName, // Sync name
+                        photo_url: photoUrl,       // Sync avatar
                     })
                     .eq('user_id', user.id);
 
@@ -99,12 +111,12 @@ export default function AddNativeSpeakerScreen() {
                     .from('app_native_speakers')
                     .insert({
                         user_id: user.id,
-                        display_name: user.user_metadata?.display_name || 'Anonymous',
-                        languages: ['French'],
+                        display_name: displayName,
+                        languages: ['French'], // Todo: Make dynamic
                         bio: bio.trim(),
                         availability: availability.trim(),
                         whatsapp_number: whatsappNumber.trim(),
-                        photo_url: user.user_metadata?.avatar_url || null,
+                        photo_url: photoUrl,
                         is_active: true,
                     });
 
