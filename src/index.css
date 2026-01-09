@@ -1,0 +1,37 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&family=Source+Serif+4:opsz,wght@8..16,400;700;900&display=swap');
+@import "tailwindcss";
+
+:root {
+  --soup-blue: #00aedf;
+  --soup-turquoise: #00aedf;
+  --soup-dark: #1b1b2f;
+  --soup-beige: #fef6e4;
+  --soup-green: #19b091;
+  --soup-pink: #ec008b;
+}
+
+body {
+  font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background-color: var(--soup-beige);
+  color: var(--soup-dark);
+  min-height: 100vh;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #ccc;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #aaa;
+}
