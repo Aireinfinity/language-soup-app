@@ -95,48 +95,46 @@ export default function App() {
             </button>
           ))}
         </nav>
+      </div>
 
-      </nav>
-    </div>
+      {/* Overlay for mobile */}
+      {
+        mobileMenuOpen && (
+          <div
+            className="lg:hidden fixed inset-0 bg-black/40 z-30"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+        )
+      }
 
-      {/* Overlay for mobile */ }
-  {
-    mobileMenuOpen && (
-      <div
-        className="lg:hidden fixed inset-0 bg-black/40 z-30"
-        onClick={() => setMobileMenuOpen(false)}
-      />
-    )
-  }
+      {/* Main Content */}
+      <div className="flex-1 overflow-auto flex flex-col">
+        <main className="p-4 lg:p-10 max-w-7xl w-full mx-auto flex-1 mt-16 lg:mt-0">
+          {activeTab === 'overview' && (
+            <div className="space-y-8 animate-in fade-in duration-500">
+              <div className="flex justify-between items-center mb-10">
+                <div>
+                  <h1 className="text-4xl font-bold text-[var(--soup-dark)] tracking-tight">gm {user.display_name?.split(' ')[0]} ✨</h1>
+                  <p className="text-gray-500 font-medium mt-1">Here's how Language Soup is doing today.</p>
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-[var(--soup-green)] rounded-full text-xs font-bold uppercase tracking-wider">
+                  <div className="w-2 h-2 rounded-full bg-[var(--soup-green)] animate-pulse"></div>
+                  Live Status
+                </div>
+              </div>
 
-  {/* Main Content */ }
-  <div className="flex-1 overflow-auto flex flex-col">
-    <main className="p-4 lg:p-10 max-w-7xl w-full mx-auto flex-1 mt-16 lg:mt-0">
-      {activeTab === 'overview' && (
-        <div className="space-y-8 animate-in fade-in duration-500">
-          <div className="flex justify-between items-center mb-10">
-            <div>
-              <h1 className="text-4xl font-bold text-[var(--soup-dark)] tracking-tight">gm {user.display_name?.split(' ')[0]} ✨</h1>
-              <p className="text-gray-500 font-medium mt-1">Here's how Language Soup is doing today.</p>
+              <OverviewTab />
             </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-[var(--soup-green)] rounded-full text-xs font-bold uppercase tracking-wider">
-              <div className="w-2 h-2 rounded-full bg-[var(--soup-green)] animate-pulse"></div>
-              Live Status
-            </div>
-          </div>
+          )}
 
-          <OverviewTab />
-        </div>
-      )}
-
-      {activeTab === 'users' && <UsersTab />}
-      {activeTab === 'challenges' && <ChallengesTab user={user} />}
-      {activeTab === 'groups' && <GroupsTab />}
-      {activeTab === 'announcements' && <AnnouncementsTab />}
-      {activeTab === 'marketing' && <MarketingTab />}
-      {activeTab === 'support' && <SupportTab />}
-    </main>
-  </div>
+          {activeTab === 'users' && <UsersTab />}
+          {activeTab === 'challenges' && <ChallengesTab user={user} />}
+          {activeTab === 'groups' && <GroupsTab />}
+          {activeTab === 'announcements' && <AnnouncementsTab />}
+          {activeTab === 'marketing' && <MarketingTab />}
+          {activeTab === 'support' && <SupportTab />}
+        </main>
+      </div>
     </div >
   );
 }
