@@ -29,7 +29,7 @@ export default function GroupSelectionScreen() {
                 .from('app_groups')
                 .select('*')
                 .eq('is_visible', true)
-                .order('name');
+                .order('member_count', { ascending: false });
 
             if (error) throw error;
 
