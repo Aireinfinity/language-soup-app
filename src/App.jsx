@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
-import { BarChart3, Users, MessageSquare, LifeBuoy, LogOut, Search, Zap, Megaphone, TrendingUp, Activity, MessageCircle, Layers, Menu, X } from 'lucide-react';
+import { BarChart3, Users, MessageSquare, LifeBuoy, Search, Zap, Megaphone, TrendingUp, Activity, MessageCircle, Layers, Menu, X } from 'lucide-react';
 import ChallengesTab from './ChallengesTab';
 import AnnouncementsTab from './AnnouncementsTab';
 import MarketingTab from './MarketingTab';
@@ -9,32 +9,24 @@ import SupportInbox from './SupportInbox';
 import SupportTabSimplified from './SupportTabSimplified';
 
 export default function App() {
-  // Auth - Hardcoded System Bot
+  // Hardcode the Language Soup bot as the admin user - no auth needed!
   const SYSTEM_BOT_ID = '00000000-0000-0000-0000-000000000000';
-  const user = {
-    id: SYSTEM_BOT_ID,
-    display_name: 'Language Soup Bot',
-    is_admin: true
-  };
+  const user = { id: SYSTEM_BOT_ID, display_name: 'language soup' };
 
-  // State
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem('dashboardActiveTab') || 'overview';
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Save active tab to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('dashboardActiveTab', activeTab);
   }, [activeTab]);
 
   useEffect(() => {
-    checkBot();
+    ensureBotExists();
   }, []);
 
-  const checkBot = async () => {
-    // Ensure Official Bot exists for challenge broadcasting
+  const ensureBotExists = async () => {
     const { data: botExists } = await supabase.from('app_users').select('id').eq('id', SYSTEM_BOT_ID).single();
 
     if (!botExists) {
@@ -50,10 +42,7 @@ export default function App() {
         fluent_languages: null
       });
     }
-
-    setLoading(false);
   };
-
 
   return (
     <div className="min-h-screen flex bg-[var(--soup-beige)] text-[var(--soup-dark)]">
@@ -110,14 +99,12 @@ export default function App() {
       </div>
 
       {/* Overlay for mobile */}
-      {
-        mobileMenuOpen && (
-          <div
-            className="lg:hidden fixed inset-0 bg-black/40 z-30"
-            onClick={() => setMobileMenuOpen(false)}
-          />
-        )
-      }
+      {mobileMenuOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/40 z-30"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto flex flex-col">
@@ -147,7 +134,7 @@ export default function App() {
           {activeTab === 'support' && <SupportTab />}
         </main>
       </div>
-    </div >
+    </div>
   );
 }
 
