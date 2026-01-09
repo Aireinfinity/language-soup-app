@@ -48,6 +48,9 @@ export function MessageBubble({
     const isSending = message.status === 'sending' || message.status === 'uploading';
     const isDeleted = !!message.deleted_at;
     const sender = message[senderKey];
+    // Use display name and avatar directly
+    const displayName = sender?.display_name || 'Unknown Souper';
+    const avatarUrl = sender?.avatar_url;
 
 
     // Fetch user data for reactions
@@ -145,9 +148,9 @@ export function MessageBubble({
         setShowActionMenu(false);
     };
 
-    const avatarElement = sender && !isMe && sender.avatar_url ? (
+    const avatarElement = sender && !isMe && avatarUrl ? (
         <Pressable onPress={() => onAvatarPress && onAvatarPress(sender)}>
-            <Image source={{ uri: sender.avatar_url }} style={ChatStyles.avatar} />
+            <Image source={{ uri: avatarUrl }} style={ChatStyles.avatar} />
         </Pressable>
     ) : null;
 
@@ -161,7 +164,8 @@ export function MessageBubble({
 
                 if (!repliedMsg) return null;
 
-                const senderName = repliedMsg.sender?.display_name || 'User';
+                const replySenderRaw = repliedMsg.sender;
+                const senderName = (replySenderRaw?.display_name) || 'User';
                 const content = repliedMsg.content || 'Message';
 
                 return (
