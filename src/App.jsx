@@ -9,37 +9,21 @@ import SupportInbox from './SupportInbox';
 import SupportTabSimplified from './SupportTabSimplified';
 
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState(() => {
-    // Restore last active tab from localStorage, default to 'overview'
-    return localStorage.getItem('dashboardActiveTab') || 'overview';
-  });
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  // Save active tab to localStorage whenever it changes
-  useEffect(() => {
-    localStorage.setItem('dashboardActiveTab', activeTab);
-  }, [activeTab]);
-
-  // Auth
-  const [name, setName] = useState('');
-  const [loggingIn, setLoggingIn] = useState(false);
-  const [authError, setAuthError] = useState('');
+  // Auth - Hardcoded System Bot
+  const SYSTEM_BOT_ID = '00000000-0000-0000-0000-000000000000';
+  const user = {
+    id: SYSTEM_BOT_ID,
+    display_name: 'Language Soup Bot',
+    is_admin: true
+  };
 
   useEffect(() => {
-    checkUser();
+    checkBot();
   }, []);
 
-  const checkUser = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-
+  const checkBot = async () => {
     // Ensure Official Bot exists for challenge broadcasting
-    const SYSTEM_BOT_ID = '00000000-0000-0000-0000-000000000000';
     const { data: botExists } = await supabase.from('app_users').select('id').eq('id', SYSTEM_BOT_ID).single();
-
-    // Comprehensive list of languages for the bot
-    const ALL_LANGUAGES = ['Spanish', 'French', 'Italian', 'German', 'Portuguese', 'Russian', 'Japanese', 'Chinese', 'Dutch', 'Hungarian', 'Swedish', 'Korean', 'English'];
 
     if (!botExists) {
       console.log('🥣 Creating official Language Soup bot...');
@@ -53,148 +37,11 @@ export default function App() {
         learning_languages: null,
         fluent_languages: null
       });
-    } else {
-      // Update existing bot to match new requirements
-      await supabase.from('app_users').update({
-        display_name: 'language soup',
-        avatar_url: 'https://uspegyneclgkscxwmomn.supabase.co/storage/v1/object/public/avatars/00000000-0000-0000-0000-000000000000/bot-avatar.png',
-        learning_languages: null,
-        fluent_languages: null
-      }).eq('id', SYSTEM_BOT_ID);
     }
 
-    if (user) {
-      // Verify admin status
-      const { data } = await supabase
-        .from('app_users')
-        .select('is_admin, display_name')
-        .eq('id', user.id)
-        .single();
-
-      if (data?.is_admin) {
-        setUser(user);
-      }
-    }
     setLoading(false);
   };
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-
-    setLoggingIn(true);
-    setAuthError('');
-
-    try {
-      // Check if this name is the admin
-      if (name.trim().toLowerCase() !== 'noah :)') {
-        throw new Error('Not an admin account');
-      }
-
-      // Sign in anonymously
-      const { data, error } = await supabase.auth.signInAnonymously();
-      if (error) throw error;
-
-      if (data.user) {
-        // Check if this specific auth user already has a profile
-        const { data: existingProfile } = await supabase
-          .from('app_users')
-          .select('id')
-          .eq('id', data.user.id)
-          .single();
-
-        if (!existingProfile) {
-          // Create user profile with admin access only if it doesn't exist
-          const { error: profileError } = await supabase
-            .from('app_users')
-            .upsert({
-              id: data.user.id,
-              display_name: name.trim(),
-              is_admin: true,
-              is_community_manager: true,
-              avatar_url: `https://api.dicebear.com/7.x/avataaars/png?seed=${data.user.id}`,
-              status_text: 'Founder Daddy',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            });
-
-          if (profileError) {
-            console.warn('Profile creation error:', profileError);
-          }
-        }
-
-        setUser(data.user);
-      }
-    } catch (err) {
-      setAuthError(err.message || 'Login failed');
-      await supabase.auth.signOut();
-    } finally {
-      setLoggingIn(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg text-gray-600">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4 bg-[var(--soup-beige)]">
-        <div className="bg-white rounded-3xl shadow-sm p-10 w-full max-w-md border border-black/5">
-          <div className="text-center mb-10">
-            <div className="w-16 h-16 bg-[var(--soup-turquoise)] rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-[var(--soup-turquoise)]/20">
-              <span className="text-3xl">🍜</span>
-            </div>
-            <h1 className="text-4xl font-extrabold mb-2 text-[var(--soup-dark)] tracking-tight">
-              LANGUAGE SOUP
-            </h1>
-            <p className="text-gray-400 font-bold tracking-widest uppercase text-xs">Admin Dashboard</p>
-          </div>
-
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Your Admin Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="noah :)"
-                className="w-full px-6 py-4 bg-gray-50 border-2 border-transparent focus:border-[var(--soup-turquoise)]/30 focus:bg-white rounded-2xl text-lg font-bold transition-all focus:ring-0"
-                autoFocus
-              />
-            </div>
-
-            {authError && (
-              <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm">
-                {authError}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loggingIn || !name.trim()}
-              className="w-full py-4 px-4 bg-[var(--soup-turquoise)] text-white rounded-2xl font-black text-lg shadow-lg shadow-[var(--soup-turquoise)]/20 hover:scale-[1.02] active:scale-98 transition-all disabled:opacity-50 mt-4"
-            >
-              {loggingIn ? 'Signing in...' : 'Sign In'}
-            </button>
-          </form>
-
-          <p className="text-xs text-gray-500 text-center mt-4 italic">
-            (hint: only admins can access this)
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex bg-[var(--soup-beige)] text-[var(--soup-dark)]">
@@ -249,54 +96,48 @@ export default function App() {
           ))}
         </nav>
 
-        <div className="p-6 border-t border-gray-100">
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 font-bold hover:bg-red-50 hover:text-red-500 rounded-xl transition-all"
-          >
-            <LogOut size={18} />
-            <span className="text-sm">Sign Out</span>
-          </button>
-        </div>
-      </div>
+      </nav>
+    </div>
 
-      {/* Overlay for mobile */}
-      {mobileMenuOpen && (
-        <div
-          className="lg:hidden fixed inset-0 bg-black/40 z-30"
-          onClick={() => setMobileMenuOpen(false)}
-        />
+      {/* Overlay for mobile */ }
+  {
+    mobileMenuOpen && (
+      <div
+        className="lg:hidden fixed inset-0 bg-black/40 z-30"
+        onClick={() => setMobileMenuOpen(false)}
+      />
+    )
+  }
+
+  {/* Main Content */ }
+  <div className="flex-1 overflow-auto flex flex-col">
+    <main className="p-4 lg:p-10 max-w-7xl w-full mx-auto flex-1 mt-16 lg:mt-0">
+      {activeTab === 'overview' && (
+        <div className="space-y-8 animate-in fade-in duration-500">
+          <div className="flex justify-between items-center mb-10">
+            <div>
+              <h1 className="text-4xl font-bold text-[var(--soup-dark)] tracking-tight">gm {user.display_name?.split(' ')[0]} ✨</h1>
+              <p className="text-gray-500 font-medium mt-1">Here's how Language Soup is doing today.</p>
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-[var(--soup-green)] rounded-full text-xs font-bold uppercase tracking-wider">
+              <div className="w-2 h-2 rounded-full bg-[var(--soup-green)] animate-pulse"></div>
+              Live Status
+            </div>
+          </div>
+
+          <OverviewTab />
+        </div>
       )}
 
-      {/* Main Content */}
-      <div className="flex-1 overflow-auto flex flex-col">
-        <main className="p-4 lg:p-10 max-w-7xl w-full mx-auto flex-1 mt-16 lg:mt-0">
-          {activeTab === 'overview' && (
-            <div className="space-y-8 animate-in fade-in duration-500">
-              <div className="flex justify-between items-center mb-10">
-                <div>
-                  <h1 className="text-4xl font-bold text-[var(--soup-dark)] tracking-tight">gm {user.display_name?.split(' ')[0]} ✨</h1>
-                  <p className="text-gray-500 font-medium mt-1">Here's how Language Soup is doing today.</p>
-                </div>
-                <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-[var(--soup-green)] rounded-full text-xs font-bold uppercase tracking-wider">
-                  <div className="w-2 h-2 rounded-full bg-[var(--soup-green)] animate-pulse"></div>
-                  Live Status
-                </div>
-              </div>
-
-              <OverviewTab />
-            </div>
-          )}
-
-          {activeTab === 'users' && <UsersTab />}
-          {activeTab === 'challenges' && <ChallengesTab user={user} />}
-          {activeTab === 'groups' && <GroupsTab />}
-          {activeTab === 'announcements' && <AnnouncementsTab />}
-          {activeTab === 'marketing' && <MarketingTab />}
-          {activeTab === 'support' && <SupportTab />}
-        </main>
-      </div>
-    </div>
+      {activeTab === 'users' && <UsersTab />}
+      {activeTab === 'challenges' && <ChallengesTab user={user} />}
+      {activeTab === 'groups' && <GroupsTab />}
+      {activeTab === 'announcements' && <AnnouncementsTab />}
+      {activeTab === 'marketing' && <MarketingTab />}
+      {activeTab === 'support' && <SupportTab />}
+    </main>
+  </div>
+    </div >
   );
 }
 
