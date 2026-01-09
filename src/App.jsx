@@ -8,135 +8,138 @@ import GrowthCharts from './GrowthCharts';
 import SupportInbox from './SupportInbox';
 import SupportTabSimplified from './SupportTabSimplified';
 
-export default function App() {
-  // Auth - Hardcoded System Bot
-  const SYSTEM_BOT_ID = '00000000-0000-0000-0000-000000000000';
-  const user = {
-    id: SYSTEM_BOT_ID,
-    display_name: 'Language Soup Bot',
-    is_admin: true
-  };
+// State
+const [loading, setLoading] = useState(true);
+const [activeTab, setActiveTab] = useState(() => {
+  return localStorage.getItem('dashboardActiveTab') || 'overview';
+});
+const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  useEffect(() => {
-    checkBot();
-  }, []);
+// Save active tab to localStorage whenever it changes
+useEffect(() => {
+  localStorage.setItem('dashboardActiveTab', activeTab);
+}, [activeTab]);
 
-  const checkBot = async () => {
-    // Ensure Official Bot exists for challenge broadcasting
-    const { data: botExists } = await supabase.from('app_users').select('id').eq('id', SYSTEM_BOT_ID).single();
+useEffect(() => {
+  checkBot();
+}, []);
 
-    if (!botExists) {
-      console.log('🥣 Creating official Language Soup bot...');
-      await supabase.from('app_users').upsert({
-        id: SYSTEM_BOT_ID,
-        display_name: 'language soup',
-        avatar_url: 'https://uspegyneclgkscxwmomn.supabase.co/storage/v1/object/public/avatars/00000000-0000-0000-0000-000000000000/bot-avatar.png',
-        is_admin: true,
-        is_community_manager: true,
-        status_text: 'Official Soup Bot',
-        learning_languages: null,
-        fluent_languages: null
-      });
+const checkBot = async () => {
+  // Ensure Official Bot exists for challenge broadcasting
+  const { data: botExists } = await supabase.from('app_users').select('id').eq('id', SYSTEM_BOT_ID).single();
+
+  if (!botExists) {
+    console.log('🥣 Creating official Language Soup bot...');
+    await supabase.from('app_users').upsert({
+      id: SYSTEM_BOT_ID,
+      display_name: 'language soup',
+      avatar_url: 'https://uspegyneclgkscxwmomn.supabase.co/storage/v1/object/public/avatars/00000000-0000-0000-0000-000000000000/bot-avatar.png',
+      is_admin: true,
+      is_community_manager: true,
+      status_text: 'Official Soup Bot',
+      learning_languages: null,
+      fluent_languages: null
+    });
+  }
+
+  setLoading(false);
+};
+
+
+return (
+  <div className="min-h-screen flex bg-[var(--soup-beige)] text-[var(--soup-dark)]">
+    {/* Mobile Menu Button */}
+    <button
+      onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+      className="lg:hidden fixed top-4 left-4 z-50 p-3 bg-white rounded-xl shadow-lg border border-black/5"
+    >
+      {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+    </button>
+
+    {/* Sidebar */}
+    <div className={`w-64 bg-white border-r border-black/5 flex flex-col shadow-sm z-40 fixed lg:static h-full transition-transform duration-300 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+      }`}>
+      <div className="p-8">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-[var(--soup-turquoise)] rounded-xl flex items-center justify-center shadow-lg shadow-[var(--soup-turquoise)]/20">
+            <span className="text-xl">🍜</span>
+          </div>
+          <div>
+            <h1 className="text-lg font-black tracking-tight text-[var(--soup-dark)] leading-tight">LANGUAGE</h1>
+            <h1 className="text-lg font-black tracking-tight text-[var(--soup-turquoise)] leading-tight">SOUP</h1>
+          </div>
+        </div>
+        <p className="text-[10px] font-bold text-gray-400 mt-2 tracking-widest uppercase">Admin Dashboard</p>
+      </div>
+
+      <nav className="flex-1 px-4 space-y-1 mt-2">
+        {[
+          { id: 'overview', label: 'Overview', icon: TrendingUp },
+          { id: 'users', label: 'Users', icon: Users },
+          { id: 'challenges', label: 'Challenges', icon: Megaphone },
+          { id: 'support', label: 'Support', icon: LifeBuoy },
+          { id: 'groups', label: 'Groups', icon: Users },
+          { id: 'announcements', label: 'Announcements', icon: MessageSquare },
+          { id: 'marketing', label: 'Marketing', icon: Zap },
+        ].map((item) => (
+          <button
+            key={item.id}
+            onClick={() => {
+              setActiveTab(item.id);
+              setMobileMenuOpen(false);
+            }}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeTab === item.id
+              ? 'bg-[var(--soup-turquoise)] text-white shadow-md'
+              : 'text-gray-500 hover:bg-gray-50 hover:text-[var(--soup-turquoise)]'
+              }`}
+          >
+            <item.icon size={20} />
+            <span className="text-sm">{item.label}</span>
+          </button>
+        ))}
+      </nav>
+    </div>
+
+    {/* Overlay for mobile */}
+    {
+      mobileMenuOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/40 z-30"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )
     }
 
-    setLoading(false);
-  };
-
-
-  return (
-    <div className="min-h-screen flex bg-[var(--soup-beige)] text-[var(--soup-dark)]">
-      {/* Mobile Menu Button */}
-      <button
-        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-3 bg-white rounded-xl shadow-lg border border-black/5"
-      >
-        {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-      </button>
-
-      {/* Sidebar */}
-      <div className={`w-64 bg-white border-r border-black/5 flex flex-col shadow-sm z-40 fixed lg:static h-full transition-transform duration-300 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        }`}>
-        <div className="p-8">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[var(--soup-turquoise)] rounded-xl flex items-center justify-center shadow-lg shadow-[var(--soup-turquoise)]/20">
-              <span className="text-xl">🍜</span>
-            </div>
-            <div>
-              <h1 className="text-lg font-black tracking-tight text-[var(--soup-dark)] leading-tight">LANGUAGE</h1>
-              <h1 className="text-lg font-black tracking-tight text-[var(--soup-turquoise)] leading-tight">SOUP</h1>
-            </div>
-          </div>
-          <p className="text-[10px] font-bold text-gray-400 mt-2 tracking-widest uppercase">Admin Dashboard</p>
-        </div>
-
-        <nav className="flex-1 px-4 space-y-1 mt-2">
-          {[
-            { id: 'overview', label: 'Overview', icon: TrendingUp },
-            { id: 'users', label: 'Users', icon: Users },
-            { id: 'challenges', label: 'Challenges', icon: Megaphone },
-            { id: 'support', label: 'Support', icon: LifeBuoy },
-            { id: 'groups', label: 'Groups', icon: Users },
-            { id: 'announcements', label: 'Announcements', icon: MessageSquare },
-            { id: 'marketing', label: 'Marketing', icon: Zap },
-          ].map((item) => (
-            <button
-              key={item.id}
-              onClick={() => {
-                setActiveTab(item.id);
-                setMobileMenuOpen(false);
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeTab === item.id
-                ? 'bg-[var(--soup-turquoise)] text-white shadow-md'
-                : 'text-gray-500 hover:bg-gray-50 hover:text-[var(--soup-turquoise)]'
-                }`}
-            >
-              <item.icon size={20} />
-              <span className="text-sm">{item.label}</span>
-            </button>
-          ))}
-        </nav>
-      </div>
-
-      {/* Overlay for mobile */}
-      {
-        mobileMenuOpen && (
-          <div
-            className="lg:hidden fixed inset-0 bg-black/40 z-30"
-            onClick={() => setMobileMenuOpen(false)}
-          />
-        )
-      }
-
-      {/* Main Content */}
-      <div className="flex-1 overflow-auto flex flex-col">
-        <main className="p-4 lg:p-10 max-w-7xl w-full mx-auto flex-1 mt-16 lg:mt-0">
-          {activeTab === 'overview' && (
-            <div className="space-y-8 animate-in fade-in duration-500">
-              <div className="flex justify-between items-center mb-10">
-                <div>
-                  <h1 className="text-4xl font-bold text-[var(--soup-dark)] tracking-tight">gm {user.display_name?.split(' ')[0]} ✨</h1>
-                  <p className="text-gray-500 font-medium mt-1">Here's how Language Soup is doing today.</p>
-                </div>
-                <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-[var(--soup-green)] rounded-full text-xs font-bold uppercase tracking-wider">
-                  <div className="w-2 h-2 rounded-full bg-[var(--soup-green)] animate-pulse"></div>
-                  Live Status
-                </div>
+    {/* Main Content */}
+    <div className="flex-1 overflow-auto flex flex-col">
+      <main className="p-4 lg:p-10 max-w-7xl w-full mx-auto flex-1 mt-16 lg:mt-0">
+        {activeTab === 'overview' && (
+          <div className="space-y-8 animate-in fade-in duration-500">
+            <div className="flex justify-between items-center mb-10">
+              <div>
+                <h1 className="text-4xl font-bold text-[var(--soup-dark)] tracking-tight">gm {user.display_name?.split(' ')[0]} ✨</h1>
+                <p className="text-gray-500 font-medium mt-1">Here's how Language Soup is doing today.</p>
               </div>
-
-              <OverviewTab />
+              <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-[var(--soup-green)] rounded-full text-xs font-bold uppercase tracking-wider">
+                <div className="w-2 h-2 rounded-full bg-[var(--soup-green)] animate-pulse"></div>
+                Live Status
+              </div>
             </div>
-          )}
 
-          {activeTab === 'users' && <UsersTab />}
-          {activeTab === 'challenges' && <ChallengesTab user={user} />}
-          {activeTab === 'groups' && <GroupsTab />}
-          {activeTab === 'announcements' && <AnnouncementsTab />}
-          {activeTab === 'marketing' && <MarketingTab />}
-          {activeTab === 'support' && <SupportTab />}
-        </main>
-      </div>
-    </div >
-  );
+            <OverviewTab />
+          </div>
+        )}
+
+        {activeTab === 'users' && <UsersTab />}
+        {activeTab === 'challenges' && <ChallengesTab user={user} />}
+        {activeTab === 'groups' && <GroupsTab />}
+        {activeTab === 'announcements' && <AnnouncementsTab />}
+        {activeTab === 'marketing' && <MarketingTab />}
+        {activeTab === 'support' && <SupportTab />}
+      </main>
+    </div>
+  </div >
+);
 }
 
 // Sub-components moved out of App
