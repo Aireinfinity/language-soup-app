@@ -14,58 +14,40 @@ serve(async (req) => {
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
         const supabase = createClient(supabaseUrl, supabaseKey)
 
-        // Get group details to fetch language
-        const { data: group, error: groupError } = await supabase
-            .from('app_groups')
-            .select('language, name')
-            .eq('id', record.group_id)
-            .single()
+        // Simple notification message - no group-specific info needed
+        const notificationTitle = '🥳 new challenges just dropped!'
+        const notificationBody = 'tap to see what it is!'
 
-        if (groupError) {
-            console.error('Error fetching group:', groupError)
-            return new Response(JSON.stringify({ error: 'Group not found' }), { status: 404 })
-        }
-
-        // Simple notification message for all languages
-        const notificationTitle = '🥳 new challenge just dropped!'
-
-        // Get all group members
-        const { data: members, error: membersError } = await supabase
-            .from('app_group_members')
-            .select('user_id')
-            .eq('group_id', record.group_id)
-
-        if (membersError || !members || members.length === 0) {
-            console.log('No members found for group:', record.group_id)
-            return new Response(JSON.stringify({ message: 'No members to notify' }), { status: 200 })
-        }
-
-        const userIds = members.map(m => m.user_id)
-
-        // Get push tokens for all members
+        // Get ALL users with push tokens (across all groups)
+        // This ensures each user gets only ONE notification regardless of how many groups they're in
         const { data: tokens, error: tokensError } = await supabase
             .from('app_push_tokens')
             .select('user_id, expo_push_token, platform')
-            .in('user_id', userIds)
 
         if (tokensError || !tokens || tokens.length === 0) {
             console.log('No push tokens found for group members')
             return new Response(JSON.stringify({ message: 'No push tokens found' }), { status: 200 })
         }
 
-        console.log(`📱 Sending notifications to ${tokens.length} devices`)
+        // Deduplicate: send only one notification per user (not per group membership)
+        const seenUsers = new Set()
+        const uniqueTokens = tokens.filter(token => {
+            if (seenUsers.has(token.user_id)) return false
+            seenUsers.add(token.user_id)
+            return true
+        })
+
+        console.log(`📱 Sending notifications to ${uniqueTokens.length} unique users (${tokens.length} total tokens)`)
 
         // Prepare notification messages
-        const messages = tokens.map(token => ({
+        const messages = uniqueTokens.map(token => ({
             to: token.expo_push_token,
             sound: 'default',
             title: notificationTitle,
-            body: record.prompt_text.substring(0, 100) + (record.prompt_text.length > 100 ? '...' : ''),
+            body: notificationBody,
             data: {
                 type: 'challenge',
-                groupId: record.group_id,
                 challengeId: record.id,
-                groupName: group.name,
             },
             priority: 'high',
             channelId: 'default',
@@ -94,13 +76,12 @@ serve(async (req) => {
         }
 
         // Log notifications to database
-        const notificationRecords = tokens.map(token => ({
+        const notificationRecords = uniqueTokens.map(token => ({
             user_id: token.user_id,
             type: 'challenge',
             title: notificationTitle,
-            body: record.prompt_text.substring(0, 100),
+            body: notificationBody,
             data: {
-                groupId: record.group_id,
                 challengeId: record.id,
             },
         }))
@@ -114,7 +95,7 @@ serve(async (req) => {
         return new Response(
             JSON.stringify({
                 success: true,
-                sent: tokens.length,
+                sent: uniqueTokens.length,
                 results
             }),
             {
