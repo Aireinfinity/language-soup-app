@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
-import { BarChart3, Users, MessageSquare, LifeBuoy, Search, Zap, Megaphone, TrendingUp, Activity, MessageCircle, Layers, Menu, X, Target, DollarSign } from 'lucide-react';
+import { BarChart3, Users, MessageSquare, LifeBuoy, LogOut, Search, Zap, Megaphone, TrendingUp, Activity, MessageCircle, Layers, Menu, X, Target, DollarSign } from 'lucide-react';
 import ChallengesTab from './ChallengesTab';
 import AnnouncementsTab from './AnnouncementsTab';
 import MarketingTab from './MarketingTab';
@@ -11,25 +11,70 @@ import GoalsTab from './GoalsTab';
 import FinancesTab from './FinancesTab';
 
 export default function App() {
-  // Hardcode the Language Soup bot as the admin user - no auth needed!
-  const SYSTEM_BOT_ID = '00000000-0000-0000-0000-000000000000';
-  const user = { id: SYSTEM_BOT_ID, display_name: 'language soup' };
-
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  // Initialize activeTab from URL or localStorage
   const [activeTab, setActiveTab] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlTab = params.get('tab');
+    if (urlTab) return urlTab;
     return localStorage.getItem('dashboardActiveTab') || 'overview';
   });
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Sync URL when activeTab changes
   useEffect(() => {
     localStorage.setItem('dashboardActiveTab', activeTab);
+
+    // Update URL
+    const url = new URL(window.location);
+    const currentTab = url.searchParams.get('tab');
+
+    // Only update if changed to avoid overwriting view params unnecessarily on mount
+    if (currentTab !== activeTab) {
+      url.searchParams.set('tab', activeTab);
+      url.searchParams.delete('view'); // Reset sub-view when switching main tabs
+      window.history.pushState({}, '', url);
+    }
   }, [activeTab]);
 
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Auth
+  const [name, setName] = useState('');
+  const [loggingIn, setLoggingIn] = useState(false);
+  const [authError, setAuthError] = useState('');
+
+  // Notification Badges
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
+
   useEffect(() => {
-    ensureBotExists();
+    checkUser();
+    loadNotificationCounts();
   }, []);
 
-  const ensureBotExists = async () => {
+  const loadNotificationCounts = async () => {
+    try {
+      // Pending Language Requests
+      const { count } = await supabase
+        .from('app_language_requests')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+
+      setPendingRequestsCount(count || 0);
+    } catch (err) {
+      console.error('Error loading notifications:', err);
+    }
+  };
+
+  const checkUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // Ensure Official Bot exists for challenge broadcasting
+    const SYSTEM_BOT_ID = '00000000-0000-0000-0000-000000000000';
     const { data: botExists } = await supabase.from('app_users').select('id').eq('id', SYSTEM_BOT_ID).single();
+
+    // Comprehensive list of languages for the bot
+    const ALL_LANGUAGES = ['Spanish', 'French', 'Italian', 'German', 'Portuguese', 'Russian', 'Japanese', 'Chinese', 'Dutch', 'Hungarian', 'Swedish', 'Korean', 'English'];
 
     if (!botExists) {
       console.log('🥣 Creating official Language Soup bot...');
@@ -43,8 +88,148 @@ export default function App() {
         learning_languages: null,
         fluent_languages: null
       });
+    } else {
+      // Update existing bot to match new requirements
+      await supabase.from('app_users').update({
+        display_name: 'language soup',
+        avatar_url: 'https://uspegyneclgkscxwmomn.supabase.co/storage/v1/object/public/avatars/00000000-0000-0000-0000-000000000000/bot-avatar.png',
+        learning_languages: null,
+        fluent_languages: null
+      }).eq('id', SYSTEM_BOT_ID);
+    }
+
+    if (user) {
+      // Verify admin status
+      const { data } = await supabase
+        .from('app_users')
+        .select('is_admin, display_name')
+        .eq('id', user.id)
+        .single();
+
+      if (data?.is_admin) {
+        setUser(user);
+      }
+    }
+    setLoading(false);
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+
+    setLoggingIn(true);
+    setAuthError('');
+
+    try {
+      // Check if this name is the admin
+      if (name.trim().toLowerCase() !== 'noah :)') {
+        throw new Error('Not an admin account');
+      }
+
+      // Sign in anonymously
+      const { data, error } = await supabase.auth.signInAnonymously();
+      if (error) throw error;
+
+      if (data.user) {
+        // Check if this specific auth user already has a profile
+        const { data: existingProfile } = await supabase
+          .from('app_users')
+          .select('id')
+          .eq('id', data.user.id)
+          .single();
+
+        if (!existingProfile) {
+          // Create user profile with admin access only if it doesn't exist
+          const { error: profileError } = await supabase
+            .from('app_users')
+            .upsert({
+              id: data.user.id,
+              display_name: name.trim(),
+              is_admin: true,
+              is_community_manager: true,
+              avatar_url: `https://api.dicebear.com/7.x/avataaars/png?seed=${data.user.id}`,
+              status_text: 'Founder Daddy',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+
+          if (profileError) {
+            console.warn('Profile creation error:', profileError);
+          }
+        }
+
+        setUser(data.user);
+      }
+    } catch (err) {
+      setAuthError(err.message || 'Login failed');
+      await supabase.auth.signOut();
+    } finally {
+      setLoggingIn(false);
     }
   };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-lg text-gray-600">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-[var(--soup-beige)]">
+        <div className="bg-white rounded-3xl shadow-sm p-10 w-full max-w-md border border-black/5">
+          <div className="text-center mb-10">
+            <div className="w-16 h-16 bg-[var(--soup-turquoise)] rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-[var(--soup-turquoise)]/20">
+              <span className="text-3xl">🍜</span>
+            </div>
+            <h1 className="text-4xl font-extrabold mb-2 text-[var(--soup-dark)] tracking-tight">
+              LANGUAGE SOUP
+            </h1>
+            <p className="text-gray-400 font-bold tracking-widest uppercase text-xs">Admin Dashboard</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest ml-1">Your Admin Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="noah :)"
+                className="w-full px-6 py-4 bg-gray-50 border-2 border-transparent focus:border-[var(--soup-turquoise)]/30 focus:bg-white rounded-2xl text-lg font-bold transition-all focus:ring-0"
+                autoFocus
+              />
+            </div>
+
+            {authError && (
+              <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm">
+                {authError}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loggingIn || !name.trim()}
+              className="w-full py-4 px-4 bg-[var(--soup-turquoise)] text-white rounded-2xl font-black text-lg shadow-lg shadow-[var(--soup-turquoise)]/20 hover:scale-[1.02] active:scale-98 transition-all disabled:opacity-50 mt-4"
+            >
+              {loggingIn ? 'Signing in...' : 'Sign In'}
+            </button>
+          </form>
+
+          <p className="text-xs text-gray-500 text-center mt-4 italic">
+            (hint: only admins can access this)
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex bg-[var(--soup-beige)] text-[var(--soup-dark)]">
@@ -75,10 +260,12 @@ export default function App() {
         <nav className="flex-1 px-4 space-y-1 mt-2">
           {[
             { id: 'overview', label: 'Overview', icon: TrendingUp },
+            { id: 'goals', label: '2026 Goals', icon: Target },
+            { id: 'finances', label: 'Finances', icon: DollarSign },
             { id: 'users', label: 'Users', icon: Users },
             { id: 'challenges', label: 'Challenges', icon: Megaphone },
             { id: 'support', label: 'Support', icon: LifeBuoy },
-            { id: 'groups', label: 'Groups', icon: Users },
+            { id: 'groups', label: 'Groups', icon: Users, badge: pendingRequestsCount },
             { id: 'announcements', label: 'Announcements', icon: MessageSquare },
             { id: 'marketing', label: 'Marketing', icon: Zap },
           ].map((item) => (
@@ -88,16 +275,36 @@ export default function App() {
                 setActiveTab(item.id);
                 setMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeTab === item.id
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-bold transition-all ${activeTab === item.id
                 ? 'bg-[var(--soup-turquoise)] text-white shadow-md'
                 : 'text-gray-500 hover:bg-gray-50 hover:text-[var(--soup-turquoise)]'
                 }`}
             >
-              <item.icon size={20} />
-              <span className="text-sm">{item.label}</span>
+              <div className="flex items-center gap-3">
+                <item.icon size={20} />
+                <span className="text-sm">{item.label}</span>
+              </div>
+              {item.badge > 0 && (
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${activeTab === item.id
+                  ? 'bg-white text-[var(--soup-turquoise)]'
+                  : 'bg-red-500 text-white'
+                  }`}>
+                  {item.badge}
+                </span>
+              )}
             </button>
           ))}
         </nav>
+
+        <div className="p-6 border-t border-gray-100">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 font-bold hover:bg-red-50 hover:text-red-500 rounded-xl transition-all"
+          >
+            <LogOut size={18} />
+            <span className="text-sm">Sign Out</span>
+          </button>
+        </div>
       </div>
 
       {/* Overlay for mobile */}
@@ -129,10 +336,10 @@ export default function App() {
           )}
 
           {activeTab === 'users' && <UsersTab />}
-          {activeTab === 'challenges' && <ChallengesTab user={user} />}
-          {activeTab === 'groups' && <GroupsTab />}
           {activeTab === 'goals' && <GoalsTab />}
           {activeTab === 'finances' && <FinancesTab />}
+          {activeTab === 'challenges' && <ChallengesTab user={user} />}
+          {activeTab === 'groups' && <GroupsTab />}
           {activeTab === 'announcements' && <AnnouncementsTab />}
           {activeTab === 'marketing' && <MarketingTab />}
           {activeTab === 'support' && <SupportTab />}
@@ -859,14 +1066,24 @@ function GroupsTab() {
 
 // Support Tab - Trello-style Ticket Board
 function SupportTab() {
-  const [activeView, setActiveView] = useState('tickets'); // 'tickets' or 'inbox'
+  const [activeView, setActiveView] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('view') || 'tickets';
+  });
+
+  const handleViewChange = (newView) => {
+    setActiveView(newView);
+    const url = new URL(window.location);
+    url.searchParams.set('view', newView);
+    window.history.pushState({}, '', url);
+  };
 
   return (
     <div className="animate-in fade-in duration-500">
       {/* Tab Switcher */}
       <div className="mb-6 flex items-center gap-4 bg-white p-2 rounded-2xl border border-black/5 shadow-sm w-fit">
         <button
-          onClick={() => setActiveView('tickets')}
+          onClick={() => handleViewChange('tickets')}
           className={`px-6 py-3 rounded-xl font-bold transition-all ${activeView === 'tickets'
             ? 'bg-[var(--soup-turquoise)] text-white shadow-md'
             : 'text-gray-500 hover:text-[var(--soup-turquoise)]'
@@ -875,7 +1092,7 @@ function SupportTab() {
           🎫 Tickets
         </button>
         <button
-          onClick={() => setActiveView('inbox')}
+          onClick={() => handleViewChange('inbox')}
           className={`px-6 py-3 rounded-xl font-bold transition-all ${activeView === 'inbox'
             ? 'bg-[var(--soup-turquoise)] text-white shadow-md'
             : 'text-gray-500 hover:text-[var(--soup-turquoise)]'
