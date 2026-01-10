@@ -583,9 +583,17 @@ function OverviewTab() {
 
   const loadStats = async () => {
     try {
-      const { count: usersCount } = await supabase
+      // Exclude test users: noah, bots, system accounts
+      const { data: allUsers } = await supabase
         .from('app_users')
-        .select('*', { count: 'exact', head: true });
+        .select('id, display_name');
+
+      const realUsers = allUsers?.filter(u => {
+        const name = (u.display_name || '').toLowerCase();
+        return !name.includes('noah') && !name.includes('bot') && !name.includes('system');
+      }) || [];
+
+      const usersCount = realUsers.length;
 
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
