@@ -367,7 +367,13 @@ function UsersTab() {
 
       if (error) throw error;
 
-      setUsers(data || []);
+      // Filter out test users (noah, bots, system)
+      const filteredData = (data || []).filter(u => {
+        const name = (u.display_name || '').toLowerCase();
+        return !name.includes('noah') && !name.includes('bot') && !name.includes('system');
+      });
+
+      setUsers(filteredData);
     } catch (err) {
       console.error('Error loading users:', err);
     } finally {
