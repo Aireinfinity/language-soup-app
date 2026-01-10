@@ -31,7 +31,7 @@ export default function ChallengesTab({ user }) {
             const { data: groupsData } = await supabase
                 .from('app_groups')
                 .select('id, name, language, level, member_count')
-                .order('language', { ascending: true });
+                .order('member_count', { ascending: false });
 
             const groupsWithData = await Promise.all(
                 (groupsData || []).map(async (group) => {
