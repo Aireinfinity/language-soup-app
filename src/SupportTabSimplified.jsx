@@ -56,7 +56,7 @@ export default function SupportTabSimplified() {
             const { data, error } = await supabase
                 .from('app_support_messages')
                 .select('*, app_users(display_name, avatar_url)')
-                .eq('from_admin', false)
+                .not('title', 'is', null) // Fetch all tickets (admin or user), ignore replies (no title)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;

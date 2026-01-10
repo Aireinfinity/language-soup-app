@@ -40,13 +40,21 @@ export default function GrowthCharts() {
             const weeklyRetention = processRetention(messages || []);
             const dailyShares = processDailyShares(shareLinks || []);
 
-            // Calculate Summary Stats (from Filtered Data)
-            const todayKey = getDateKey(new Date());
-            const currentDAU = dailyActive.find(d => d.date === todayKey)?.value || 0;
-            const currentRetention = weeklyRetention.length > 0 ? weeklyRetention[weeklyRetention.length - 1].value : 0;
+            // Calculate Summary Stats from the processed chart data
+            // Use the most recent data point (even if it's 0, it matches the chart)
+            const currentDAU = dailyActive.length > 0 ? dailyActive[dailyActive.length - 1].value : 0;
 
-            // Filter summary total to match launch date
-            // Filter summary total to match launch date
+            // For retention, ignore the last day if it's 0 (because we can't calculate retention for today yet)
+            // Find the last non-zero retention, or just the one before the last if appropriate
+            let currentRetention = 0;
+            const validRetention = weeklyRetention.filter(d => d.value > 0);
+            if (validRetention.length > 0) {
+                currentRetention = validRetention[validRetention.length - 1].value;
+            } else if (weeklyRetention.length > 1) {
+                // If all are 0, but we have data, show the second to last (yesterday's retention of day before)
+                currentRetention = weeklyRetention[weeklyRetention.length - 2]?.value || 0;
+            }
+
             const totalShares = shareLinks.filter(s => s.created_at >= LAUNCH_DATE).length;
 
             setMetrics({
@@ -133,51 +141,51 @@ export default function GrowthCharts() {
     };
 
     const processRetention = (msgs) => {
-        // Keep retention weekly as daily retention is too noisy/complex for this view
-        const getWeekKey = (date) => {
-            const d = new Date(date);
-            const day = d.getDay();
-            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-            const monday = new Date(d);
-            monday.setDate(diff);
-            return monday.toISOString().split('T')[0];
-        };
+        // Calculate Daily Retention (Day 1 Return Rate)
+        const timeline = getLaunchTimeline();
 
-        const weeks = [];
-        const today = new Date();
-        for (let i = 7; i >= 0; i--) {
-            const d = new Date(today);
-            d.setDate(d.getDate() - (i * 7));
-            weeks.push(getWeekKey(d));
-        }
+        // 1. Identify "Cohort" for each day (Users whose first message was on Day X)
+        const userCohorts = {}; // userId -> cohortDate (YYYY-MM-DD)
+        const dailyActiveUsers = {}; // date -> Set(userIds)
 
-        const userCohorts = {};
-        const weeklyActiveUsers = {};
-        weeks.forEach(w => weeklyActiveUsers[w] = new Set());
+        timeline.forEach(d => dailyActiveUsers[d] = new Set());
 
-        msgs.forEach(m => {
-            const week = getWeekKey(m.created_at);
+        // Sort messages chronologically to ensure we find FIRST message correctly
+        const sortedMsgs = [...msgs].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+        sortedMsgs.forEach(m => {
+            const day = getDateKey(m.created_at);
             const user = m.sender_id;
-            if (!userCohorts[user]) userCohorts[user] = week;
-            if (weeklyActiveUsers[week]) weeklyActiveUsers[week].add(user);
+
+            // Assign user to their first day's cohort
+            if (!userCohorts[user]) userCohorts[user] = day;
+
+            // Record activity for that day
+            if (dailyActiveUsers[day]) dailyActiveUsers[day].add(user);
         });
 
-        return weeks.map((week, index) => {
+        // 2. Calculate Day 1 Retention for each day
+        return timeline.map((day, index) => {
+            const label = new Date(day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+            // Get users who started on this day
             const cohortUsers = Object.entries(userCohorts)
-                .filter(([_, startWeek]) => startWeek === week)
+                .filter(([_, startDay]) => startDay === day)
                 .map(([uid]) => uid);
 
-            if (cohortUsers.length === 0) return { label: new Date(week).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), value: 0 };
+            if (cohortUsers.length === 0) return { label, value: 0 };
 
-            const nextWeek = weeks[index + 1];
-            if (!nextWeek) return { label: new Date(week).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), value: 0 };
+            // Check if they were active the NEXT day
+            const nextDay = timeline[index + 1];
+            if (!nextDay) return { label, value: 0 }; // Cannot calculate retention for today yet
 
-            const retainedCount = cohortUsers.filter(uid => weeklyActiveUsers[nextWeek]?.has(uid)).length;
+            const retainedCount = cohortUsers.filter(uid => dailyActiveUsers[nextDay]?.has(uid)).length;
+
             return {
-                label: new Date(week).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                label,
                 value: Math.round((retainedCount / cohortUsers.length) * 100)
             };
-        });
+        }).filter(d => d.value !== null && d.value !== undefined && (d.value !== 0 || d.label !== new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))); // Remove nulls and trailing 0s
     };
 
     const processTopSharers = (links) => {
@@ -208,7 +216,7 @@ export default function GrowthCharts() {
 
     return (
         <div className="space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <MetricCard
                     title="Daily Active Users"
                     value={metrics.summary.activeUsers}
@@ -216,6 +224,15 @@ export default function GrowthCharts() {
                     type="area"
                     color="blue"
                     icon={Users}
+                />
+                <MetricCard
+                    title="Retention Rate"
+                    value={metrics.summary.retentionRate + '%'}
+                    data={metrics.retention || []}
+                    type="line"
+                    color="indigo"
+                    icon={Activity}
+                    subtitle="Weekly Return Rate"
                 />
                 <MetricCard
                     title="Viral Shares"
@@ -317,12 +334,14 @@ function MetricCard({ title, value, data, type, color, icon: Icon, subtitle }) {
             {/* Line Chart Connector Line (Visual decoration) */}
             {/* Line Chart Connector Line (Visual decoration) */}
             {type === 'line' && !isZero && (
-                <svg className="absolute bottom-6 left-6 right-6 h-16 w-[calc(100%-3rem)] pointer-events-none opacity-20" preserveAspectRatio="none">
+                <svg className="absolute bottom-6 left-6 right-6 h-16 w-[calc(100%-3rem)] pointer-events-none opacity-50" preserveAspectRatio="none">
                     <polyline
                         points={data.map((d, i) => `${(i / (data.length - 1)) * 100},${100 - (d.value / maxValue) * 100}`).join(' ')}
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth="2"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
                         className={c.text}
                     />
                 </svg>

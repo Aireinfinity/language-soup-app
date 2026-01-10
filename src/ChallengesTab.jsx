@@ -19,12 +19,24 @@ export default function ChallengesTab({ user }) {
         return localStorage.getItem('lastChallengeText') || '';
     });
     const [translating, setTranslating] = useState(false);
-    const [activeView, setActiveView] = useState('send');
+
+    const [activeView, setActiveView] = useState(() => {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('view') || 'send';
+    });
+
+    const handleViewChange = (newView) => {
+        setActiveView(newView);
+        const url = new URL(window.location);
+        url.searchParams.set('view', newView);
+        window.history.pushState({}, '', url);
+    };
 
 
     useEffect(() => {
         loadGroupsWithChallenges();
     }, []);
+
 
     const loadGroupsWithChallenges = async () => {
         try {
@@ -243,6 +255,8 @@ export default function ChallengesTab({ user }) {
         if (lang.includes('russian') || lang.includes('русский')) return 'ru';
         if (lang.includes('japanese') || lang.includes('日本語')) return 'ja';
         if (lang.includes('chinese') || lang.includes('中文')) return 'zh-CN';
+        if (lang.includes('mandarin')) return 'zh-CN';
+        if (lang.includes('cantonese')) return 'zh-TW'; // Traditional Chinese for Cantonese
         if (lang.includes('korean') || lang.includes('한국어')) return 'ko';
         if (lang.includes('indonesian') || lang.includes('bahasa')) return 'id';
         if (lang.includes('turkish') || lang.includes('türkçe')) return 'tr';
@@ -263,6 +277,7 @@ export default function ChallengesTab({ user }) {
         if (lang.includes('hebrew') || lang.includes('עברית')) return 'iw';
         if (lang.includes('persian') || lang.includes('فارسی') || lang.includes('farsi')) return 'fa';
         if (lang.includes('urdu') || lang.includes('اردو')) return 'ur';
+        if (lang.includes('galician') || lang.includes('galego')) return 'gl';
 
         return null;
     };
@@ -389,7 +404,7 @@ export default function ChallengesTab({ user }) {
             {/* Tab Navigation */}
             <div className="mb-6 flex gap-4 border-b border-gray-200">
                 <button
-                    onClick={() => setActiveView('send')}
+                    onClick={() => handleViewChange('send')}
                     className={`pb-4 px-2 font-bold transition-all ${activeView === 'send'
                         ? 'text-[var(--soup-turquoise)] border-b-2 border-[var(--soup-turquoise)]'
                         : 'text-gray-400 hover:text-gray-600'
@@ -398,7 +413,7 @@ export default function ChallengesTab({ user }) {
                     Send Challenges
                 </button>
                 <button
-                    onClick={() => setActiveView('queue')}
+                    onClick={() => handleViewChange('queue')}
                     className={`pb-4 px-2 font-bold transition-all ${activeView === 'queue'
                         ? 'text-[var(--soup-turquoise)] border-b-2 border-[var(--soup-turquoise)]'
                         : 'text-gray-400 hover:text-gray-600'
@@ -407,7 +422,7 @@ export default function ChallengesTab({ user }) {
                     Challenge Queue 📅
                 </button>
                 <button
-                    onClick={() => setActiveView('feed')}
+                    onClick={() => handleViewChange('feed')}
                     className={`pb-4 px-2 font-bold transition-all ${activeView === 'feed'
                         ? 'text-[var(--soup-turquoise)] border-b-2 border-[var(--soup-turquoise)]'
                         : 'text-gray-400 hover:text-gray-600'

@@ -139,7 +139,7 @@ export default function FinancesTab() {
                         <div className="h-4 bg-gray-100 rounded-full overflow-hidden border border-black/5">
                             <div
                                 className={`h-full transition-all duration-1000 ${burnRatePercentage > 80 ? 'bg-red-500' :
-                                    burnRatePercentage > 50 ? 'bg-orange-500' : 'bg-green-500'
+                                        burnRatePercentage > 50 ? 'bg-orange-500' : 'bg-green-500'
                                     }`}
                                 style={{ width: `${burnRatePercentage}%` }}
                             />
