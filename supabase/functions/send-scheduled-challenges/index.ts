@@ -14,7 +14,7 @@ serve(async (req) => {
         const { data: dueChallenges, error: fetchError } = await supabase
             .from('app_scheduled_challenges')
             .select('*')
-            .eq('status', 'pending')
+            .eq('status', 'approved')  // Changed from 'pending' to 'approved'
             .lte('scheduled_time', new Date().toISOString());
 
         if (fetchError) throw fetchError;
@@ -38,14 +38,53 @@ serve(async (req) => {
         for (const challenge of dueChallenges) {
             console.log(`📤 Processing challenge: ${challenge.id}`);
 
-            // Send to all groups
+            const cleanEnglish = challenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
+
+            // Get unique languages and translate
+            const uniqueLanguages = [...new Set(groups.map(g => g.language))];
+            const translations: Record<string, string> = {};
+
+            for (const language of uniqueLanguages) {
+                if (language.toLowerCase() === 'english') {
+                    translations[language] = cleanEnglish;
+                    continue;
+                }
+
+                try {
+                    // Try DeepL first
+                    const { data, error } = await supabase.functions.invoke('translate-text', {
+                        body: { text: cleanEnglish, targetLang: language }
+                    });
+
+                    if (!error && data?.translatedText) {
+                        translations[language] = data.translatedText;
+                    } else {
+                        // Fallback to Google
+                        const googleResp = await supabase.functions.invoke('translate-google', {
+                            body: { text: cleanEnglish, targetLang: language }
+                        });
+                        translations[language] = googleResp.data?.translatedText || cleanEnglish;
+                    }
+                } catch {
+                    translations[language] = cleanEnglish;
+                }
+            }
+
+            // Send to all groups with proper format
             for (const group of groups) {
-                // Insert challenge
+                const translation = translations[group.language];
+
+                // Format: #challenge\n[english]\n[translation]
+                // For English groups: just #challenge\n[english]
+                const finalText = group.language.toLowerCase() === 'english'
+                    ? `#challenge\n${cleanEnglish}`
+                    : `#challenge\n${cleanEnglish}\n${translation}`;
+
                 const { error: challengeError } = await supabase
                     .from('app_challenges')
                     .insert({
                         group_id: group.id,
-                        prompt_text: challenge.challenge_text,
+                        prompt_text: finalText,
                         created_by: SYSTEM_BOT_ID,
                     });
 
