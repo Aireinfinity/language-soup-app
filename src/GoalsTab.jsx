@@ -76,12 +76,12 @@ export default function GoalsTab() {
             });
             const totalShares = userShares.length;
 
-            // Count users excluding admin
-            const realUsers = adminUser ? totalUsers - 1 : totalUsers;
+            // Count users excluding admin (for K-Factor calculation)
+            const realUsersForKFactor = adminUser ? totalUsers - 1 : totalUsers;
 
             // Calculate K-Factor
-            const kFactor = realUsers > 0 ? totalShares / realUsers : 0;
-            console.log(`K-Factor Calc (since Jan 4): ${totalShares} shares / ${realUsers} users = ${kFactor}`);
+            const kFactor = realUsersForKFactor > 0 ? totalShares / realUsersForKFactor : 0;
+            console.log(`K-Factor Calc (since Jan 4): ${totalShares} shares / ${realUsersForKFactor} users = ${kFactor}`);
 
             setMetrics({
                 totalUsers: totalUsers || 0,
