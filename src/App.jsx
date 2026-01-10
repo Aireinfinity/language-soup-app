@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
-import { BarChart3, Users, MessageSquare, LifeBuoy, Search, Zap, Megaphone, TrendingUp, Activity, MessageCircle, Layers, Menu, X } from 'lucide-react';
+import { BarChart3, Users, MessageSquare, LifeBuoy, Search, Zap, Megaphone, TrendingUp, Activity, MessageCircle, Layers, Menu, X, Target, DollarSign } from 'lucide-react';
 import ChallengesTab from './ChallengesTab';
 import AnnouncementsTab from './AnnouncementsTab';
 import MarketingTab from './MarketingTab';
 import GrowthCharts from './GrowthCharts';
 import SupportInbox from './SupportInbox';
 import SupportTabSimplified from './SupportTabSimplified';
+import GoalsTab from './GoalsTab';
+import FinancesTab from './FinancesTab';
 
 export default function App() {
   // Hardcode the Language Soup bot as the admin user - no auth needed!
@@ -129,6 +131,8 @@ export default function App() {
           {activeTab === 'users' && <UsersTab />}
           {activeTab === 'challenges' && <ChallengesTab user={user} />}
           {activeTab === 'groups' && <GroupsTab />}
+          {activeTab === 'goals' && <GoalsTab />}
+          {activeTab === 'finances' && <FinancesTab />}
           {activeTab === 'announcements' && <AnnouncementsTab />}
           {activeTab === 'marketing' && <MarketingTab />}
           {activeTab === 'support' && <SupportTab />}
