@@ -1,3 +1,6 @@
+/*
+import { View, Text } from 'react-native';
+*/
 import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -13,6 +16,7 @@ import { shouldShowWhatsNew, markWhatsNewAsSeen } from '../utils/versionTracking
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
+console.log('[Layout] Root Layout Mounted');
 
 // Note: Firebase Crashlytics initialization removed for Expo Go compatibility
 // It will be automatically initialized via app.json plugins in production builds
