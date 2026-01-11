@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, Alert, ActivityIndicator, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -44,7 +44,7 @@ export default function AvatarScreen() {
                 mediaTypes: 'images',
                 allowsEditing: Platform.OS === 'ios', // Only enable crop editor on iOS (Android UI is inconsistent)
                 aspect: [1, 1],
-                quality: 0.8,
+                quality: 0.5, // Reduced quality for faster uploads
             });
 
             if (!result.canceled && result.assets[0]) {

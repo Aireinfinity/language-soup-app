@@ -240,7 +240,7 @@ export default function ProfileScreen() {
                 mediaTypes: 'images',
                 allowsEditing: Platform.OS === 'ios', // Only enable crop editor on iOS (Android UI is inconsistent)
                 aspect: [1, 1],
-                quality: 0.8,
+                quality: 0.5, // Reduced quality for faster uploads
             });
 
             console.log('[Profile] Picker result:', { canceled: result.canceled, hasAssets: !!result.assets?.[0] });
@@ -359,17 +359,29 @@ export default function ProfileScreen() {
                 </View>
 
                 {/* Center - Profile Photo */}
-                <Pressable onPress={showAvatarOptions} style={styles.heroAvatarContainer}>
+                <Pressable onPress={showAvatarOptions} style={styles.heroAvatarContainer} disabled={uploading}>
                     {user?.avatar_url ? (
-                        <Image source={{ uri: user.avatar_url }} style={styles.heroAvatar} />
+                        <Image
+                            source={{ uri: user.avatar_url }}
+                            style={[styles.heroAvatar, uploading && { opacity: 0.5 }]}
+                        />
                     ) : (
-                        <View style={styles.heroAvatarPlaceholder}>
+                        <View style={[styles.heroAvatarPlaceholder, uploading && { opacity: 0.5 }]}>
                             <Text style={styles.heroAvatarInitial}>{user?.display_name?.[0]?.toUpperCase() || '?'}</Text>
                         </View>
                     )}
-                    <View style={styles.heroEditBadge}>
-                        <Camera size={16} color="#fff" />
-                    </View>
+                    {uploading && (
+                        <View style={StyleSheet.absoluteFill}>
+                            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 40, justifyContent: 'center', alignItems: 'center' }}>
+                                <ActivityIndicator color="#fff" size="small" />
+                            </View>
+                        </View>
+                    )}
+                    {!uploading && (
+                        <View style={styles.heroEditBadge}>
+                            <Camera size={16} color="#fff" />
+                        </View>
+                    )}
                 </Pressable>
 
                 {/* Right Column - Conversational Languages */}
