@@ -42,7 +42,7 @@ export default function AvatarScreen() {
 
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: 'images',
-                allowsEditing: true,
+                allowsEditing: Platform.OS === 'ios', // Only enable crop editor on iOS (Android UI is inconsistent)
                 aspect: [1, 1],
                 quality: 0.8,
             });
@@ -58,13 +58,21 @@ export default function AvatarScreen() {
         }
     };
 
-    const handleSelectSoup = (soup) => {
-        // For local assets, we use the image module number temporarily for display
-        // We'll process the asset upload on continue
-        const asset = Asset.fromModule(soup.source);
-        setAvatarUri(asset.uri);
-        setSelectedSoupId(soup.id);
-        setIsCustomPhoto(false);
+    const handleSelectSoup = async (soup) => {
+        try {
+            setUploading(true); // Show loading feedback
+            // For local assets, download the asset first to ensure URI is available
+            const asset = Asset.fromModule(soup.source);
+            await asset.downloadAsync(); // Download asset to get valid URI
+            setAvatarUri(asset.localUri || asset.uri); // Use localUri or fallback to uri
+            setSelectedSoupId(soup.id);
+            setIsCustomPhoto(false);
+        } catch (error) {
+            console.error('Error loading soup avatar:', error);
+            Alert.alert('Error', 'Failed to load soup avatar');
+        } finally {
+            setUploading(false);
+        }
     };
 
     const processUpload = async () => {

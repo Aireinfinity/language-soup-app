@@ -238,7 +238,7 @@ export default function ProfileScreen() {
             console.log('[Profile] Launching image picker...');
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: 'images',
-                allowsEditing: true,
+                allowsEditing: Platform.OS === 'ios', // Only enable crop editor on iOS (Android UI is inconsistent)
                 aspect: [1, 1],
                 quality: 0.8,
             });
@@ -255,13 +255,21 @@ export default function ProfileScreen() {
     };
 
     const handleSelectSoup = async (soup) => {
-        setSelectedSoupId(soup.id);
-        setShowAvatarPicker(false);
+        try {
+            setUploading(true);
+            setSelectedSoupId(soup.id);
+            setShowAvatarPicker(false);
 
-        // Upload soup avatar
-        const asset = Asset.fromModule(soup.source);
-        await asset.downloadAsync();
-        await uploadAvatar(asset.localUri, false);
+            // Upload soup avatar
+            const asset = Asset.fromModule(soup.source);
+            await asset.downloadAsync();
+            await uploadAvatar(asset.localUri, false);
+        } catch (error) {
+            console.error('Error selecting soup:', error);
+            Alert.alert('Error', 'Failed to select soup avatar');
+        } finally {
+            setUploading(false);
+        }
     };
 
     const uploadAvatar = async (uri, isCustomPhoto = true) => {
@@ -314,25 +322,9 @@ export default function ProfileScreen() {
     // --- RENDER HELPERS ---
 
     const showAvatarOptions = () => {
-        if (Platform.OS === 'android') {
-            // Android: Use modal picker to show all soup options (Alert.alert limits options)
-            setShowAvatarPicker(true);
-        } else {
-            // iOS: Use Alert.alert
-            Alert.alert(
-                'Choose Avatar',
-                'Select a photo or pick a soup',
-                [
-                    { text: 'Upload Photo', onPress: pickImage },
-                    ...SOUP_AVATARS.map(soup => ({
-                        text: soup.name,
-                        onPress: () => handleSelectSoup(soup)
-                    })),
-                    { text: 'Cancel', style: 'cancel' }
-                ],
-                { cancelable: true }
-            );
-        }
+        // Use modal for both platforms for consistency
+        // Android implementation at lines 1266-1323 already works perfectly
+        setShowAvatarPicker(true);
     };
 
     const renderIdentity = () => (

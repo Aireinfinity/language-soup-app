@@ -324,9 +324,9 @@ export function SharedChatUI({
 
     return (
         <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={{ flex: 1 }}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         >
             {/* Custom Header */}
             {headerComponent}
@@ -415,6 +415,14 @@ export function SharedChatUI({
                             placeholderTextColor={Colors.textLight}
                             multiline
                             maxLength={500}
+                            onFocus={() => {
+                                // On Android, scroll to bottom when keyboard opens to keep input visible
+                                if (Platform.OS === 'android' && listRef?.current) {
+                                    setTimeout(() => {
+                                        listRef.current?.scrollToOffset({ offset: 0, animated: true });
+                                    }, 100);
+                                }
+                            }}
                         />
                         {textInput.trim() ? (
                             <Pressable onPress={handleSendWrapper} disabled={sending} style={ChatStyles.sendButton}>
