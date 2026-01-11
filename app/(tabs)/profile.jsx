@@ -258,15 +258,19 @@ export default function ProfileScreen() {
         try {
             setUploading(true);
             setSelectedSoupId(soup.id);
-            setShowAvatarPicker(false);
+            // DON'T close modal yet - keep it open so user sees loading spinner
 
             // Upload soup avatar
             const asset = Asset.fromModule(soup.source);
             await asset.downloadAsync();
             await uploadAvatar(asset.localUri, false);
+
+            // Close modal AFTER upload completes
+            setShowAvatarPicker(false);
         } catch (error) {
             console.error('Error selecting soup:', error);
             Alert.alert('Error', 'Failed to select soup avatar');
+            setShowAvatarPicker(false); // Close on error
         } finally {
             setUploading(false);
         }
