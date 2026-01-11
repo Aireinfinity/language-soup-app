@@ -715,6 +715,7 @@ export default function ChatScreen() {
 
     return (
         <View style={styles.container}>
+            <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
             <SharedChatUI
                 chatType="group"
                 tableName="app_messages"

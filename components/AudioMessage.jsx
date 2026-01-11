@@ -14,7 +14,7 @@ import { cacheDirectory } from 'expo-file-system';
 const WAVEFORM_BARS = 30;
 
 // Cache directory for voice memos
-const CACHE_DIR = `${cacheDirectory}voice_memos/`;
+const CACHE_DIR = `${LegacyFileSystem.cacheDirectory}voice_memos/`;
 
 // Ensure cache directory exists (Safely)
 (async () => {

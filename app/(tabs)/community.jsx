@@ -143,7 +143,8 @@ export default function CommunityScreen() {
             // 3. Combine in order: Photos -> Soup/Avatars -> Rest
             // User request: "show all the users with photos" and make it a "party"
             // We show everyone we fetched (up to 300) sorted by priority
-            const finalSelection = [...randomizedPhotos, ...randomizedSoup, ...randomizedRest];
+            // LIMIT to 50 for performance to prevent lag
+            const finalSelection = [...randomizedPhotos, ...randomizedSoup, ...randomizedRest].slice(0, 50);
 
             setActiveUsers(finalSelection);
         } catch (error) {

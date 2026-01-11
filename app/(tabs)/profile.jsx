@@ -79,6 +79,7 @@ export default function ProfileScreen() {
     const [statsTab, setStatsTab] = useState('input'); // 'input' | 'output'
     const [showLevelsInfo, setShowLevelsInfo] = useState(false);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+    const [previewAvatar, setPreviewAvatar] = useState(null); // For optimistic UI updates
     const [selectedSoupId, setSelectedSoupId] = useState(null);
     const [learningExpanded, setLearningExpanded] = useState(false);
     const [fluentExpanded, setFluentExpanded] = useState(false);
@@ -245,8 +246,10 @@ export default function ProfileScreen() {
 
             console.log('[Profile] Picker result:', { canceled: result.canceled, hasAssets: !!result.assets?.[0] });
             if (!result.canceled && result.assets[0]) {
+                const uri = result.assets[0].uri;
+                setPreviewAvatar(uri); // Show immediately
                 console.log('[Profile] Starting upload...');
-                await uploadAvatar(result.assets[0].uri, true);
+                await uploadAvatar(uri, true);
             }
         } catch (error) {
             console.error('[Profile] Error picking image:', error);
@@ -263,6 +266,7 @@ export default function ProfileScreen() {
             // Upload soup avatar
             const asset = Asset.fromModule(soup.source);
             await asset.downloadAsync();
+            setPreviewAvatar(asset.localUri || asset.uri); // Optimistic update
             await uploadAvatar(asset.localUri, false);
 
             // Close modal AFTER upload completes
@@ -360,9 +364,9 @@ export default function ProfileScreen() {
 
                 {/* Center - Profile Photo */}
                 <Pressable onPress={showAvatarOptions} style={styles.heroAvatarContainer} disabled={uploading}>
-                    {user?.avatar_url ? (
+                    {previewAvatar || user?.avatar_url ? (
                         <Image
-                            source={{ uri: user.avatar_url }}
+                            source={{ uri: previewAvatar || user.avatar_url }}
                             style={[styles.heroAvatar, uploading && { opacity: 0.5 }]}
                         />
                     ) : (
