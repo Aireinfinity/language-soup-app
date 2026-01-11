@@ -1297,15 +1297,22 @@ export default function ProfileScreen() {
                                         key={soup.id}
                                         style={[
                                             styles.soupOption,
-                                            selectedSoupId === soup.id && styles.soupOptionSelected
+                                            selectedSoupId === soup.id && styles.soupOptionSelected,
+                                            uploading && { opacity: 0.5 }
                                         ]}
                                         onPress={() => handleSelectSoup(soup)}
+                                        disabled={uploading}
                                     >
                                         <Image source={soup.source} style={styles.soupImage} resizeMode="contain" />
                                         <Text style={[
                                             styles.soupName,
                                             selectedSoupId === soup.id && styles.soupNameSelected
                                         ]}>{soup.name}</Text>
+                                        {uploading && selectedSoupId === soup.id && (
+                                            <View style={styles.loaderOverlay}>
+                                                <ActivityIndicator color={SOUP_COLORS.blue} size="large" />
+                                            </View>
+                                        )}
                                     </Pressable>
                                 ))}
                             </View>

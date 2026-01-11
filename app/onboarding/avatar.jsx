@@ -188,15 +188,22 @@ export default function AvatarScreen() {
                                     key={soup.id}
                                     style={[
                                         styles.soupOption,
-                                        selectedSoupId === soup.id && styles.soupOptionSelected
+                                        selectedSoupId === soup.id && styles.soupOptionSelected,
+                                        uploading && { opacity: 0.5 }
                                     ]}
                                     onPress={() => handleSelectSoup(soup)}
+                                    disabled={uploading}
                                 >
                                     <Image source={soup.source} style={styles.soupImage} resizeMode="contain" />
                                     <Text style={[
                                         styles.soupName,
                                         selectedSoupId === soup.id && styles.soupNameSelected
                                     ]}>{soup.name}</Text>
+                                    {uploading && selectedSoupId === soup.id && (
+                                        <View style={styles.loaderOverlay}>
+                                            <ActivityIndicator color={Colors.primary} size="small" />
+                                        </View>
+                                    )}
                                 </Pressable>
                             ))}
                         </View>
@@ -207,11 +214,14 @@ export default function AvatarScreen() {
             <View style={styles.footer}>
                 <Pressable
                     onPress={processUpload}
-                    style={[styles.button, !avatarUri && styles.buttonDisabled]}
+                    style={[styles.button, (!avatarUri || uploading) && styles.buttonDisabled]}
                     disabled={uploading || !avatarUri}
                 >
                     {uploading ? (
-                        <ActivityIndicator color="#fff" />
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <ActivityIndicator color="#fff" size="small" />
+                            <Text style={styles.buttonText}>loading...</Text>
+                        </View>
                     ) : (
                         <Text style={styles.buttonText}>start slurping</Text>
                     )}
