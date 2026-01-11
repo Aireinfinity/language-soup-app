@@ -268,7 +268,7 @@ export default function App() {
             { id: 'support', label: 'Support', icon: LifeBuoy },
             { id: 'groups', label: 'Groups', icon: Users, badge: pendingRequestsCount },
             { id: 'announcements', label: 'Announcements', icon: MessageSquare },
-            { id: 'weekly', label: 'Weekly Update', icon: Share2 },
+            { id: 'weekly', label: 'Weekly Update 🍜', icon: Share2 },
             { id: 'marketing', label: 'Marketing', icon: Zap },
           ].map((item) => (
             <button
