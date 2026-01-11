@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
-import { BarChart3, Users, MessageSquare, LifeBuoy, LogOut, Search, Zap, Megaphone, TrendingUp, Activity, MessageCircle, Layers, Menu, X } from 'lucide-react';
+import { BarChart3, Users, MessageSquare, LifeBuoy, LogOut, Search, Zap, Megaphone, TrendingUp, Activity, MessageCircle, Layers, Menu, X, Share2 } from 'lucide-react';
 import ChallengesTab from './ChallengesTab';
 import AnnouncementsTab from './AnnouncementsTab';
 import MarketingTab from './MarketingTab';
 import GrowthCharts from './GrowthCharts';
 import SupportInbox from './SupportInbox';
 import SupportTabSimplified from './SupportTabSimplified';
+import WeeklyUpdateTab from './WeeklyUpdateTab';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -230,6 +231,7 @@ export default function App() {
             { id: 'support', label: 'Support', icon: LifeBuoy },
             { id: 'groups', label: 'Groups', icon: Users },
             { id: 'announcements', label: 'Announcements', icon: MessageSquare },
+            { id: 'weekly', label: 'Weekly Update', icon: Share2 },
             { id: 'marketing', label: 'Marketing', icon: Zap },
           ].map((item) => (
             <button
@@ -292,6 +294,7 @@ export default function App() {
           {activeTab === 'challenges' && <ChallengesTab user={user} />}
           {activeTab === 'groups' && <GroupsTab />}
           {activeTab === 'announcements' && <AnnouncementsTab />}
+          {activeTab === 'weekly' && <WeeklyUpdateTab />}
           {activeTab === 'marketing' && <MarketingTab />}
           {activeTab === 'support' && <SupportTab />}
         </main>
