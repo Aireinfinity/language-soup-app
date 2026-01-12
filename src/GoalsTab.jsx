@@ -7,7 +7,8 @@ export default function GoalsTab() {
         totalUsers: 0,
         day7Retention: 0,
         kFactor: 0,
-        mrr: 0
+        mrr: 0,
+        activeSoupers: 0
     });
     const [loading, setLoading] = useState(true);
 
@@ -96,11 +97,17 @@ export default function GoalsTab() {
             const kFactor = realUsersForKFactor > 0 ? totalShares / realUsersForKFactor : 0;
             console.log(`K-Factor Calc (since Jan 4): ${totalShares} shares / ${realUsersForKFactor} users = ${kFactor}`);
 
+            // Calculate Active Soupers (WAU) - Unique users who chatted in last 7 days
+            // We already have 'recentMessages' (last 7 days) from Retention logic
+            const activeSouperIds = new Set(recentMessages.map(m => m.sender_id));
+            const activeSoupers = activeSouperIds.size;
+
             setMetrics({
                 totalUsers: totalUsers || 0,
-                day7Retention: retention, // Use the calculated retention variable
+                day7Retention: retention, // This is now 'Week 1 Retention'
                 kFactor: kFactor,
-                mrr: 0 // Placeholder for Q3
+                mrr: 0, // Placeholder
+                activeSoupers: activeSoupers
             });
         } catch (err) {
             console.error('Error loading metrics:', err);
@@ -123,25 +130,14 @@ export default function GoalsTab() {
         },
         {
             quarter: 'Q2',
-            title: 'Hard GTM to 1,000',
+            title: 'Hard GTM to 1k',
             metric: 'Total Users',
             current: metrics.totalUsers,
             target: 1000,
             unit: '',
             icon: TrendingUp,
             color: 'bg-[var(--soup-turquoise)]',
-            status: metrics.totalUsers >= 1000 ? '✅' : '🎯'
-        },
-        {
-            quarter: 'Q2',
-            title: 'Viral Loop',
-            metric: 'K-Factor',
-            current: metrics.kFactor,
-            target: 1.2,
-            unit: 'x',
-            icon: Target,
-            color: 'bg-purple-500',
-            status: metrics.kFactor >= 1.2 ? '✅' : '🎯'
+            status: metrics.totalUsers >= 1000 ? '✅' : '🚀'
         },
         {
             quarter: 'Q3',
@@ -152,7 +148,18 @@ export default function GoalsTab() {
             unit: '$',
             icon: DollarSign,
             color: 'bg-green-500',
-            status: metrics.mrr >= 500 ? '✅' : '🎯'
+            status: metrics.mrr >= 500 ? '✅' : '💸'
+        },
+        {
+            quarter: 'Q4',
+            title: 'Year Closeout',
+            metric: 'Active Soupers', // WAU proxy
+            current: metrics.activeSoupers || 0,
+            target: 50, // A good target for a small community
+            unit: '',
+            icon: Target,
+            color: 'bg-indigo-500',
+            status: (metrics.activeSoupers || 0) >= 50 ? '✅' : '🧘'
         }
     ];
 
