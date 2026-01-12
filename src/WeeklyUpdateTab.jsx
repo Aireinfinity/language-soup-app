@@ -149,30 +149,33 @@ export default function WeeklyUpdateTab() {
         );
     }
 
+    const generateMessage = () => {
+        const weekNum = Math.ceil((new Date().getDate()) / 7);
+        return `🍜 *Weekly Soup Update (Week ${weekNum})* 🍜\n\n` +
+            `👋 *Community Size:* We are now ${stats.totalUsers} Soupers strong!\n` +
+            `(${stats.humanSoups} Humans 🧑‍🍳 + ${stats.soupAvatars} Avatars 🍅)\n\n` +
+            `💬 *Activity:* ${stats.totalMessages} messages sent this week.\n` +
+            `${stats.voicePercent}% of them were Voice Notes! 🎤\n\n` +
+            `🌍 *Top Languages:*\n` +
+            stats.topLanguages.map(([l, c]) => `• ${languageFlags[l] || '🌐'} ${l.split(' ')[0]}: ${c}`).join('\n') +
+            `\n\n🏆 *Top Chatters:*\n` +
+            stats.topChatters.map((c, i) => `${i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'} ${c.name}`).join('\n') +
+            `\n\n🚀 Invite your friends! We are ${stats.progressTo1000}% of the way to 1,000 Soupers!`;
+    };
+
+    const copyToClipboard = () => {
+        navigator.clipboard.writeText(generateMessage());
+        alert('✅ Message copied for your community!');
+    };
+
     const handleBroadcast = async () => {
         if (!confirm('Are you sure you want to BLAST this update to the entire community? 📣')) return;
 
         try {
             setLoading(true);
-
-            // Format the message
-            const weekNum = Math.ceil((new Date().getDate()) / 7);
-            const msg = `🍜 *Weekly Soup Update (Week ${weekNum})* 🍜\n\n` +
-                `👋 *Community Size:* We are now ${stats.totalUsers} Soupers strong!\n` +
-                `(${stats.humanSoups} Humans 🧑‍🍳 + ${stats.soupAvatars} Avatars 🍅)\n\n` +
-                `💬 *Activity:* ${stats.totalMessages} messages sent this week.\n` +
-                `${stats.voicePercent}% of them were Voice Notes! 🎤\n\n` +
-                `🌍 *Top Languages:*\n` +
-                stats.topLanguages.map(([l, c]) => `• ${languageFlags[l] || '🌐'} ${l.split(' ')[0]}: ${c}`).join('\n') +
-                `\n\n🏆 *Top Chatters:*\n` +
-                stats.topChatters.map((c, i) => `${i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'} ${c.name}`).join('\n') +
-                `\n\n🚀 Invite your friends! We are ${stats.progressTo1000}% of the way to 1,000 Soupers!`;
-
-            // Send via Secure RPC
+            const msg = generateMessage();
             const { error } = await supabase.rpc('send_system_message', { message_text: msg });
-
             if (error) throw error;
-
             alert('✅ Update blasted to the app (Chat only, no notification)!');
         } catch (err) {
             console.error('Broadcast failed:', err);
@@ -183,13 +186,13 @@ export default function WeeklyUpdateTab() {
     };
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
+        <div className="space-y-8 animate-in fade-in duration-500 max-w-2xl mx-auto">
             {/* Header */}
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-3">
                         🍜 Weekly Update
-                        <span className="text-sm font-bold text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
+                        <span className="text-sm font-bold text-gray-400 bg-gray-100 px-3 py-1 rounded-full text-center">
                             Week {Math.ceil((new Date().getDate()) / 7)}
                         </span>
                     </h1>
@@ -197,15 +200,8 @@ export default function WeeklyUpdateTab() {
                 </div>
                 <div className="flex gap-2">
                     <button
-                        onClick={() => window.print()}
-                        className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition-all"
-                    >
-                        <Share2 size={18} />
-                        Save PDF
-                    </button>
-                    <button
                         onClick={handleBroadcast}
-                        className="flex items-center gap-2 px-4 py-2 bg-[var(--soup-turquoise)] text-white rounded-xl font-bold hover:scale-105 transition-all shadow-lg hover:shadow-cyan-200"
+                        className="flex items-center gap-2 px-6 py-3 bg-[var(--soup-turquoise)] text-white rounded-2xl font-black hover:scale-105 transition-all shadow-lg shadow-[var(--soup-turquoise)]/20"
                     >
                         <Mic size={18} />
                         Blast to App 🚀
@@ -213,135 +209,50 @@ export default function WeeklyUpdateTab() {
                 </div>
             </div>
 
-            {/* Main Shareable Card */}
-            <div
-                id="weekly-card"
-                className="bg-gradient-to-br from-[#FDF5E6] to-[#fff5eb] rounded-3xl p-8 border-2 border-[#ec008b]/20 shadow-xl max-w-lg mx-auto"
-                style={{ aspectRatio: '9/16', maxHeight: '800px' }}
-            >
-                {/* Card Header */}
-                <div className="text-center mb-6">
-                    <div className="text-4xl mb-2">🍜</div>
-                    <h2 className="text-2xl font-black text-gray-900">Language Soup</h2>
-                    <p className="text-sm font-bold text-[#ec008b]">Weekly Wrap-Up</p>
+            {/* Formatted Text Box */}
+            <div className="bg-white rounded-[32px] p-8 border border-black/5 shadow-sm space-y-6">
+                <div className="flex items-center justify-between">
+                    <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                        <Share2 size={14} className="text-[var(--soup-turquoise)]" /> Community Message
+                    </h2>
+                    <button
+                        onClick={copyToClipboard}
+                        className="text-xs font-black text-[var(--soup-turquoise)] bg-[var(--soup-turquoise)]/10 px-4 py-2 rounded-xl border border-[var(--soup-turquoise)]/20 hover:bg-[var(--soup-turquoise)]/20 transition-all flex items-center gap-2"
+                    >
+                        <TrendingUp size={14} /> Copy for WhatsApp/Discord
+                    </button>
                 </div>
 
-                {/* Community Size */}
-                <div className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-black/5">
-                    <div className="flex items-center justify-between mb-3">
-                        <span className="text-gray-500 font-bold text-sm flex items-center gap-2">
-                            <Users size={16} className="text-[#00adef]" />
-                            Community Size
-                        </span>
-                        <span className="text-2xl font-black text-gray-900">{stats.totalUsers}</span>
-                    </div>
-                    <div className="flex gap-3 text-sm">
-                        <div className="flex-1 bg-orange-50 rounded-xl p-3 text-center">
-                            <div className="text-lg font-black text-orange-600">{stats.humanSoups}</div>
-                            <div className="text-xs text-orange-500 font-bold">🧑‍🍳 Human Soups</div>
-                        </div>
-                        <div className="flex-1 bg-red-50 rounded-xl p-3 text-center">
-                            <div className="text-lg font-black text-red-600">{stats.soupAvatars}</div>
-                            <div className="text-xs text-red-500 font-bold">🍅 Soup Avatars</div>
-                        </div>
-                    </div>
+                <div className="bg-[var(--soup-beige)] rounded-2xl p-6 font-mono text-sm text-[var(--soup-dark)] whitespace-pre-wrap border border-black/5 select-all">
+                    {generateMessage()}
                 </div>
 
-                {/* Messages */}
-                <div className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-black/5">
-                    <div className="flex items-center gap-2 mb-3">
-                        <MessageCircle size={16} className="text-[#ec008b]" />
-                        <span className="text-gray-500 font-bold text-sm">This Week's Activity</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-center">
-                        <div className="bg-pink-50 rounded-xl p-3">
-                            <div className="text-xl font-black text-pink-600">{stats.totalMessages}</div>
-                            <div className="text-[10px] text-pink-500 font-bold">Messages</div>
-                        </div>
-                        <div className="bg-purple-50 rounded-xl p-3">
-                            <div className="text-xl font-black text-purple-600">{stats.voiceMessages}</div>
-                            <div className="text-[10px] text-purple-500 font-bold flex items-center justify-center gap-1">
-                                <Mic size={10} /> Voice
-                            </div>
-                        </div>
-                        <div className="bg-blue-50 rounded-xl p-3">
-                            <div className="text-xl font-black text-blue-600">{stats.voicePercent}%</div>
-                            <div className="text-[10px] text-blue-500 font-bold">Talking!</div>
-                        </div>
+                <div className="p-4 bg-orange-50 border border-orange-100 rounded-xl flex items-start gap-3">
+                    <div className="text-xl">💡</div>
+                    <div className="text-xs text-orange-700 font-bold leading-relaxed">
+                        This update includes your 1,000 Souper milestone progress, top languages, and community MVPs. Ready to copy and paste!
                     </div>
                 </div>
-
-                {/* Languages */}
-                <div className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-black/5">
-                    <div className="flex items-center gap-2 mb-3">
-                        <span className="text-lg">🌍</span>
-                        <span className="text-gray-500 font-bold text-sm">What We're Learning</span>
-                    </div>
-                    <div className="space-y-2">
-                        {stats.topLanguages.map(([lang, count], i) => (
-                            <div key={lang} className="flex items-center justify-between">
-                                <span className="text-sm font-bold text-gray-700">
-                                    {languageFlags[lang] || '🌐'} {lang.split(' ')[0]}
-                                </span>
-                                <span className="text-xs font-bold text-gray-400 bg-gray-100 px-2 py-1 rounded-full">
-                                    {count} learners
-                                </span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Top Chatters */}
-                {stats.topChatters.length > 0 && (
-                    <div className="bg-white rounded-2xl p-5 mb-4 shadow-sm border border-black/5">
-                        <div className="flex items-center gap-2 mb-3">
-                            <Trophy size={16} className="text-amber-500" />
-                            <span className="text-gray-500 font-bold text-sm">Top Chatters</span>
-                        </div>
-                        <div className="flex justify-center gap-4">
-                            {stats.topChatters.map((chatter, i) => (
-                                <div key={chatter.id} className="text-center">
-                                    <div className="text-lg">{i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}</div>
-                                    <div className="text-xs font-bold text-gray-700 truncate max-w-[60px]">
-                                        {chatter.name}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Road to 1000 */}
-                <div className="bg-gradient-to-r from-[#00adef] to-[#ec008b] rounded-2xl p-5 text-white">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="font-bold text-sm flex items-center gap-2">
-                            <Target size={16} />
-                            Road to 1,000 Soupers!
-                        </span>
-                        <span className="font-black">{stats.progressTo1000}%</span>
-                    </div>
-                    <div className="bg-white/30 rounded-full h-3 overflow-hidden">
-                        <div
-                            className="bg-white h-full rounded-full transition-all duration-1000"
-                            style={{ width: `${Math.min(stats.progressTo1000, 100)}%` }}
-                        />
-                    </div>
-                    <div className="text-center mt-3 text-sm font-bold opacity-90">
-                        {stats.totalUsers}/1,000 — Invite friends! 🚀
-                    </div>
-                </div>
-
-                {/* Most Active Day */}
-                {stats.topDay && (
-                    <div className="text-center mt-4 text-sm text-gray-500 font-bold">
-                        📅 Most Active: {stats.topDay.day} ({stats.topDay.count} msgs)
-                    </div>
-                )}
             </div>
 
-            {/* Instructions */}
-            <div className="text-center text-gray-400 text-sm">
-                <p>💡 Tip: Right-click the card above → "Take Screenshot" or use your system screenshot tool!</p>
+            {/* Quick Stats Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-white p-6 rounded-2xl border border-black/5 text-center">
+                    <div className="text-2xl font-black text-[var(--soup-dark)] mb-1">{stats.totalUsers}</div>
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Soupers</div>
+                </div>
+                <div className="bg-white p-6 rounded-2xl border border-black/5 text-center">
+                    <div className="text-2xl font-black text-[var(--soup-turquoise)] mb-1">{stats.totalMessages}</div>
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Messages</div>
+                </div>
+                <div className="bg-white p-6 rounded-2xl border border-black/5 text-center">
+                    <div className="text-2xl font-black text-amber-500 mb-1">{stats.topChatters[0]?.name?.split(' ')[0] || '-'}</div>
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">MVP</div>
+                </div>
+                <div className="bg-white p-6 rounded-2xl border border-black/5 text-center">
+                    <div className="text-2xl font-black text-[var(--soup-pink)] mb-1">{stats.progressTo1000}%</div>
+                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Road to 1k</div>
+                </div>
             </div>
         </div>
     );
