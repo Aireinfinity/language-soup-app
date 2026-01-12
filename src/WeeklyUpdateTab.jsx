@@ -149,6 +149,39 @@ export default function WeeklyUpdateTab() {
         );
     }
 
+    const handleBroadcast = async () => {
+        if (!confirm('Are you sure you want to BLAST this update to the entire community? 📣')) return;
+
+        try {
+            setLoading(true);
+
+            // Format the message
+            const weekNum = Math.ceil((new Date().getDate()) / 7);
+            const msg = `🍜 *Weekly Soup Update (Week ${weekNum})* 🍜\n\n` +
+                `👋 *Community Size:* We are now ${stats.totalUsers} Soupers strong!\n` +
+                `(${stats.humanSoups} Humans 🧑‍🍳 + ${stats.soupAvatars} Avatars 🍅)\n\n` +
+                `💬 *Activity:* ${stats.totalMessages} messages sent this week.\n` +
+                `${stats.voicePercent}% of them were Voice Notes! 🎤\n\n` +
+                `🌍 *Top Languages:*\n` +
+                stats.topLanguages.map(([l, c]) => `• ${languageFlags[l] || '🌐'} ${l.split(' ')[0]}: ${c}`).join('\n') +
+                `\n\n🏆 *Top Chatters:*\n` +
+                stats.topChatters.map((c, i) => `${i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'} ${c.name}`).join('\n') +
+                `\n\n🚀 Invite your friends! We are ${stats.progressTo1000}% of the way to 1,000 Soupers!`;
+
+            // Send via Secure RPC
+            const { error } = await supabase.rpc('send_system_message', { message_text: msg });
+
+            if (error) throw error;
+
+            alert('✅ Update blasted to the app!');
+        } catch (err) {
+            console.error('Broadcast failed:', err);
+            alert('❌ Failed to send update: ' + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="space-y-8 animate-in fade-in duration-500">
             {/* Header */}
@@ -160,15 +193,24 @@ export default function WeeklyUpdateTab() {
                             Week {Math.ceil((new Date().getDate()) / 7)}
                         </span>
                     </h1>
-                    <p className="text-gray-500 mt-1">Screenshot this card for your community update!</p>
+                    <p className="text-gray-500 mt-1">Ready to update the community?</p>
                 </div>
-                <button
-                    onClick={() => window.print()}
-                    className="flex items-center gap-2 px-4 py-2 bg-[var(--soup-turquoise)] text-white rounded-xl font-bold hover:scale-105 transition-all"
-                >
-                    <Share2 size={18} />
-                    Share
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => window.print()}
+                        className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200 transition-all"
+                    >
+                        <Share2 size={18} />
+                        Save PDF
+                    </button>
+                    <button
+                        onClick={handleBroadcast}
+                        className="flex items-center gap-2 px-4 py-2 bg-[var(--soup-turquoise)] text-white rounded-xl font-bold hover:scale-105 transition-all shadow-lg hover:shadow-cyan-200"
+                    >
+                        <Mic size={18} />
+                        Blast to App 🚀
+                    </button>
+                </div>
             </div>
 
             {/* Main Shareable Card */}
