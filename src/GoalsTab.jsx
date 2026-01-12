@@ -20,7 +20,7 @@ export default function GoalsTab() {
             // Total Users (exclude test users: noah, bots, system accounts)
             const { data: allUsers } = await supabase
                 .from('app_users')
-                .select('id, display_name');
+                .select('id, display_name, created_at');
 
             const realUsers = allUsers?.filter(u => {
                 const name = (u.display_name || '').toLowerCase();
@@ -33,25 +33,36 @@ export default function GoalsTab() {
             const { data: dashboardData } = await supabase.rpc('get_dashboard_data');
             const messages = dashboardData?.messages || [];
 
-            // 1. Define Cohort: Users joined >7 days ago
+            // 1. Define Cohort: Real Users joined >= 7 days ago
             // 2. Define Active Window: Messages sent in last 7 days by those users
             const today = new Date();
             const sevenDaysAgo = new Date(today);
             sevenDaysAgo.setDate(today.getDate() - 7);
 
-            // Get users active in last 7 days
+            // Filter real users to get the cohort
+            const cohortUsers = realUsers.filter(u => new Date(u.created_at) < sevenDaysAgo);
+            const cohortIds = new Set(cohortUsers.map(u => u.id));
+
+            // Get users active in last 7 days who are part of the cohort
             const recentMessages = messages.filter(m => new Date(m.created_at) >= sevenDaysAgo);
-            const activeUserIds = new Set(recentMessages.map(m => m.sender_id));
 
-            // Logic: Rolling "Week 1" Retention for simplicity in "Stable Launch" goal
-            // (Strict Day 7 retention is too volatile for small cohorts)
-            const activeCount = activeUserIds.size;
+            // Only count if the sender is in the cohort
+            const activeCohortIds = new Set();
+            recentMessages.forEach(m => {
+                if (cohortIds.has(m.sender_id)) {
+                    activeCohortIds.add(m.sender_id);
+                }
+            });
 
-            // Total real users (calculated above)
-            // Retention = Active / Total
-            const retention = totalUsers > 0 ? (activeCount / totalUsers) * 100 : 0;
+            const activeCount = activeCohortIds.size;
+            const cohortSize = cohortIds.size;
 
-            if (retention > 0) {
+            // Retention = Active Cohort / Total Cohort
+            const retention = cohortSize > 0 ? (activeCount / cohortSize) * 100 : 0;
+
+            console.log(`Retention Logic: ${activeCount} active / ${cohortSize} cohort = ${retention}%`);
+
+            if (retention > 0 || cohortSize > 0) {
                 setMetrics(prev => ({ ...prev, day7Retention: retention }));
             }
 
