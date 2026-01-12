@@ -1,14 +1,15 @@
--- Create a secure function to send system messages
+-- Create a secure function to send system messages to the Community Group
 -- Only admins can call this function
 
 CREATE OR REPLACE FUNCTION send_system_message(message_text TEXT)
 RETURNS JSONB
 LANGUAGE plpgsql
-SECURITY DEFINER -- Runs with permission of the creator (postgres) to bypass RLS
+SECURITY DEFINER -- Runs with permission to bypass RLS
 SET search_path = public
 AS $$
 DECLARE
     system_bot_id UUID := '00000000-0000-0000-0000-000000000000';
+    target_group_id UUID;
     new_message_id UUID;
     caller_is_admin BOOLEAN;
 BEGIN
@@ -21,9 +22,27 @@ BEGIN
         RAISE EXCEPTION 'Access Denied: Only admins can send system messages.';
     END IF;
 
-    -- 2. Insert the message as the System Bot
+    -- 2. Find the Community Group (Try name 'Community', then language 'Community')
+    SELECT id INTO target_group_id
+    FROM public.app_groups
+    WHERE name = 'Community'
+    LIMIT 1;
+
+    IF target_group_id IS NULL THEN
+        SELECT id INTO target_group_id
+        FROM public.app_groups
+        WHERE language = 'Community'
+        LIMIT 1;
+    END IF;
+
+    IF target_group_id IS NULL THEN
+        RAISE EXCEPTION 'Community group not found!';
+    END IF;
+
+    -- 3. Insert the message
     INSERT INTO public.app_messages (
         sender_id,
+        group_id,
         content,
         message_type,
         created_at,
@@ -31,13 +50,14 @@ BEGIN
     )
     VALUES (
         system_bot_id,
+        target_group_id,
         message_text,
         'text',
         NOW(),
-        'English' -- Default to English for announcements
+        'English'
     )
     RETURNING id INTO new_message_id;
 
-    RETURN jsonb_build_object('success', true, 'message_id', new_message_id);
+    RETURN jsonb_build_object('success', true, 'message_id', new_message_id, 'group_id', target_group_id);
 END;
 $$;
