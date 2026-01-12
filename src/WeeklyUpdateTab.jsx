@@ -169,26 +169,11 @@ export default function WeeklyUpdateTab() {
                 `\n\n🚀 Invite your friends! We are ${stats.progressTo1000}% of the way to 1,000 Soupers!`;
 
             // Send via Secure RPC
-            const { data: rpcData, error } = await supabase.rpc('send_system_message', { message_text: msg });
+            const { error } = await supabase.rpc('send_system_message', { message_text: msg });
 
             if (error) throw error;
 
-            // Trigger Push Notification (so people actually check it!)
-            // Using the group_id returned from the RPC
-            if (rpcData?.group_id) {
-                supabase.functions.invoke('send-push-notification', {
-                    body: {
-                        record: {
-                            id: rpcData.message_id,
-                            group_id: rpcData.group_id,
-                            prompt_text: `📢 Weekly Soup Update is live! Check the stats! 🍜`
-                        },
-                        isAnnouncement: true
-                    }
-                }).catch(err => console.error('Notification error (ignoring):', err));
-            }
-
-            alert('✅ Update blasted to the app (+ Notification sent)!');
+            alert('✅ Update blasted to the app (Chat only, no notification)!');
         } catch (err) {
             console.error('Broadcast failed:', err);
             alert('❌ Failed to send update: ' + err.message);
