@@ -85,16 +85,15 @@ export default function GrowthCharts() {
         return new Date(date).toISOString().split('T')[0];
     };
 
-    // Helper: Generate Launch Week keys (Jan 5 - Jan 11) or up to today
+    // Helper: Generate Launch Week keys (Jan 4 - Today)
     const getLaunchTimeline = () => {
         const days = [];
         const start = new Date(LAUNCH_DATE);
+        const end = new Date(); // Today
 
-        // Always show at least 7 days from launch for the "Week 1" view
-        for (let i = 0; i < 7; i++) {
-            const d = new Date(start);
-            d.setDate(d.getDate() + i);
-            days.push(getDateKey(d));
+        // Loop from start date until today
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            days.push(getDateKey(new Date(d)));
         }
         return days;
     };
@@ -141,51 +140,37 @@ export default function GrowthCharts() {
     };
 
     const processRetention = (msgs) => {
-        // Calculate Daily Retention (Day 1 Return Rate)
+        // Calculate Daily Stickiness (Users active Day X who returned Day X+1)
         const timeline = getLaunchTimeline();
+        const dailyActive = {}; // date -> Set(userIds)
 
-        // 1. Identify "Cohort" for each day (Users whose first message was on Day X)
-        const userCohorts = {}; // userId -> cohortDate (YYYY-MM-DD)
-        const dailyActiveUsers = {}; // date -> Set(userIds)
+        timeline.forEach(d => dailyActive[d] = new Set());
 
-        timeline.forEach(d => dailyActiveUsers[d] = new Set());
-
-        // Sort messages chronologically to ensure we find FIRST message correctly
-        const sortedMsgs = [...msgs].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-
-        sortedMsgs.forEach(m => {
+        msgs.forEach(m => {
             const day = getDateKey(m.created_at);
-            const user = m.sender_id;
-
-            // Assign user to their first day's cohort
-            if (!userCohorts[user]) userCohorts[user] = day;
-
-            // Record activity for that day
-            if (dailyActiveUsers[day]) dailyActiveUsers[day].add(user);
+            if (dailyActive[day]) dailyActive[day].add(m.sender_id);
         });
 
-        // 2. Calculate Day 1 Retention for each day
         return timeline.map((day, index) => {
             const label = new Date(day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-            // Get users who started on this day
-            const cohortUsers = Object.entries(userCohorts)
-                .filter(([_, startDay]) => startDay === day)
-                .map(([uid]) => uid);
+            // Users active on Day X
+            const dayUsers = dailyActive[day];
+            if (!dayUsers || dayUsers.size === 0) return { label, value: 0 };
 
-            if (cohortUsers.length === 0) return { label, value: 0 };
-
-            // Check if they were active the NEXT day
+            // Check Day X+1
             const nextDay = timeline[index + 1];
-            if (!nextDay) return { label, value: 0 }; // Cannot calculate retention for today yet
+            if (!nextDay) return { label, value: 0 }; // Can't calculate for today
 
-            const retainedCount = cohortUsers.filter(uid => dailyActiveUsers[nextDay]?.has(uid)).length;
+            const nextDayUsers = dailyActive[nextDay];
+            if (!nextDayUsers) return { label, value: 0 };
 
-            return {
-                label,
-                value: Math.round((retainedCount / cohortUsers.length) * 100)
-            };
-        }).filter(d => d.value !== null && d.value !== undefined && (d.value !== 0 || d.label !== new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))); // Remove nulls and trailing 0s
+            // How many of Day X users appeared in Day X+1?
+            const returningCount = [...dayUsers].filter(uid => nextDayUsers.has(uid)).length;
+            const percentage = Math.round((returningCount / dayUsers.size) * 100);
+
+            return { label, value: percentage };
+        });
     };
 
     const processTopSharers = (links) => {
@@ -232,7 +217,7 @@ export default function GrowthCharts() {
                     type="line"
                     color="indigo"
                     icon={Activity}
-                    subtitle="Weekly Return Rate"
+                    subtitle="Daily Return Rate"
                 />
                 <MetricCard
                     title="Viral Shares"

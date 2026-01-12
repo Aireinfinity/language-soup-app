@@ -5,24 +5,31 @@ const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send'
 
 serve(async (req) => {
     try {
-        const { record } = await req.json()
+        const body = await req.json()
 
-        console.log('🔔 Push notification triggered for challenge:', record.id)
+        // Support both old format (record) and new format (userIds, title, body)
+        const userIds = body.userIds || null
+        const notificationTitle = body.title || '🥳 new challenges just dropped!'
+        const notificationBody = body.body || 'tap to see what it is!'
+        const challengeId = body.record?.id || body.data?.challengeId || null
+
+        console.log('🔔 Push notification triggered', { userIds: userIds?.length, challengeId })
 
         // Initialize Supabase client
         const supabaseUrl = Deno.env.get('SUPABASE_URL')!
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
         const supabase = createClient(supabaseUrl, supabaseKey)
 
-        // Simple notification message - no group-specific info needed
-        const notificationTitle = '🥳 new challenges just dropped!'
-        const notificationBody = 'tap to see what it is!'
-
-        // Get ALL users with push tokens (across all groups)
-        // This ensures each user gets only ONE notification regardless of how many groups they're in
-        const { data: tokens, error: tokensError } = await supabase
+        // Get push tokens - either for specific users or all users
+        let query = supabase
             .from('app_push_tokens')
             .select('user_id, expo_push_token, platform')
+
+        if (userIds && userIds.length > 0) {
+            query = query.in('user_id', userIds)
+        }
+
+        const { data: tokens, error: tokensError } = await query
 
         if (tokensError || !tokens || tokens.length === 0) {
             console.log('No push tokens found for group members')
@@ -47,7 +54,7 @@ serve(async (req) => {
             body: notificationBody,
             data: {
                 type: 'challenge',
-                challengeId: record.id,
+                challengeId: challengeId,
             },
             priority: 'high',
             channelId: 'default',
@@ -82,7 +89,7 @@ serve(async (req) => {
             title: notificationTitle,
             body: notificationBody,
             data: {
-                challengeId: record.id,
+                challengeId: challengeId,
             },
         }))
 
