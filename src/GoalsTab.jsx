@@ -113,7 +113,7 @@ export default function GoalsTab() {
         {
             quarter: 'Q1',
             title: 'Stable Launch',
-            metric: 'Day 7 Retention',
+            metric: 'Week 1 Retention',
             current: metrics.day7Retention,
             target: 30,
             unit: '%',
@@ -250,7 +250,7 @@ export default function GoalsTab() {
                                 )}
 
                                 {/* Retention Benchmarks (Indie Hacker Context) */}
-                                {goal.metric === 'Day 7 Retention' && (
+                                {goal.metric === 'Week 1 Retention' && (
                                     <div className="mt-4 pt-4 border-t border-gray-100">
                                         <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2">Indie Benchmarks</p>
                                         <div className="space-y-2 text-xs">
@@ -282,7 +282,7 @@ export default function GoalsTab() {
             <div className="mt-8 bg-gradient-to-br from-[var(--soup-beige)] to-white p-6 rounded-3xl border border-[var(--soup-turquoise)]/30">
                 <h3 className="text-lg font-black text-[var(--soup-dark)] mb-3">📝 Notes</h3>
                 <ul className="space-y-2 text-sm text-gray-600 font-bold">
-                    <li>• <b>Day 7 Retention</b>: % of users who come back after 7 days</li>
+                    <li>• <b>Week 1 Retention</b>: % of users who come back after their first week</li>
                     <li>• <b>K-Factor</b>: How many new users each user brings (1.2 = viral growth!)</li>
                     <li>• <b>MRR</b>: Monthly Recurring Revenue (add monetization in Q2/Q3)</li>
                     <li>• Metrics update in real-time as your babies grow! 🍼</li>
