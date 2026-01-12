@@ -258,49 +258,60 @@ export default function GoalsTab() {
                                     </div>
                                 )}
 
-                                {/* Retention Benchmarks (Indie Hacker Context) */}
+                                {/* Detailed Benchmarks */}
                                 {goal.metric === 'Week 1 Retention' && (
                                     <div className="mt-4 pt-4 border-t border-gray-100">
-                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2">Revolutionary Benchmarks</p>
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2 text-center">Revolutionary Benchmarks</p>
                                         <div className="space-y-2 text-xs">
                                             <div className="flex justify-between text-gray-400">
                                                 <span>😐 Industry Average</span>
                                                 <span>13-15%</span>
                                             </div>
-                                            <div className="flex justify-between font-bold text-blue-500 bg-blue-50 -mx-2 px-2 py-1 rounded-lg">
+                                            <div className="flex justify-between font-bold text-[var(--soup-turquoise)] bg-[var(--soup-turquoise)]/10 -mx-2 px-2 py-1 rounded-lg">
                                                 <span>🚀 Solid Core</span>
                                                 <span>25%</span>
                                             </div>
-                                            <div className="flex justify-between font-bold text-orange-500">
-                                                <span>👑 World Class (Duolingo)</span>
+                                            <div className="flex justify-between font-black text-[var(--soup-dark)] bg-[var(--soup-beige)]/50 -mx-2 px-2 py-1.5 rounded-lg border-2 border-[var(--soup-dark)]/10">
+                                                <span>👑 The Soup Standard</span>
                                                 <span>40%+</span>
                                             </div>
                                         </div>
-                                        {goal.metric === 'Active Community' && (
-                                            <div className="mt-4 pt-4 border-t border-gray-100">
-                                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2">Engagement Benchmarks</p>
-                                                <div className="space-y-2 text-xs">
-                                                    <div className="flex justify-between text-gray-400">
-                                                        <span>😐 Social App Avg</span>
-                                                        <span>10-20%</span>
-                                                    </div>
-                                                    <div className="flex justify-between font-bold text-purple-500">
-                                                        <span>🔥 High Growth</span>
-                                                        <span>30%</span>
-                                                    </div>
-                                                    <div className="flex justify-between font-bold text-indigo-500 bg-indigo-50 -mx-2 px-2 py-1 rounded-lg">
-                                                        <span>🧠 Revolutionary</span>
-                                                        <span>50%+</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        <p className="mt-3 text-[10px] text-gray-400 italic">
-                                            {goal.metric === 'Week 1 Retention' ? '*Users >7 days old who chatted this week.' : '*Unique weekly chatters / Total users.'}
-                                        </p>
                                     </div>
                                 )}
+
+                                {goal.metric === 'Active Community' && (
+                                    <div className="mt-4 pt-4 border-t border-gray-100">
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2 text-center">Engagement Benchmarks</p>
+                                        <div className="space-y-2 text-xs">
+                                            <div className="flex justify-between text-gray-400">
+                                                <span>😐 Social App Avg</span>
+                                                <span>10-20%</span>
+                                            </div>
+                                            <div className="flex justify-between font-bold text-[var(--soup-turquoise)]">
+                                                <span>🔥 High Growth</span>
+                                                <span>30%</span>
+                                            </div>
+                                            <div className="flex justify-between font-black text-[var(--soup-dark)] bg-[var(--soup-beige)]/50 -mx-2 px-2 py-1.5 rounded-lg border-2 border-[var(--soup-dark)]/10">
+                                                <span>🧠 Revolutionary</span>
+                                                <span>50%+</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="mt-4 p-3 bg-gray-50 rounded-2xl border border-gray-100">
+                                    <p className="text-[10px] text-gray-500 font-medium italic flex items-start gap-1 leading-normal">
+                                        <span className="shrink-0 font-black text-[var(--soup-turquoise)] uppercase">Math:</span>
+                                        {goal.metric === 'Week 1 Retention'
+                                            ? '(Users joined >7d ago who chatted this week) ÷ (Total users joined >7d ago)'
+                                            : goal.metric === 'Active Community'
+                                                ? '(Unique users active this week) ÷ (Total real users)'
+                                                : goal.metric === 'Total Users'
+                                                    ? 'Human users who created a profile (excludes bots/admins)'
+                                                    : 'Amount in Stripe ÷ Target Goal '
+                                        }
+                                    </p>
+                                </div>
                             </div>
                         </div>
                     );
@@ -310,11 +321,23 @@ export default function GoalsTab() {
             {/* Notes */}
             <div className="mt-8 bg-gradient-to-br from-[var(--soup-beige)] to-white p-6 rounded-3xl border border-[var(--soup-turquoise)]/30">
                 <h3 className="text-lg font-black text-[var(--soup-dark)] mb-3">📝 Notes</h3>
-                <ul className="space-y-2 text-sm text-gray-600 font-bold">
-                    <li>• <b>Week 1 Retention</b>: Product Quality. Target 40% (World Class) to build a sticky habit.</li>
-                    <li>• <b>MRR</b>: Baseline Profitability. Target $10,000 to support a solo founder life in LA.</li>
-                    <li>• <b>Active Community</b>: The Heartbeat. Target 50% activation because a silent community is a dead one.</li>
-                    <li>• <b>Scale</b>: 1,000 Users is the foundation. From there, we hit the $1M path. 🚀</li>
+                <ul className="space-y-3 text-sm text-gray-600 font-bold leading-relaxed">
+                    <li className="flex items-start gap-2">
+                        <span className="text-[var(--soup-turquoise)] mt-1 shrink-0">•</span>
+                        <span><b>Week 1 Retention</b>: Product Quality. [Active Cohort ÷ Total Cohort]. Target 40% (The Soup Standard) for a viral addiction loop.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                        <span className="text-[var(--soup-turquoise)] mt-1 shrink-0">•</span>
+                        <span><b>MRR</b>: Baseline Profitability. Target $10,000 to flip the switch for LA freedom and scaling Language Soup.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                        <span className="text-[var(--soup-turquoise)] mt-1 shrink-0">•</span>
+                        <span><b>Active Community</b>: The Heartbeat. [WAU ÷ Total Users]. Target 50% activation because a revolutionary product stays alive.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                        <span className="text-[var(--soup-turquoise)] mt-1 shrink-0">•</span>
+                        <span><b>Scale</b>: 1,000 Users is the launchpad. We aren't here to compete; we're here to define the category. 🚀</span>
+                    </li>
                 </ul>
             </div>
         </div >
