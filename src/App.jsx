@@ -68,50 +68,57 @@ export default function App() {
   };
 
   const checkUser = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
+    try {
+      const { data } = await supabase.auth.getUser();
+      const user = data?.user;
 
-    // Ensure Official Bot exists for challenge broadcasting
-    const SYSTEM_BOT_ID = '00000000-0000-0000-0000-000000000000';
-    const { data: botExists } = await supabase.from('app_users').select('id').eq('id', SYSTEM_BOT_ID).single();
+      // Ensure Official Bot exists for challenge broadcasting
+      const SYSTEM_BOT_ID = '00000000-0000-0000-0000-000000000000';
+      const { data: botExists } = await supabase.from('app_users').select('id').eq('id', SYSTEM_BOT_ID).single();
 
-    // Comprehensive list of languages for the bot
-    const ALL_LANGUAGES = ['Spanish', 'French', 'Italian', 'German', 'Portuguese', 'Russian', 'Japanese', 'Chinese', 'Dutch', 'Hungarian', 'Swedish', 'Korean', 'English'];
+      // Comprehensive list of languages for the bot
+      const ALL_LANGUAGES = ['Spanish', 'French', 'Italian', 'German', 'Portuguese', 'Russian', 'Japanese', 'Chinese', 'Dutch', 'Hungarian', 'Swedish', 'Korean', 'English'];
 
-    if (!botExists) {
-      console.log('🥣 Creating official Language Soup bot...');
-      await supabase.from('app_users').upsert({
-        id: SYSTEM_BOT_ID,
-        display_name: 'language soup',
-        avatar_url: 'https://uspegyneclgkscxwmomn.supabase.co/storage/v1/object/public/avatars/00000000-0000-0000-0000-000000000000/bot-avatar.png',
-        is_admin: true,
-        is_community_manager: true,
-        status_text: 'Official Soup Bot',
-        learning_languages: null,
-        fluent_languages: null
-      });
-    } else {
-      // Update existing bot to match new requirements
-      await supabase.from('app_users').update({
-        display_name: 'language soup',
-        avatar_url: 'https://uspegyneclgkscxwmomn.supabase.co/storage/v1/object/public/avatars/00000000-0000-0000-0000-000000000000/bot-avatar.png',
-        learning_languages: null,
-        fluent_languages: null
-      }).eq('id', SYSTEM_BOT_ID);
-    }
-
-    if (user) {
-      // Verify admin status
-      const { data } = await supabase
-        .from('app_users')
-        .select('is_admin, display_name')
-        .eq('id', user.id)
-        .single();
-
-      if (data?.is_admin) {
-        setUser(user);
+      if (!botExists) {
+        console.log('🥣 Creating official Language Soup bot...');
+        await supabase.from('app_users').upsert({
+          id: SYSTEM_BOT_ID,
+          display_name: 'language soup',
+          avatar_url: 'https://uspegyneclgkscxwmomn.supabase.co/storage/v1/object/public/avatars/00000000-0000-0000-0000-000000000000/bot-avatar.png',
+          is_admin: true,
+          is_community_manager: true,
+          status_text: 'Official Soup Bot',
+          learning_languages: null,
+          fluent_languages: null
+        });
+      } else {
+        // Update existing bot to match new requirements
+        await supabase.from('app_users').update({
+          display_name: 'language soup',
+          avatar_url: 'https://uspegyneclgkscxwmomn.supabase.co/storage/v1/object/public/avatars/00000000-0000-0000-0000-000000000000/bot-avatar.png',
+          learning_languages: null,
+          fluent_languages: null
+        }).eq('id', SYSTEM_BOT_ID);
       }
+
+      if (user) {
+        // Verify admin status
+        const { data } = await supabase
+          .from('app_users')
+          .select('is_admin, display_name')
+          .eq('id', user.id)
+          .single();
+
+        if (data?.is_admin) {
+          setUser(user);
+        }
+      }
+    } catch (error) {
+      console.error('Error in checkUser:', error);
+      // Optional: set some error state here if needed
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleLogin = async (e) => {
