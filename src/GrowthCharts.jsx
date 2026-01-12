@@ -35,6 +35,7 @@ export default function GrowthCharts() {
                 const name = (u.display_name || '').toLowerCase();
                 return !name.includes('noah') && !name.includes('bot') && !name.includes('system');
             }) || [];
+            const realUserIds = new Set(realUsers.map(u => u.id));
 
             // 2. Week 1 Retention (Cohort Logic - Match GoalsTab)
             const today = new Date();
@@ -52,11 +53,12 @@ export default function GrowthCharts() {
 
             const week1Retention = cohortIds.size > 0 ? (activeCohortIds.size / cohortIds.size) * 100 : 0;
 
-            // 3. Process time-series data
+            // 3. Process time-series data (Exclude non-human/founder shares)
+            const realShareLinks = shareLinks.filter(s => realUserIds.has(s.sharer_user_id));
             const dailyActive = processDailyActive(messages || []);
-            const dailyShares = processDailyShares(shareLinks || []);
+            const dailyShares = processDailyShares(realShareLinks || []);
 
-            const totalShares = shareLinks.filter(s => s.created_at >= LAUNCH_DATE).length;
+            const totalShares = realShareLinks.filter(s => s.created_at >= LAUNCH_DATE).length;
 
             setMetrics({
                 dau: dailyActive,
@@ -67,7 +69,7 @@ export default function GrowthCharts() {
                     week1Retention: week1Retention,
                     viralShares: totalShares
                 },
-                topSharers: processTopSharers(shareLinks || [])
+                topSharers: processTopSharers(realShareLinks || [])
             });
 
         } catch (err) {

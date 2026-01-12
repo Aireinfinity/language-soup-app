@@ -98,10 +98,19 @@ export default function MarketingTab() {
                 `)
                 .order('created_at', { ascending: false });
 
-            if (shareLinks && shareLinks.length > 0) {
+            // Exclude Noah/Bots from shares as well
+            const { data: allUsers } = await supabase.from('app_users').select('id, display_name');
+            const realUserIds = new Set(allUsers?.filter(u => {
+                const name = (u.display_name || '').toLowerCase();
+                return !name.includes('noah') && !name.includes('bot') && !name.includes('system');
+            }).map(u => u.id) || []);
+
+            const filteredShareLinks = (shareLinks || []).filter(s => realUserIds.has(s.user_id));
+
+            if (filteredShareLinks.length > 0) {
                 // Count shares per user
                 const userShareCounts = {};
-                shareLinks.forEach(share => {
+                filteredShareLinks.forEach(share => {
                     const userId = share.user_id;
                     const userName = share.app_users?.display_name || 'Unknown';
                     const userAvatar = share.app_users?.avatar_url;
@@ -123,7 +132,7 @@ export default function MarketingTab() {
                 setStats(prev => ({
                     ...prev,
                     shares,
-                    totalShares: shareLinks.length
+                    totalShares: filteredShareLinks.length
                 }));
             }
         } catch (err) {

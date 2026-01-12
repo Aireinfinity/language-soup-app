@@ -22,6 +22,9 @@ export default function App() {
     return localStorage.getItem('dashboardActiveTab') || 'overview';
   });
 
+  const [kitchenSubTab, setKitchenSubTab] = useState('challenges');
+  const [fireSubTab, setFireSubTab] = useState('support');
+
   // Sync URL when activeTab changes
   useEffect(() => {
     localStorage.setItem('dashboardActiveTab', activeTab);
@@ -254,12 +257,12 @@ export default function App() {
         }`}>
         <div className="p-8">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[var(--soup-turquoise)] rounded-xl flex items-center justify-center shadow-lg shadow-[var(--soup-turquoise)]/20">
-              <span className="text-xl">🍜</span>
+            <div className="w-10 h-10 bg-[var(--soup-turquoise)] rounded-xl flex items-center justify-center shadow-lg shadow-[var(--soup-turquoise)]/20 overflow-hidden">
+              <img src="/src/assets/branding/ls-icon-bowl.png" alt="Soup Logo" className="w-full h-full object-cover scale-110" />
             </div>
             <div>
-              <h1 className="text-lg font-black tracking-tight text-[var(--soup-dark)] leading-tight">LANGUAGE</h1>
-              <h1 className="text-lg font-black tracking-tight text-[var(--soup-turquoise)] leading-tight">SOUP</h1>
+              <h1 className="text-lg font-black tracking-tight text-[var(--soup-dark)] leading-tight lowercase">language</h1>
+              <h1 className="text-lg font-black tracking-tight text-[var(--soup-turquoise)] leading-tight lowercase">soup</h1>
             </div>
           </div>
           <p className="text-[10px] font-bold text-gray-400 mt-2 tracking-widest uppercase">Admin Dashboard</p>
@@ -267,16 +270,10 @@ export default function App() {
 
         <nav className="flex-1 px-4 space-y-1 mt-2">
           {[
-            { id: 'overview', label: 'Overview', icon: TrendingUp },
-            { id: 'goals', label: '2026 Goals', icon: Target },
-            { id: 'finances', label: 'Finances', icon: DollarSign },
-            { id: 'users', label: 'Users', icon: Users },
-            { id: 'challenges', label: 'Challenges', icon: Megaphone },
-            { id: 'support', label: 'Support', icon: LifeBuoy },
-            { id: 'groups', label: 'Groups', icon: Users, badge: pendingRequestsCount },
-            { id: 'announcements', label: 'Announcements', icon: MessageSquare },
-            { id: 'weekly', label: 'Weekly Update 🍜', icon: Share2 },
-            { id: 'marketing', label: 'Marketing', icon: Zap },
+            { id: 'castle', label: 'the castle', icon: Target },
+            { id: 'kitchen', label: 'the kitchen', icon: Share2 },
+            { id: 'fire_station', label: 'fire station', icon: LifeBuoy, badge: pendingRequestsCount },
+            { id: 'garden', label: 'the garden', icon: TrendingUp },
           ].map((item) => (
             <button
               key={item.id}
@@ -284,14 +281,14 @@ export default function App() {
                 setActiveTab(item.id);
                 setMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-bold transition-all ${activeTab === item.id
-                ? 'bg-[var(--soup-turquoise)] text-white shadow-md'
-                : 'text-gray-500 hover:bg-gray-50 hover:text-[var(--soup-turquoise)]'
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl font-black transition-all ${activeTab === item.id || (activeTab === 'overview' && item.id === 'castle')
+                ? 'bg-[var(--soup-turquoise)] text-white shadow-lg shadow-[var(--soup-turquoise)]/20'
+                : 'text-gray-500 hover:bg-white hover:text-[var(--soup-turquoise)]'
                 }`}
             >
               <div className="flex items-center gap-3">
                 <item.icon size={20} />
-                <span className="text-sm">{item.label}</span>
+                <span className="text-sm lowercase">{item.label}</span>
               </div>
               {item.badge > 0 && (
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${activeTab === item.id
@@ -303,6 +300,22 @@ export default function App() {
               )}
             </button>
           ))}
+
+          <div className="pt-4 mt-4 border-t border-gray-100">
+            <button
+              onClick={() => {
+                setActiveTab('finances');
+                setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-bold text-xs transition-all ${activeTab === 'finances'
+                ? 'bg-gray-100 text-[var(--soup-dark)]'
+                : 'text-gray-400 hover:text-gray-600'
+                }`}
+            >
+              <DollarSign size={14} />
+              <span className="lowercase">finances</span>
+            </button>
+          </div>
         </nav>
 
         <div className="p-6 border-t border-gray-100">
@@ -327,34 +340,143 @@ export default function App() {
       {/* Main Content */}
       <div className="flex-1 overflow-auto flex flex-col">
         <main className="p-4 lg:p-10 max-w-7xl w-full mx-auto flex-1 mt-16 lg:mt-0">
-          {activeTab === 'overview' && (
+          {/* 🏰 The Castle: Insights & Goals */}
+          {(activeTab === 'castle' || activeTab === 'overview') && (
             <div className="space-y-8 animate-in fade-in duration-500">
               <div className="flex justify-between items-center mb-10">
                 <div>
-                  <h1 className="text-4xl font-bold text-[var(--soup-dark)] tracking-tight">gm {user.display_name?.split(' ')[0]} ✨</h1>
-                  <p className="text-gray-500 font-medium mt-1">Here's how Language Soup is doing today.</p>
+                  <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">gm {user.display_name?.split(' ')[0]} ✨</h1>
+                  <p className="text-gray-500 font-bold mt-1">the state of the soup today.</p>
                 </div>
-                <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-[var(--soup-green)] rounded-full text-xs font-bold uppercase tracking-wider">
+                <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-[var(--soup-green)] rounded-full text-xs font-black uppercase tracking-wider border border-[var(--soup-green)]/10">
                   <div className="w-2 h-2 rounded-full bg-[var(--soup-green)] animate-pulse"></div>
-                  Live Status
+                  App is Live
                 </div>
               </div>
 
-              <OverviewTab />
+              <div className="space-y-12">
+                <OverviewTab />
+                <div className="pt-8 border-t border-black/5">
+                  <h3 className="text-2xl font-black text-[var(--soup-dark)] mb-6 flex items-center gap-2">
+                    <Target className="text-[var(--soup-turquoise)]" size={24} />
+                    2026 roadmap
+                  </h3>
+                  <GoalsTab />
+                </div>
+              </div>
             </div>
           )}
 
-          {activeTab === 'users' && <UsersTab />}
-          {activeTab === 'goals' && <GoalsTab />}
-          {activeTab === 'finances' && <FinancesTab />}
-          {activeTab === 'challenges' && <ChallengesTab user={user} />}
-          {activeTab === 'groups' && <GroupsTab />}
-          {activeTab === 'announcements' && <AnnouncementsTab />}
-          {activeTab === 'weekly' && <WeeklyUpdateTab />}
-          {activeTab === 'marketing' && <MarketingTab />}
-          {activeTab === 'support' && <SupportTab />}
+          {/* 🍳 The Kitchen: Engagement & Content */}
+          {activeTab === 'kitchen' && (
+            <div className="space-y-8 animate-in fade-in duration-500">
+              <div className="mb-10">
+                <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">the kitchen 🍳</h1>
+                <p className="text-gray-500 font-bold mt-1">cook up some community vibe.</p>
+              </div>
+              <WeeklyUpdateTab />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-8 border-t border-black/5">
+                <div>
+                  <h3 className="text-2xl font-black text-[var(--soup-dark)] mb-6 flex items-center gap-2">
+                    <Megaphone className="text-[var(--soup-pink)]" size={24} />
+                    broadcasts
+                  </h3>
+                  <div className="bg-white rounded-[32px] p-2 border border-black/5 shadow-sm">
+                    <PillarSubNav
+                      options={[
+                        { id: 'challenges', label: 'challenges' },
+                        { id: 'announcements', label: 'announcements' }
+                      ]}
+                      activeId={kitchenSubTab || 'challenges'}
+                      onChange={setKitchenSubTab}
+                    />
+                    <div className="p-4">
+                      {(kitchenSubTab === 'challenges' || !kitchenSubTab) && <ChallengesTab user={user} />}
+                      {kitchenSubTab === 'announcements' && <AnnouncementsTab />}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black text-[var(--soup-dark)] mb-6 flex items-center gap-2">
+                    <Users className="text-[var(--soup-turquoise)]" size={24} />
+                    groups
+                  </h3>
+                  <GroupsTab />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 🚒 The Fire Station: Support & Users */}
+          {activeTab === 'fire_station' && (
+            <div className="space-y-8 animate-in fade-in duration-500">
+              <div className="mb-10">
+                <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">the fire station 🚒</h1>
+                <p className="text-gray-500 font-bold mt-1">triage and user care.</p>
+              </div>
+              <div className="bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm">
+                <PillarSubNav
+                  options={[
+                    { id: 'support', label: 'support tickets' },
+                    { id: 'users', label: 'user directory' }
+                  ]}
+                  activeId={fireSubTab || 'support'}
+                  onChange={setFireSubTab}
+                />
+                <div className="p-8">
+                  {(fireSubTab === 'support' || !fireSubTab) && <SupportTab />}
+                  {fireSubTab === 'users' && <UsersTab />}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 📈 The Garden: Growth & Marketing */}
+          {activeTab === 'garden' && (
+            <div className="space-y-8 animate-in fade-in duration-500">
+              <div className="mb-10">
+                <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">the garden 📈</h1>
+                <p className="text-gray-500 font-bold mt-1">seeds of growth.</p>
+              </div>
+              <MarketingTab />
+            </div>
+          )}
+
+          {/* 💸 Finances: Admin Only (Hidden) */}
+          {activeTab === 'finances' && (
+            <div className="space-y-8 animate-in fade-in duration-500">
+              <div className="mb-10">
+                <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">finances 💸</h1>
+                <p className="text-gray-500 font-bold mt-1">the boring back-office stuff.</p>
+              </div>
+              <FinancesTab />
+            </div>
+          )}
         </main>
       </div>
+    </div>
+  );
+}
+
+// Sub-navigation for Pillars
+function PillarSubNav({ options, activeId, onChange }) {
+  return (
+    <div className="flex border-b border-gray-100 px-4">
+      {options.map(opt => (
+        <button
+          key={opt.id}
+          onClick={() => onChange(opt.id)}
+          className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all relative ${activeId === opt.id
+            ? 'text-[var(--soup-turquoise)]'
+            : 'text-gray-400 hover:text-gray-600'
+            }`}
+        >
+          {opt.label}
+          {activeId === opt.id && (
+            <div className="absolute bottom-0 left-6 right-6 h-0.5 bg-[var(--soup-turquoise)] rounded-full" />
+          )}
+        </button>
+      ))}
     </div>
   );
 }
@@ -640,10 +762,14 @@ function OverviewTab() {
         `)
         .order('created_at', { ascending: false });
 
+      // Exclude Noah/Bots from shares as well
+      const realUserIds = new Set(realUsers.map(u => u.id));
+      const filteredShareLinks = (shareLinks || []).filter(s => realUserIds.has(s.user_id));
+
       let shares = [];
-      if (shareLinks && shareLinks.length > 0) {
+      if (filteredShareLinks.length > 0) {
         const userShareCounts = {};
-        shareLinks.forEach(share => {
+        filteredShareLinks.forEach(share => {
           const userId = share.user_id;
           const userName = share.app_users?.display_name || 'Unknown';
           const userAvatar = share.app_users?.avatar_url;
@@ -668,7 +794,7 @@ function OverviewTab() {
         totalMessages: messagesCount || 0,
         totalGroups: groupsCount || 0,
         shares: shares,
-        totalShares: shareLinks?.length || 0
+        totalShares: filteredShareLinks.length || 0
       });
     } catch (err) {
       console.error('Error loading stats:', err);
