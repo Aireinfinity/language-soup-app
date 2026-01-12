@@ -374,35 +374,32 @@ export default function App() {
                 <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">the kitchen 🍳</h1>
                 <p className="text-gray-500 font-bold mt-1">cook up some community vibe.</p>
               </div>
-              <WeeklyUpdateTab />
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pt-8 border-t border-black/5">
-                <div>
-                  <h3 className="text-2xl font-black text-[var(--soup-dark)] mb-6 flex items-center gap-2">
-                    <Megaphone className="text-[var(--soup-pink)]" size={24} />
-                    broadcasts
-                  </h3>
-                  <div className="bg-white rounded-[32px] p-2 border border-black/5 shadow-sm">
-                    <PillarSubNav
-                      options={[
-                        { id: 'challenges', label: 'challenges' },
-                        { id: 'announcements', label: 'announcements' }
-                      ]}
-                      activeId={kitchenSubTab || 'challenges'}
-                      onChange={setKitchenSubTab}
-                    />
-                    <div className="p-4">
-                      {(kitchenSubTab === 'challenges' || !kitchenSubTab) && <ChallengesTab user={user} />}
-                      {kitchenSubTab === 'announcements' && <AnnouncementsTab />}
-                    </div>
-                  </div>
+
+              {/* Top Center Hub: Broadcasts & Groups */}
+              <div className="bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm">
+                <PillarSubNav
+                  options={[
+                    { id: 'challenges', label: 'challenges' },
+                    { id: 'announcements', label: 'announcements' },
+                    { id: 'groups', label: 'groups' }
+                  ]}
+                  activeId={kitchenSubTab || 'challenges'}
+                  onChange={setKitchenSubTab}
+                />
+                <div className="p-8">
+                  {(kitchenSubTab === 'challenges' || !kitchenSubTab) && <ChallengesTab user={user} />}
+                  {kitchenSubTab === 'announcements' && <AnnouncementsTab />}
+                  {kitchenSubTab === 'groups' && <GroupsTab />}
                 </div>
-                <div>
-                  <h3 className="text-2xl font-black text-[var(--soup-dark)] mb-6 flex items-center gap-2">
-                    <Users className="text-[var(--soup-turquoise)]" size={24} />
-                    groups
-                  </h3>
-                  <GroupsTab />
-                </div>
+              </div>
+
+              {/* Bottom: Weekly Update Tool */}
+              <div className="pt-12 border-t border-black/5">
+                <h3 className="text-2xl font-black text-[var(--soup-dark)] mb-6 flex items-center gap-2">
+                  <Share2 className="text-[var(--soup-turquoise)]" size={24} />
+                  weekly community update
+                </h3>
+                <WeeklyUpdateTab />
               </div>
             </div>
           )}

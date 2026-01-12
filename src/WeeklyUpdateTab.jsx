@@ -99,7 +99,6 @@ export default function WeeklyUpdateTab() {
                 .slice(0, 3)
                 .map(([id, count]) => ({ id, count }));
 
-            // Get names for top chatters
             const { data: topChatterUsers } = await supabase
                 .from('app_users')
                 .select('id, display_name')
@@ -113,6 +112,12 @@ export default function WeeklyUpdateTab() {
                 return !name.includes('noah') && !name.includes('bot') && !name.includes('system');
             });
 
+            // Get new groups this week
+            const { data: newGroups } = await supabase
+                .from('app_groups')
+                .select('name, language')
+                .gte('created_at', weekAgo);
+
             setStats({
                 totalUsers: realUsers.length,
                 humanSoups,
@@ -124,6 +129,7 @@ export default function WeeklyUpdateTab() {
                 topLanguages,
                 topDay: topDay ? { day: topDay[0], count: topDay[1] } : null,
                 topChatters,
+                newGroups: newGroups || [],
                 progressTo1000: Math.round((realUsers.length / 1000) * 100 * 10) / 10,
             });
         } catch (err) {
@@ -158,6 +164,7 @@ export default function WeeklyUpdateTab() {
             `${stats.voicePercent}% of them were Voice Notes! 🎤\n\n` +
             `🌍 *Top Languages:*\n` +
             stats.topLanguages.map(([l, c]) => `• ${languageFlags[l] || '🌐'} ${l.split(' ')[0]}: ${c}`).join('\n') +
+            (stats.newGroups.length > 0 ? `\n\n✨ *New Groups:* ${stats.newGroups.map(g => `${g.name}`).join(', ')}` : '') +
             `\n\n🏆 *Top Chatters:*\n` +
             stats.topChatters.map((c, i) => `${i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'} ${c.name}`).join('\n') +
             `\n\n🚀 Invite your friends! We are ${stats.progressTo1000}% of the way to 1,000 Soupers!`;
