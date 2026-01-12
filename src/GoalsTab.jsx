@@ -237,6 +237,30 @@ export default function GoalsTab() {
                                         💪 Keep building! You got this!
                                     </div>
                                 )}
+
+                                {/* Retention Benchmarks (Indie Hacker Context) */}
+                                {goal.metric === 'Day 7 Retention' && (
+                                    <div className="mt-4 pt-4 border-t border-gray-100">
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2">Indie Benchmarks</p>
+                                        <div className="space-y-2 text-xs">
+                                            <div className="flex justify-between text-gray-400">
+                                                <span>😐 Average App</span>
+                                                <span>10-15%</span>
+                                            </div>
+                                            <div className="flex justify-between font-bold text-[var(--soup-dark)] bg-gray-50 -mx-2 px-2 py-1 rounded-lg">
+                                                <span>🚀 You (Solid Start!)</span>
+                                                <span>{goal.current.toFixed(1)}%</span>
+                                            </div>
+                                            <div className="flex justify-between text-gray-400">
+                                                <span>🤩 World Class</span>
+                                                <span>40%+</span>
+                                            </div>
+                                        </div>
+                                        <p className="mt-3 text-[10px] text-gray-400 italic">
+                                            *Users &gt;7 days old who chatted this week.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     );
@@ -253,6 +277,6 @@ export default function GoalsTab() {
                     <li>• Metrics update in real-time as your babies grow! 🍼</li>
                 </ul>
             </div>
-        </div>
+        </div >
     );
 }
