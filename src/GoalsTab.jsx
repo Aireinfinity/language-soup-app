@@ -8,7 +8,8 @@ export default function GoalsTab() {
         day7Retention: 0,
         kFactor: 0,
         mrr: 0,
-        activeSoupers: 0
+        activeSoupers: 0,
+        activeRatio: 0
     });
     const [loading, setLoading] = useState(true);
 
@@ -98,16 +99,17 @@ export default function GoalsTab() {
             console.log(`K-Factor Calc (since Jan 4): ${totalShares} shares / ${realUsersForKFactor} users = ${kFactor}`);
 
             // Calculate Active Soupers (WAU) - Unique users who chatted in last 7 days
-            // We already have 'recentMessages' (last 7 days) from Retention logic
             const activeSouperIds = new Set(recentMessages.map(m => m.sender_id));
             const activeSoupers = activeSouperIds.size;
+            const activeRatio = totalUsers > 0 ? (activeSoupers / totalUsers) * 100 : 0;
 
             setMetrics({
                 totalUsers: totalUsers || 0,
-                day7Retention: retention, // This is now 'Week 1 Retention'
+                day7Retention: retention,
                 kFactor: kFactor,
-                mrr: 0, // Placeholder
-                activeSoupers: activeSoupers
+                mrr: 0,
+                activeSoupers: activeSoupers,
+                activeRatio: activeRatio
             });
         } catch (err) {
             console.error('Error loading metrics:', err);
@@ -122,11 +124,11 @@ export default function GoalsTab() {
             title: 'Stable App Launch',
             metric: 'Week 1 Retention',
             current: metrics.day7Retention,
-            target: 30,
+            target: 40,
             unit: '%',
             icon: Users,
             color: 'bg-blue-500',
-            status: metrics.day7Retention >= 30 ? '✅' : '🎯'
+            status: metrics.day7Retention >= 40 ? '✅' : '🎯'
         },
         {
             quarter: 'Q2',
@@ -141,25 +143,25 @@ export default function GoalsTab() {
         },
         {
             quarter: 'Q3',
-            title: 'Make First $',
+            title: 'Revolutionary Revenue',
             metric: 'MRR',
             current: metrics.mrr,
-            target: 500,
+            target: 10000,
             unit: '$',
             icon: DollarSign,
             color: 'bg-green-500',
-            status: metrics.mrr >= 500 ? '✅' : '💸'
+            status: metrics.mrr >= 10000 ? '✅' : '💸'
         },
         {
             quarter: 'Q4',
-            title: 'Ramp Down & Closeout',
-            metric: 'Active Soupers',
-            current: metrics.activeSoupers || 0,
+            title: 'Scale & Hiring',
+            metric: 'Active Community',
+            current: metrics.activeRatio,
             target: 50,
-            unit: '',
+            unit: '%',
             icon: Target,
             color: 'bg-indigo-500',
-            status: (metrics.activeSoupers || 0) >= 50 ? '✅' : '🧘'
+            status: metrics.activeRatio >= 50 ? '✅' : '🧠'
         }
     ];
 
@@ -289,10 +291,10 @@ export default function GoalsTab() {
             <div className="mt-8 bg-gradient-to-br from-[var(--soup-beige)] to-white p-6 rounded-3xl border border-[var(--soup-turquoise)]/30">
                 <h3 className="text-lg font-black text-[var(--soup-dark)] mb-3">📝 Notes</h3>
                 <ul className="space-y-2 text-sm text-gray-600 font-bold">
-                    <li>• <b>Week 1 Retention</b>: % of users who come back after their first week</li>
-                    <li>• <b>K-Factor</b>: How many new users each user brings (1.2 = viral growth!)</li>
-                    <li>• <b>MRR</b>: Monthly Recurring Revenue (add monetization in Q2/Q3)</li>
-                    <li>• Metrics update in real-time as your babies grow! 🍼</li>
+                    <li>• <b>Week 1 Retention</b>: Product Quality. Target 40% (World Class) to build a sticky habit.</li>
+                    <li>• <b>MRR</b>: Baseline Profitability. Target $10,000 to support a solo founder life in LA.</li>
+                    <li>• <b>Active Community</b>: The Heartbeat. Target 50% activation because a silent community is a dead one.</li>
+                    <li>• <b>Scale</b>: 1,000 Users is the foundation. From there, we hit the $1M path. 🚀</li>
                 </ul>
             </div>
         </div >
