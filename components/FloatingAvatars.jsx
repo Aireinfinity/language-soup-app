@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, memo } from 'react';
 import { View, Text, StyleSheet, Image, Pressable, Animated, Easing } from 'react-native';
 import { getLanguageFlag } from '../utils/languageFlags';
 
@@ -29,7 +29,7 @@ export function FloatingAvatars({ users = [], onUserPress }) {
     );
 }
 
-function FloatingAvatar({ user, index, onPress }) {
+const FloatingAvatar = memo(function FloatingAvatar({ user, index, onPress }) {
     const bobAnim = useRef(new Animated.Value(0)).current;
     const scaleAnim = useRef(new Animated.Value(1)).current;
 
@@ -79,12 +79,13 @@ function FloatingAvatar({ user, index, onPress }) {
     }, [index]);
 
     // Random offset and rotation for playful layout
-    const randomOffset = {
+    // Memoize these random values so they don't change on re-render unless index changes
+    const randomOffset = useRef({
         marginLeft: (Math.random() - 0.5) * 10,
         marginTop: (Math.random() - 0.5) * 10,
-    };
+    }).current;
 
-    const randomRotation = `${(Math.random() - 0.5) * 10}deg`;
+    const randomRotation = useRef(`${(Math.random() - 0.5) * 10}deg`).current;
 
     // Get language flags
     const languages = user.fluent_languages || user.learning_languages || [];
@@ -141,7 +142,7 @@ function FloatingAvatar({ user, index, onPress }) {
             </View>
         </Animated.View>
     );
-}
+});
 
 const styles = StyleSheet.create({
     container: {
@@ -178,6 +179,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.15,
         shadowRadius: 8,
         elevation: 5,
+        backgroundColor: '#e1e1e1', // Placeholder color
     },
     avatarPlaceholder: {
         width: 80,

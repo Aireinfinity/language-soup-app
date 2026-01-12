@@ -8,18 +8,23 @@ import Animated, {
     withSpring,
 } from 'react-native-reanimated';
 import { useAudioPlayer } from '../contexts/AudioPlayerContext';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as LegacyFileSystem from 'expo-file-system/legacy';
+import { cacheDirectory } from 'expo-file-system';
 
 const WAVEFORM_BARS = 30;
 
 // Cache directory for voice memos
-const CACHE_DIR = `${FileSystem.cacheDirectory}voice_memos/`;
+const CACHE_DIR = `${LegacyFileSystem.cacheDirectory}voice_memos/`;
 
-// Ensure cache directory exists
+// Ensure cache directory exists (Safely)
 (async () => {
-    const info = await FileSystem.getInfoAsync(CACHE_DIR);
-    if (!info.exists) {
-        await FileSystem.makeDirectoryAsync(CACHE_DIR);
+    try {
+        const info = await LegacyFileSystem.getInfoAsync(CACHE_DIR);
+        if (!info.exists) {
+            await LegacyFileSystem.makeDirectoryAsync(CACHE_DIR);
+        }
+    } catch (error) {
+        console.warn('[AudioMessage] Failed to initialize cache dir:', error);
     }
 })();
 
@@ -61,13 +66,13 @@ export function AudioMessage({ audioUrl, duration, senderName, isMe, messageId, 
                 const filename = audioUrl.split('/').pop();
                 const path = `${CACHE_DIR}${filename}`;
 
-                const info = await FileSystem.getInfoAsync(path);
+                const info = await LegacyFileSystem.getInfoAsync(path);
 
                 if (info.exists) {
                     if (isMounted) setLocalUri(path);
                 } else {
                     // Download in background
-                    const { uri } = await FileSystem.downloadAsync(audioUrl, path);
+                    const { uri } = await LegacyFileSystem.downloadAsync(audioUrl, path);
                     if (isMounted) setLocalUri(uri);
                 }
             } catch (error) {

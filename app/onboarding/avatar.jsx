@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image, Alert, ActivityIndicator, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Camera } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Asset } from 'expo-asset';
 import { decode } from 'base64-arraybuffer';
 import { Colors } from '../../constants/Colors';
@@ -42,9 +42,9 @@ export default function AvatarScreen() {
 
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: 'images',
-                allowsEditing: true,
+                allowsEditing: Platform.OS === 'ios', // Only enable crop editor on iOS (Android UI is inconsistent)
                 aspect: [1, 1],
-                quality: 0.8,
+                quality: 0.5, // Reduced quality for faster uploads
             });
 
             if (!result.canceled && result.assets[0]) {
@@ -58,13 +58,21 @@ export default function AvatarScreen() {
         }
     };
 
-    const handleSelectSoup = (soup) => {
-        // For local assets, we use the image module number temporarily for display
-        // We'll process the asset upload on continue
-        const asset = Asset.fromModule(soup.source);
-        setAvatarUri(asset.uri);
-        setSelectedSoupId(soup.id);
-        setIsCustomPhoto(false);
+    const handleSelectSoup = async (soup) => {
+        try {
+            setUploading(true); // Show loading feedback
+            // For local assets, download the asset first to ensure URI is available
+            const asset = Asset.fromModule(soup.source);
+            await asset.downloadAsync(); // Download asset to get valid URI
+            setAvatarUri(asset.localUri || asset.uri); // Use localUri or fallback to uri
+            setSelectedSoupId(soup.id);
+            setIsCustomPhoto(false);
+        } catch (error) {
+            console.error('Error loading soup avatar:', error);
+            Alert.alert('Error', 'Failed to load soup avatar');
+        } finally {
+            setUploading(false);
+        }
     };
 
     const processUpload = async () => {
@@ -180,15 +188,22 @@ export default function AvatarScreen() {
                                     key={soup.id}
                                     style={[
                                         styles.soupOption,
-                                        selectedSoupId === soup.id && styles.soupOptionSelected
+                                        selectedSoupId === soup.id && styles.soupOptionSelected,
+                                        uploading && { opacity: 0.5 }
                                     ]}
                                     onPress={() => handleSelectSoup(soup)}
+                                    disabled={uploading}
                                 >
                                     <Image source={soup.source} style={styles.soupImage} resizeMode="contain" />
                                     <Text style={[
                                         styles.soupName,
                                         selectedSoupId === soup.id && styles.soupNameSelected
                                     ]}>{soup.name}</Text>
+                                    {uploading && selectedSoupId === soup.id && (
+                                        <View style={styles.loaderOverlay}>
+                                            <ActivityIndicator color={Colors.primary} size="small" />
+                                        </View>
+                                    )}
                                 </Pressable>
                             ))}
                         </View>
@@ -199,11 +214,14 @@ export default function AvatarScreen() {
             <View style={styles.footer}>
                 <Pressable
                     onPress={processUpload}
-                    style={[styles.button, !avatarUri && styles.buttonDisabled]}
+                    style={[styles.button, (!avatarUri || uploading) && styles.buttonDisabled]}
                     disabled={uploading || !avatarUri}
                 >
                     {uploading ? (
-                        <ActivityIndicator color="#fff" />
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <ActivityIndicator color="#fff" size="small" />
+                            <Text style={styles.buttonText}>loading...</Text>
+                        </View>
                     ) : (
                         <Text style={styles.buttonText}>start slurping</Text>
                     )}

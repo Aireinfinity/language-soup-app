@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
 import { Calendar, Trash2, Send, Clock, CheckCircle, Edit2, X, Check } from 'lucide-react';
+import { predictResponseRate, logChallengeSent } from './soupPredictor';
 
 export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLangCode, handleSendToGroups }) {
     const [queuedChallenges, setQueuedChallenges] = useState([]);
@@ -19,10 +20,49 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
     const [editDay, setEditDay] = useState('');
     const [editTime, setEditTime] = useState('');
     const [translationCache, setTranslationCache] = useState({});
+    const [showSoupInfo, setShowSoupInfo] = useState(false);
+    const [prediction, setPrediction] = useState(null);
+
+    // Generate dynamic date options for the next 7 days
+    const dateOptions = Array.from({ length: 7 }, (_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() + i);
+
+        let value;
+        let labelPrefix;
+
+        if (i === 0) {
+            value = 'today';
+            labelPrefix = 'Today';
+        } else if (i === 1) {
+            value = 'tomorrow';
+            labelPrefix = 'Tomorrow';
+        } else {
+            value = `day${i}`;
+            labelPrefix = date.toLocaleDateString('en-US', { weekday: 'long' });
+        }
+
+        const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        return { value, label: `${labelPrefix} (${dateStr})` };
+    });
 
     useEffect(() => {
         loadQueue();
     }, []);
+
+    // Trigger prediction when draft text changes
+    useEffect(() => {
+        if (draftText.trim().length > 3) {
+            const timer = setTimeout(async () => {
+                const result = await predictResponseRate(draftText);
+                setPrediction(result);
+            }, 500); // Debounce for 500ms
+
+            return () => clearTimeout(timer);
+        } else {
+            setPrediction(null);
+        }
+    }, [draftText]);
 
     const loadQueue = async () => {
         try {
@@ -198,15 +238,14 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
         try {
             // Get unique languages from groups
             const uniqueLanguages = [...new Set(groups.map(g => g.language))];
-            const translationResults = {};
 
-            for (const language of uniqueLanguages) {
+            // Translate all languages in PARALLEL for speed!
+            const translationPromises = uniqueLanguages.map(async (language) => {
                 const deeplLang = getDeepLLangCode(language);
                 const googleLang = getGoogleLangCode(language);
 
                 if (!deeplLang && !googleLang) {
-                    translationResults[language] = challenge.challenge_text;
-                    continue;
+                    return [language, challenge.challenge_text];
                 }
 
                 try {
@@ -216,7 +255,7 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
                     });
 
                     if (!error && !data.error) {
-                        translationResults[language] = data.translatedText;
+                        return [language, data.translatedText];
                     } else {
                         throw new Error('DeepL failed');
                     }
@@ -225,9 +264,13 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
                     const { data } = await supabase.functions.invoke('translate-google', {
                         body: { text: challenge.challenge_text, targetLang: googleLang }
                     });
-                    translationResults[language] = data.translatedText;
+                    return [language, data.translatedText];
                 }
-            }
+            });
+
+            // Wait for all translations to complete
+            const translationPairs = await Promise.all(translationPromises);
+            const translationResults = Object.fromEntries(translationPairs);
 
             setTranslations(translationResults);
             // Cache the translations
@@ -242,28 +285,91 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
             setTranslating(false);
         }
     };
+    const approveChallenge = async () => {
+        try {
+            // Just mark as approved - don't send yet
+            await supabase
+                .from('app_scheduled_challenges')
+                .update({
+                    status: 'approved',
+                })
+                .eq('id', selectedChallenge.id);
 
-    const approveAndSend = async () => {
-        if (sending || translating) return;
+            alert('Challenge approved! It will auto-send at the scheduled time. ✅');
+            setShowPreview(false);
+            setSelectedChallenge(null);
+            setTranslations({});
+            loadQueue();
+        } catch (err) {
+            console.error('Error approving:', err);
+            alert('Failed to approve: ' + err.message);
+        }
+    };
+
+
+    const sendNow = async (challenge) => {
+        if (!confirm(`Send "${challenge.challenge_text}" to all ${groups.length} groups NOW?`)) return;
 
         setSending(true);
         try {
-            // Group by language and send
-            for (const group of groups) {
-                const translatedText = translations[group.language] || selectedChallenge.challenge_text;
+            // Remove #challenge prefix if user already typed it
+            const cleanEnglish = challenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
 
-                // Insert challenge
-                const { error: challengeError } = await supabase
-                    .from('app_challenges')
-                    .insert({
-                        group_id: group.id,
-                        prompt_text: translatedText,
-                        created_by: user.id,
+            // Get unique languages and translate in PARALLEL
+            const uniqueLanguages = [...new Set(groups.map(g => g.language))];
+
+            const translationPromises = uniqueLanguages.map(async (language) => {
+                if (language.toLowerCase() === 'english') {
+                    return [language, cleanEnglish];
+                }
+
+                const deeplLang = getDeepLLangCode(language);
+                const googleLang = getGoogleLangCode(language);
+
+                if (!deeplLang && !googleLang) {
+                    return [language, cleanEnglish];
+                }
+
+                try {
+                    // Try DeepL first
+                    const { data, error } = await supabase.functions.invoke('translate-text', {
+                        body: { text: cleanEnglish, targetLang: deeplLang }
                     });
 
-                if (challengeError) throw challengeError;
+                    if (!error && !data.error) {
+                        return [language, data.translatedText];
+                    } else {
+                        throw new Error('DeepL failed');
+                    }
+                } catch {
+                    // Fallback to Google
+                    const { data } = await supabase.functions.invoke('translate-google', {
+                        body: { text: cleanEnglish, targetLang: googleLang }
+                    });
+                    return [language, data.translatedText];
+                }
+            });
 
-                // Send notifications (same logic as existing)
+            const translationPairs = await Promise.all(translationPromises);
+            const translationResults = Object.fromEntries(translationPairs);
+
+            // Send to all groups with proper format
+            for (const group of groups) {
+                const translation = translationResults[group.language];
+
+                // Format: #challenge\n[english]\n[translation]
+                // For English groups: just #challenge\n[english] (2 lines)
+                const finalText = group.language.toLowerCase() === 'english'
+                    ? `#challenge\n${cleanEnglish}`
+                    : `#challenge\n${cleanEnglish}\n${translation}`;
+
+                await supabase.from('app_challenges').insert({
+                    group_id: group.id,
+                    prompt_text: finalText,
+                    created_by: user.id
+                });
+
+                // Send notifications
                 const { data: members } = await supabase
                     .from('app_group_members')
                     .select('user_id')
@@ -271,6 +377,7 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
 
                 if (members?.length > 0) {
                     const userIds = members.map(m => m.user_id).filter(id => id !== user.id);
+
                     if (userIds.length > 0) {
                         const { data: tokens } = await supabase
                             .from('app_push_tokens')
@@ -285,13 +392,16 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
                                 to: t.expo_push_token,
                                 sound: 'default',
                                 title: 'mmm goood soup!',
-                                body: `${randomEmoji} new challenge in ${group.name}`,
+                                body: `${randomEmoji} new challenge in ${group?.name || 'your group'}`,
                                 data: { type: 'challenge', groupId: group.id }
                             }));
 
                             await fetch('https://exp.host/--/api/v2/push/send', {
                                 method: 'POST',
-                                headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                                headers: {
+                                    'Accept': 'application/json',
+                                    'Content-Type': 'application/json',
+                                },
                                 body: JSON.stringify(pushMessages),
                             });
                         }
@@ -303,15 +413,15 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
             await supabase
                 .from('app_scheduled_challenges')
                 .update({ status: 'sent' })
-                .eq('id', selectedChallenge.id);
+                .eq('id', challenge.id);
 
-            alert(`Challenge sent to all ${groups.length} groups! 🚀`);
-            setShowPreview(false);
-            setSelectedChallenge(null);
-            setTranslations({});
+            // Log the challenge for AI learning
+            await logChallengeSent(challenge.challenge_text);
+
+            alert(`✅ Challenge sent to ${groups.length} groups!`);
             loadQueue();
         } catch (err) {
-            console.error('Error sending:', err);
+            console.error('Error sending challenge:', err);
             alert('Failed to send: ' + err.message);
         } finally {
             setSending(false);
@@ -334,6 +444,7 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
     }
 
     const pendingChallenges = queuedChallenges.filter(c => c.status === 'pending');
+    const approvedChallenges = queuedChallenges.filter(c => c.status === 'approved');
     const sentChallenges = queuedChallenges.filter(c => c.status === 'sent');
 
     return (
@@ -344,7 +455,7 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
                     Challenge Queue 📅
                 </h2>
                 <p className="text-gray-500 font-bold">
-                    {pendingChallenges.length} pending • {sentChallenges.length} sent
+                    {pendingChallenges.length} pending review • {approvedChallenges.length} approved • {sentChallenges.length} sent
                 </p>
             </div>
 
@@ -360,6 +471,117 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
                     rows={4}
                 />
 
+
+                {/* SOUP GAUGE - LEARNING VERSION */}
+                {draftText.length > 0 && (() => {
+                    // Use prediction if available, otherwise show loading
+                    if (!prediction) {
+                        return (
+                            <div className="mb-6 p-4 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+                                <div className="text-sm text-gray-400 font-bold italic animate-pulse">
+                                    🧠 Analyzing prompt...
+                                </div>
+                            </div>
+                        );
+                    }
+
+                    // If no prediction available (not enough data)
+                    if (prediction.predicted === null) {
+                        return (
+                            <div className="mb-6 p-4 bg-[var(--soup-beige)]/50 rounded-2xl border-2 border-dashed border-[var(--soup-turquoise)]/30">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-xs font-black text-[var(--soup-turquoise)] uppercase tracking-wider">
+                                        🌱 Learning Mode
+                                    </span>
+                                </div>
+                                <p className="text-sm text-[var(--soup-dark)] font-bold">
+                                    {prediction.message}
+                                </p>
+                                {prediction.totalDataPoints > 0 && (
+                                    <p className="text-xs text-gray-600 mt-2">
+                                        ({prediction.totalDataPoints} total challenges tracked)
+                                    </p>
+                                )}
+                            </div>
+                        );
+                    }
+
+                    // We have a prediction!
+                    const rate = prediction.predicted;
+                    const [minRate, maxRate] = prediction.range;
+
+                    // Color based on predicted rate
+                    let color = 'bg-gray-300';
+                    let emoji = '😐';
+                    let label = 'Low';
+                    if (rate > 35) { color = 'bg-[var(--soup-turquoise)]'; emoji = '🚀'; label = 'High'; }
+                    else if (rate > 20) { color = 'bg-green-400'; emoji = '🙂'; label = 'Good'; }
+                    else if (rate < 15) { color = 'bg-red-300'; emoji = '😴'; label = 'Low'; }
+
+                    // Confidence badge
+                    const confidenceColor = {
+                        'high': 'bg-green-100 text-green-700',
+                        'medium': 'bg-yellow-100 text-yellow-700',
+                        'low': 'bg-gray-100 text-gray-600'
+                    }[prediction.confidence];
+
+                    return (
+                        <div className="mb-6 p-4 bg-gradient-to-br from-[var(--soup-beige)] to-white rounded-2xl border-2 border-[var(--soup-turquoise)]/30 transition-all duration-300 shadow-sm">
+                            <div className="flex justify-between items-center mb-3">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-[var(--soup-dark)] uppercase tracking-wider flex items-center gap-1">
+                                        🧠 AI Prediction
+                                        <button
+                                            onClick={() => setShowSoupInfo(!showSoupInfo)}
+                                            className="w-4 h-4 rounded-full bg-[var(--soup-turquoise)]/20 hover:bg-[var(--soup-turquoise)]/30 text-[var(--soup-turquoise)] flex items-center justify-center text-[10px] font-bold transition-colors ml-1"
+                                            title="How does this work?"
+                                        >
+                                            i
+                                        </button>
+                                    </span>
+                                </div>
+                                <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${confidenceColor}`}>
+                                    {prediction.confidence} confidence
+                                </span>
+                            </div>
+
+                            <div className="mb-3">
+                                <div className="flex items-baseline gap-2 mb-1">
+                                    <span className="text-3xl font-black text-[var(--soup-dark)]">{rate}%</span>
+                                    <span className="text-sm font-bold text-[var(--soup-turquoise)]">predicted response rate</span>
+                                </div>
+                                <div className="text-xs text-gray-600 font-bold">
+                                    Range: {minRate}% - {maxRate}% {emoji}
+                                </div>
+                            </div>
+
+                            <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden mb-3">
+                                <div
+                                    className={`h-full ${color} transition-all duration-500 ease-out`}
+                                    style={{ width: `${Math.min(100, rate)}%` }}
+                                />
+                            </div>
+
+                            <div className="text-xs text-[var(--soup-turquoise)] font-bold">
+                                📊 Based on {prediction.sampleSize} similar prompts
+                            </div>
+
+                            {/* THE EXPLAINER */}
+                            {showSoupInfo && (
+                                <div className="mt-4 p-3 bg-white rounded-xl text-xs text-[var(--soup-dark)] border border-[var(--soup-turquoise)]/30 animate-in fade-in zoom-in-95 duration-200 leading-relaxed">
+                                    <p className="font-bold mb-2">🧠 How the AI learns:</p>
+                                    <ul className="list-disc pl-4 space-y-1">
+                                        <li>I compare your prompt to <b>{prediction.totalDataPoints} past challenges</b></li>
+                                        <li>I find the <b>{prediction.sampleSize} most similar</b> ones (word count, keywords, format)</li>
+                                        <li>I calculate their <b>average response rate</b></li>
+                                        <li>The more data I have, the <b>smarter I get</b>! 📈</li>
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
+
                 <div className="flex gap-4 items-end">
                     <div className="flex-1">
                         <label className="block text-sm font-black text-gray-400 uppercase tracking-wider mb-2">
@@ -371,13 +593,11 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
                             className="w-full px-6 py-3 bg-[var(--soup-beige)]/30 border-2 border-transparent focus:border-[var(--soup-turquoise)]/30 focus:bg-white rounded-2xl focus:ring-0 font-bold text-base appearance-none cursor-pointer"
                         >
                             <option value="">Choose day...</option>
-                            <option value="today">Today (Sun, Jan 5)</option>
-                            <option value="tomorrow">Tomorrow (Mon, Jan 6)</option>
-                            <option value="day2">Wednesday (Jan 7)</option>
-                            <option value="day3">Thursday (Jan 8)</option>
-                            <option value="day4">Friday (Jan 9)</option>
-                            <option value="day5">Saturday (Jan 10)</option>
-                            <option value="day6">Sunday (Jan 11)</option>
+                            {dateOptions.map(opt => (
+                                <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                </option>
+                            ))}
                         </select>
                     </div>
 
@@ -433,13 +653,11 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
                                                 onChange={(e) => setEditDay(e.target.value)}
                                                 className="flex-1 px-4 py-2 bg-white border-2 border-[var(--soup-turquoise)]/30 rounded-xl focus:ring-0 font-bold text-sm"
                                             >
-                                                <option value="today">Today (Sun, Jan 5)</option>
-                                                <option value="tomorrow">Tomorrow (Mon, Jan 6)</option>
-                                                <option value="day2">Wednesday (Jan 7)</option>
-                                                <option value="day3">Thursday (Jan 8)</option>
-                                                <option value="day4">Friday (Jan 9)</option>
-                                                <option value="day5">Saturday (Jan 10)</option>
-                                                <option value="day6">Sunday (Jan 11)</option>
+                                                {dateOptions.map(opt => (
+                                                    <option key={opt.value} value={opt.value}>
+                                                        {opt.label}
+                                                    </option>
+                                                ))}
                                             </select>
                                             <input
                                                 type="time"
@@ -508,15 +726,123 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
                 )}
             </div>
 
+            {/* Approved Queue - Ready to Send */}
+            {approvedChallenges.length > 0 && (
+                <div className="mb-8 bg-white rounded-3xl border border-black/5 shadow-sm overflow-hidden">
+                    <div className="px-8 py-4 bg-[var(--soup-turquoise)]/10 border-b border-black/5">
+                        <h3 className="text-lg font-black text-[var(--soup-dark)]">✅ Approved & Scheduled ({approvedChallenges.length})</h3>
+                        <p className="text-xs text-gray-500 font-bold mt-1">These will auto-send at their scheduled time</p>
+                    </div>
+                    <div className="divide-y divide-gray-50">
+                        {approvedChallenges.map((challenge) => (
+                            <div key={challenge.id} className="p-6 hover:bg-gray-50/50 transition-colors">
+                                {editingId === challenge.id ? (
+                                    // Edit mode
+                                    <div className="space-y-4">
+                                        <textarea
+                                            value={editText}
+                                            onChange={(e) => setEditText(e.target.value)}
+                                            className="w-full px-4 py-3 bg-white border-2 border-[var(--soup-turquoise)]/30 rounded-xl focus:ring-0 font-bold text-base"
+                                            rows={3}
+                                        />
+                                        <div className="flex gap-3">
+                                            <select
+                                                value={editDay}
+                                                onChange={(e) => setEditDay(e.target.value)}
+                                                className="flex-1 px-4 py-2 bg-white border-2 border-[var(--soup-turquoise)]/30 rounded-xl focus:ring-0 font-bold text-sm"
+                                            >
+                                                {dateOptions.map(opt => (
+                                                    <option key={opt.value} value={opt.value}>
+                                                        {opt.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <input
+                                                type="time"
+                                                value={editTime}
+                                                onChange={(e) => setEditTime(e.target.value)}
+                                                className="flex-1 px-4 py-2 bg-white border-2 border-[var(--soup-turquoise)]/30 rounded-xl focus:ring-0 font-bold text-sm"
+                                            />
+                                            <button
+                                                onClick={saveEdit}
+                                                className="px-4 py-2 bg-green-500 text-white rounded-xl font-black hover:scale-105 transition-all"
+                                            >
+                                                <Check size={16} />
+                                            </button>
+                                            <button
+                                                onClick={cancelEditing}
+                                                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-xl font-black hover:scale-105 transition-all"
+                                            >
+                                                <X size={16} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    // View mode
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div className="flex-1">
+                                            <p className="text-lg font-bold text-[var(--soup-dark)] mb-2">
+                                                {challenge.challenge_text}
+                                            </p>
+                                            <div className="flex items-center gap-3 text-sm">
+                                                <span className="flex items-center gap-1 text-[var(--soup-turquoise)] font-black">
+                                                    <Clock size={14} />
+                                                    {formatDate(challenge.scheduled_time)}
+                                                </span>
+                                                <span className="px-2 py-1 bg-green-100 text-green-700 rounded-lg text-xs font-black">
+                                                    APPROVED ✓
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => startEditing(challenge)}
+                                                className="px-4 py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl font-black transition-all flex items-center gap-1"
+                                            >
+                                                <Edit2 size={14} />
+                                                Edit Time
+                                            </button>
+                                            <button
+                                                onClick={() => openPreview(challenge)}
+                                                className="px-6 py-2.5 bg-blue-500 text-white rounded-xl font-black hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+                                            >
+                                                👁️ Preview Format
+                                            </button>
+                                            <button
+                                                onClick={() => sendNow(challenge)}
+                                                disabled={sending}
+                                                className="px-6 py-2.5 bg-[var(--soup-turquoise)] text-white rounded-xl font-black hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[var(--soup-turquoise)]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                            >
+                                                <Send size={16} />
+                                                Send Now 🚀
+                                            </button>
+                                            <button
+                                                onClick={() => deleteChallenge(challenge.id)}
+                                                className="px-4 py-2.5 text-red-500 hover:bg-red-50 rounded-xl font-black transition-all"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* Preview Modal */}
             {showPreview && selectedChallenge && (
                 <div className="fixed inset-0 bg-[var(--soup-dark)]/40 backdrop-blur-md flex items-center justify-center p-6 z-50 animate-in fade-in duration-300">
-                    <div className="bg-white rounded-[40px] shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-10 transform animate-in zoom-in-95 duration-300">
+                    <div className="bg-white rounded-[40px] shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto p-10 transform animate-in zoom-in-95 duration-300">
                         <h3 className="text-4xl font-black text-[var(--soup-dark)] tracking-tighter mb-2">
-                            Preview Translations 🌍
+                            Preview: Exact Format 🔍
                         </h3>
-                        <p className="text-gray-500 font-bold mb-8">
-                            Review before sending to all {groups.length} groups
+                        <p className="text-gray-500 font-bold mb-2">
+                            This is EXACTLY what will be sent to each group
+                        </p>
+                        <p className="text-sm text-gray-400 font-bold mb-8">
+                            {groups.length} groups • {Object.keys(translations).length} languages
                         </p>
 
                         {translating ? (
@@ -525,26 +851,37 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
                                 <p className="text-gray-500 font-bold">Translating to all languages...</p>
                             </div>
                         ) : (
-                            <div className="mb-8 space-y-4">
-                                <div className="p-6 bg-[var(--soup-beige)]/30 rounded-2xl">
-                                    <p className="text-sm font-black text-gray-400 uppercase tracking-wider mb-2">
-                                        English (Original)
-                                    </p>
-                                    <p className="text-xl font-bold text-[var(--soup-dark)]">
-                                        {selectedChallenge.challenge_text}
-                                    </p>
-                                </div>
+                            <div className="mb-8 space-y-3">
+                                {/* Show each group individually with exact format */}
+                                {groups.map((group) => {
+                                    const cleanEnglish = selectedChallenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
+                                    const translation = translations[group.language] || cleanEnglish;
 
-                                {Object.entries(translations).map(([language, text]) => (
-                                    <div key={language} className="p-6 bg-white border border-black/5 rounded-2xl">
-                                        <p className="text-sm font-black text-[var(--soup-turquoise)] uppercase tracking-wider mb-2">
-                                            {language}
-                                        </p>
-                                        <p className="text-lg font-bold text-[var(--soup-dark)]">
-                                            {text}
-                                        </p>
-                                    </div>
-                                ))}
+                                    // This is EXACTLY what will be sent
+                                    const exactFormat = group.language.toLowerCase() === 'english'
+                                        ? `#challenge\n${cleanEnglish}`
+                                        : `#challenge\n${cleanEnglish}\n${translation}`;
+
+                                    return (
+                                        <div key={group.id} className="p-4 bg-white border-2 border-black/5 rounded-2xl hover:border-[var(--soup-turquoise)]/30 transition-all">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <p className="text-xs font-black text-[var(--soup-turquoise)] uppercase tracking-wider">
+                                                    {group.name}
+                                                </p>
+                                                <span className="text-xs font-bold text-gray-400">
+                                                    {group.language}
+                                                </span>
+                                            </div>
+
+                                            {/* Show exact format with line breaks visible */}
+                                            <div className="bg-[var(--soup-beige)]/20 rounded-xl p-4 font-mono text-sm">
+                                                <pre className="whitespace-pre-wrap font-bold text-[var(--soup-dark)] leading-relaxed">
+                                                    {exactFormat}
+                                                </pre>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
 
@@ -561,19 +898,19 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
                                 Cancel
                             </button>
                             <button
-                                onClick={approveAndSend}
-                                disabled={sending || translating}
+                                onClick={approveChallenge}
+                                disabled={translating}
                                 className="px-10 py-4 bg-[var(--soup-turquoise)] text-white rounded-[20px] font-black hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[var(--soup-turquoise)]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3"
                             >
-                                {sending ? (
+                                {translating ? (
                                     <>
                                         <Clock size={20} className="animate-spin" />
-                                        Sending...
+                                        Translating...
                                     </>
                                 ) : (
                                     <>
                                         <CheckCircle size={20} />
-                                        Approve & Send to All Groups 🚀
+                                        Approve & Schedule ✅
                                     </>
                                 )}
                             </button>
@@ -584,3 +921,4 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
         </div>
     );
 }
+// force deploy

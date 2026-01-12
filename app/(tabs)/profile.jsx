@@ -79,6 +79,7 @@ export default function ProfileScreen() {
     const [statsTab, setStatsTab] = useState('input'); // 'input' | 'output'
     const [showLevelsInfo, setShowLevelsInfo] = useState(false);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+    const [previewAvatar, setPreviewAvatar] = useState(null); // For optimistic UI updates
     const [selectedSoupId, setSelectedSoupId] = useState(null);
     const [learningExpanded, setLearningExpanded] = useState(false);
     const [fluentExpanded, setFluentExpanded] = useState(false);
@@ -238,15 +239,17 @@ export default function ProfileScreen() {
             console.log('[Profile] Launching image picker...');
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: 'images',
-                allowsEditing: true,
+                allowsEditing: Platform.OS === 'ios', // Only enable crop editor on iOS (Android UI is inconsistent)
                 aspect: [1, 1],
-                quality: 0.8,
+                quality: 0.5, // Reduced quality for faster uploads
             });
 
             console.log('[Profile] Picker result:', { canceled: result.canceled, hasAssets: !!result.assets?.[0] });
             if (!result.canceled && result.assets[0]) {
+                const uri = result.assets[0].uri;
+                setPreviewAvatar(uri); // Show immediately
                 console.log('[Profile] Starting upload...');
-                await uploadAvatar(result.assets[0].uri, true);
+                await uploadAvatar(uri, true);
             }
         } catch (error) {
             console.error('[Profile] Error picking image:', error);
@@ -255,13 +258,26 @@ export default function ProfileScreen() {
     };
 
     const handleSelectSoup = async (soup) => {
-        setSelectedSoupId(soup.id);
-        setShowAvatarPicker(false);
+        try {
+            setUploading(true);
+            setSelectedSoupId(soup.id);
+            // DON'T close modal yet - keep it open so user sees loading spinner
 
-        // Upload soup avatar
-        const asset = Asset.fromModule(soup.source);
-        await asset.downloadAsync();
-        await uploadAvatar(asset.localUri, false);
+            // Upload soup avatar
+            const asset = Asset.fromModule(soup.source);
+            await asset.downloadAsync();
+            setPreviewAvatar(asset.localUri || asset.uri); // Optimistic update
+            await uploadAvatar(asset.localUri, false);
+
+            // Close modal AFTER upload completes
+            setShowAvatarPicker(false);
+        } catch (error) {
+            console.error('Error selecting soup:', error);
+            Alert.alert('Error', 'Failed to select soup avatar');
+            setShowAvatarPicker(false); // Close on error
+        } finally {
+            setUploading(false);
+        }
     };
 
     const uploadAvatar = async (uri, isCustomPhoto = true) => {
@@ -269,23 +285,8 @@ export default function ProfileScreen() {
         try {
             let base64;
 
-            // For soup avatars (asset URIs), use fetch instead of FileSystem on Android
-            if (!isCustomPhoto && Platform.OS === 'android') {
-                const response = await fetch(uri);
-                const blob = await response.blob();
-                const reader = new FileReader();
-                base64 = await new Promise((resolve, reject) => {
-                    reader.onloadend = () => {
-                        const base64data = reader.result.split(',')[1];
-                        resolve(base64data);
-                    };
-                    reader.onerror = reject;
-                    reader.readAsDataURL(blob);
-                });
-            } else {
-                // For custom photos or iOS, use FileSystem
-                base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-            }
+            // Universal upload logic (FileSystem works for both iOS and Android if URI is local)
+            base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
 
             const ext = isCustomPhoto ? 'jpg' : 'png';
             const mimeType = isCustomPhoto ? 'image/jpeg' : 'image/png';
@@ -329,25 +330,9 @@ export default function ProfileScreen() {
     // --- RENDER HELPERS ---
 
     const showAvatarOptions = () => {
-        if (Platform.OS === 'android') {
-            // Android: Use modal picker to show all soup options (Alert.alert limits options)
-            setShowAvatarPicker(true);
-        } else {
-            // iOS: Use Alert.alert
-            Alert.alert(
-                'Choose Avatar',
-                'Select a photo or pick a soup',
-                [
-                    { text: 'Upload Photo', onPress: pickImage },
-                    ...SOUP_AVATARS.map(soup => ({
-                        text: soup.name,
-                        onPress: () => handleSelectSoup(soup)
-                    })),
-                    { text: 'Cancel', style: 'cancel' }
-                ],
-                { cancelable: true }
-            );
-        }
+        // Use modal for both platforms for consistency
+        // Android implementation at lines 1266-1323 already works perfectly
+        setShowAvatarPicker(true);
     };
 
     const renderIdentity = () => (
@@ -378,17 +363,29 @@ export default function ProfileScreen() {
                 </View>
 
                 {/* Center - Profile Photo */}
-                <Pressable onPress={showAvatarOptions} style={styles.heroAvatarContainer}>
-                    {user?.avatar_url ? (
-                        <Image source={{ uri: user.avatar_url }} style={styles.heroAvatar} />
+                <Pressable onPress={showAvatarOptions} style={styles.heroAvatarContainer} disabled={uploading}>
+                    {previewAvatar || user?.avatar_url ? (
+                        <Image
+                            source={{ uri: previewAvatar || user.avatar_url }}
+                            style={[styles.heroAvatar, uploading && { opacity: 0.5 }]}
+                        />
                     ) : (
-                        <View style={styles.heroAvatarPlaceholder}>
+                        <View style={[styles.heroAvatarPlaceholder, uploading && { opacity: 0.5 }]}>
                             <Text style={styles.heroAvatarInitial}>{user?.display_name?.[0]?.toUpperCase() || '?'}</Text>
                         </View>
                     )}
-                    <View style={styles.heroEditBadge}>
-                        <Camera size={16} color="#fff" />
-                    </View>
+                    {uploading && (
+                        <View style={StyleSheet.absoluteFill}>
+                            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 40, justifyContent: 'center', alignItems: 'center' }}>
+                                <ActivityIndicator color="#fff" size="small" />
+                            </View>
+                        </View>
+                    )}
+                    {!uploading && (
+                        <View style={styles.heroEditBadge}>
+                            <Camera size={16} color="#fff" />
+                        </View>
+                    )}
                 </Pressable>
 
                 {/* Right Column - Conversational Languages */}
@@ -1320,15 +1317,22 @@ export default function ProfileScreen() {
                                         key={soup.id}
                                         style={[
                                             styles.soupOption,
-                                            selectedSoupId === soup.id && styles.soupOptionSelected
+                                            selectedSoupId === soup.id && styles.soupOptionSelected,
+                                            uploading && { opacity: 0.5 }
                                         ]}
                                         onPress={() => handleSelectSoup(soup)}
+                                        disabled={uploading}
                                     >
                                         <Image source={soup.source} style={styles.soupImage} resizeMode="contain" />
                                         <Text style={[
                                             styles.soupName,
                                             selectedSoupId === soup.id && styles.soupNameSelected
                                         ]}>{soup.name}</Text>
+                                        {uploading && selectedSoupId === soup.id && (
+                                            <View style={styles.loaderOverlay}>
+                                                <ActivityIndicator color={SOUP_COLORS.blue} size="large" />
+                                            </View>
+                                        )}
                                     </Pressable>
                                 ))}
                             </View>

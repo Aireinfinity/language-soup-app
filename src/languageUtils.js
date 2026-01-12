@@ -65,11 +65,14 @@ export const getGoogleLangCode = (groupLanguage) => {
     if (lang.includes('croatian') || lang.includes('hrvatski')) return 'hr';
     if (lang.includes('serbian') || lang.includes('српски')) return 'sr';
     if (lang.includes('ukrainian') || lang.includes('українська')) return 'uk';
+    if (lang.includes('galician') || lang.includes('galego')) return 'gl';
 
     // Asian languages
     if (lang.includes('russian') || lang.includes('русский')) return 'ru';
     if (lang.includes('japanese') || lang.includes('日本語')) return 'ja';
-    if (lang.includes('chinese') || lang.includes('中文') || lang.includes('mandarin')) return 'zh-CN';
+    if (lang.includes('mandarin')) return 'zh-CN';
+    if (lang.includes('cantonese')) return 'zh-TW'; // Traditional Chinese
+    if (lang.includes('chinese') || lang.includes('中文')) return 'zh-CN';
     if (lang.includes('korean') || lang.includes('한국어')) return 'ko';
     if (lang.includes('indonesian') || lang.includes('bahasa')) return 'id';
     if (lang.includes('turkish') || lang.includes('türkçe')) return 'tr';
@@ -91,5 +94,56 @@ export const getGoogleLangCode = (groupLanguage) => {
     if (lang.includes('persian') || lang.includes('فارسی') || lang.includes('farsi')) return 'fa';
     if (lang.includes('urdu') || lang.includes('اردو')) return 'ur';
 
+    // Smart fallback: Try to extract first word as language code
+    // This handles new languages automatically!
+    // Example: "Swahili #beginner" -> "sw", "Hindi" -> "hi"
+    const firstWord = lang.split(/[\s#]/)[0].trim();
+
+    // Common language name to code mappings for auto-detection
+    const autoDetect = {
+        'bengali': 'bn',
+        'gujarati': 'gu',
+        'kannada': 'kn',
+        'malayalam': 'ml',
+        'marathi': 'mr',
+        'punjabi': 'pa',
+        'tamil': 'ta',
+        'telugu': 'te',
+        'nepali': 'ne',
+        'sinhala': 'si',
+        'khmer': 'km',
+        'lao': 'lo',
+        'burmese': 'my',
+        'amharic': 'am',
+        'hausa': 'ha',
+        'igbo': 'ig',
+        'somali': 'so',
+        'cebuano': 'ceb',
+        'javanese': 'jw',
+        'sundanese': 'su',
+        'uzbek': 'uz',
+        'kazakh': 'kk',
+        'azerbaijani': 'az',
+        'georgian': 'ka',
+        'armenian': 'hy',
+        'albanian': 'sq',
+        'macedonian': 'mk',
+        'icelandic': 'is',
+        'welsh': 'cy',
+        'irish': 'ga',
+        'scots': 'gd',
+        'basque': 'eu',
+        'catalan': 'ca',
+        'corsican': 'co',
+        'maltese': 'mt'
+    };
+
+    if (autoDetect[firstWord]) {
+        console.log(`🔍 Auto-detected language code for "${groupLanguage}": ${autoDetect[firstWord]}`);
+        return autoDetect[firstWord];
+    }
+
+    console.warn(`⚠️ No Google Translate code found for language: "${groupLanguage}"`);
     return null;
 };
+

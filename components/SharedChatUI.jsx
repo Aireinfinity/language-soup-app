@@ -244,6 +244,17 @@ export function SharedChatUI({
         }
     }, [editingMessage, replyTo]);
 
+    // Android Keyboard Handling: specific listener for when keyboard is fully shown
+    useEffect(() => {
+        if (Platform.OS === 'android') {
+            const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+                // Scroll to bottom immediately without animation to reduce perceived lag
+                listRef.current?.scrollToOffset({ offset: 0, animated: false });
+            });
+            return () => showSubscription.remove();
+        }
+    }, []);
+
     const handlePickImage = async () => {
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
@@ -324,9 +335,9 @@ export function SharedChatUI({
 
     return (
         <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
             style={{ flex: 1 }}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         >
             {/* Custom Header */}
             {headerComponent}
@@ -415,6 +426,9 @@ export function SharedChatUI({
                             placeholderTextColor={Colors.textLight}
                             multiline
                             maxLength={500}
+                            onFocus={() => {
+                                // Default focus handler
+                            }}
                         />
                         {textInput.trim() ? (
                             <Pressable onPress={handleSendWrapper} disabled={sending} style={ChatStyles.sendButton}>

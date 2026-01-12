@@ -1,36 +1,71 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
-import { BarChart3, Users, MessageSquare, LifeBuoy, LogOut, Search, Zap, Megaphone, TrendingUp, Activity, MessageCircle, Layers, Menu, X, Share2 } from 'lucide-react';
+import { BarChart3, Users, MessageSquare, LifeBuoy, LogOut, Search, Zap, Megaphone, TrendingUp, Activity, MessageCircle, Layers, Menu, X, Target, DollarSign, Share2 } from 'lucide-react';
 import ChallengesTab from './ChallengesTab';
 import AnnouncementsTab from './AnnouncementsTab';
 import MarketingTab from './MarketingTab';
 import GrowthCharts from './GrowthCharts';
 import SupportInbox from './SupportInbox';
 import SupportTabSimplified from './SupportTabSimplified';
+import GoalsTab from './GoalsTab';
+import FinancesTab from './FinancesTab';
 import WeeklyUpdateTab from './WeeklyUpdateTab';
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Initialize activeTab from URL or localStorage
   const [activeTab, setActiveTab] = useState(() => {
-    // Restore last active tab from localStorage, default to 'overview'
+    const params = new URLSearchParams(window.location.search);
+    const urlTab = params.get('tab');
+    if (urlTab) return urlTab;
     return localStorage.getItem('dashboardActiveTab') || 'overview';
   });
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Save active tab to localStorage whenever it changes
+  // Sync URL when activeTab changes
   useEffect(() => {
     localStorage.setItem('dashboardActiveTab', activeTab);
+
+    // Update URL
+    const url = new URL(window.location);
+    const currentTab = url.searchParams.get('tab');
+
+    // Only update if changed to avoid overwriting view params unnecessarily on mount
+    if (currentTab !== activeTab) {
+      url.searchParams.set('tab', activeTab);
+      url.searchParams.delete('view'); // Reset sub-view when switching main tabs
+      window.history.pushState({}, '', url);
+    }
   }, [activeTab]);
+
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Auth
   const [name, setName] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
   const [authError, setAuthError] = useState('');
 
+  // Notification Badges
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
+
   useEffect(() => {
     checkUser();
+    loadNotificationCounts();
   }, []);
+
+  const loadNotificationCounts = async () => {
+    try {
+      // Pending Language Requests
+      const { count } = await supabase
+        .from('app_language_requests')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending');
+
+      setPendingRequestsCount(count || 0);
+    } catch (err) {
+      console.error('Error loading notifications:', err);
+    }
+  };
 
   const checkUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -226,12 +261,14 @@ export default function App() {
         <nav className="flex-1 px-4 space-y-1 mt-2">
           {[
             { id: 'overview', label: 'Overview', icon: TrendingUp },
+            { id: 'goals', label: '2026 Goals', icon: Target },
+            { id: 'finances', label: 'Finances', icon: DollarSign },
             { id: 'users', label: 'Users', icon: Users },
             { id: 'challenges', label: 'Challenges', icon: Megaphone },
             { id: 'support', label: 'Support', icon: LifeBuoy },
-            { id: 'groups', label: 'Groups', icon: Users },
+            { id: 'groups', label: 'Groups', icon: Users, badge: pendingRequestsCount },
             { id: 'announcements', label: 'Announcements', icon: MessageSquare },
-            { id: 'weekly', label: 'Weekly Update', icon: Share2 },
+            { id: 'weekly', label: 'Weekly Update 🍜', icon: Share2 },
             { id: 'marketing', label: 'Marketing', icon: Zap },
           ].map((item) => (
             <button
@@ -240,13 +277,23 @@ export default function App() {
                 setActiveTab(item.id);
                 setMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${activeTab === item.id
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-bold transition-all ${activeTab === item.id
                 ? 'bg-[var(--soup-turquoise)] text-white shadow-md'
                 : 'text-gray-500 hover:bg-gray-50 hover:text-[var(--soup-turquoise)]'
                 }`}
             >
-              <item.icon size={20} />
-              <span className="text-sm">{item.label}</span>
+              <div className="flex items-center gap-3">
+                <item.icon size={20} />
+                <span className="text-sm">{item.label}</span>
+              </div>
+              {item.badge > 0 && (
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${activeTab === item.id
+                  ? 'bg-white text-[var(--soup-turquoise)]'
+                  : 'bg-red-500 text-white'
+                  }`}>
+                  {item.badge}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -291,6 +338,8 @@ export default function App() {
           )}
 
           {activeTab === 'users' && <UsersTab />}
+          {activeTab === 'goals' && <GoalsTab />}
+          {activeTab === 'finances' && <FinancesTab />}
           {activeTab === 'challenges' && <ChallengesTab user={user} />}
           {activeTab === 'groups' && <GroupsTab />}
           {activeTab === 'announcements' && <AnnouncementsTab />}
@@ -321,7 +370,13 @@ function UsersTab() {
 
       if (error) throw error;
 
-      setUsers(data || []);
+      // Filter out test users (noah, bots, system)
+      const filteredData = (data || []).filter(u => {
+        const name = (u.display_name || '').toLowerCase();
+        return !name.includes('noah') && !name.includes('bot') && !name.includes('system');
+      });
+
+      setUsers(filteredData);
     } catch (err) {
       console.error('Error loading users:', err);
     } finally {
@@ -537,9 +592,17 @@ function OverviewTab() {
 
   const loadStats = async () => {
     try {
-      const { count: usersCount } = await supabase
+      // Exclude test users: noah, bots, system accounts
+      const { data: allUsers } = await supabase
         .from('app_users')
-        .select('*', { count: 'exact', head: true });
+        .select('id, display_name');
+
+      const realUsers = allUsers?.filter(u => {
+        const name = (u.display_name || '').toLowerCase();
+        return !name.includes('noah') && !name.includes('bot') && !name.includes('system');
+      }) || [];
+
+      const usersCount = realUsers.length;
 
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -1020,14 +1083,24 @@ function GroupsTab() {
 
 // Support Tab - Trello-style Ticket Board
 function SupportTab() {
-  const [activeView, setActiveView] = useState('tickets'); // 'tickets' or 'inbox'
+  const [activeView, setActiveView] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('view') || 'tickets';
+  });
+
+  const handleViewChange = (newView) => {
+    setActiveView(newView);
+    const url = new URL(window.location);
+    url.searchParams.set('view', newView);
+    window.history.pushState({}, '', url);
+  };
 
   return (
     <div className="animate-in fade-in duration-500">
       {/* Tab Switcher */}
       <div className="mb-6 flex items-center gap-4 bg-white p-2 rounded-2xl border border-black/5 shadow-sm w-fit">
         <button
-          onClick={() => setActiveView('tickets')}
+          onClick={() => handleViewChange('tickets')}
           className={`px-6 py-3 rounded-xl font-bold transition-all ${activeView === 'tickets'
             ? 'bg-[var(--soup-turquoise)] text-white shadow-md'
             : 'text-gray-500 hover:text-[var(--soup-turquoise)]'
@@ -1036,7 +1109,7 @@ function SupportTab() {
           🎫 Tickets
         </button>
         <button
-          onClick={() => setActiveView('inbox')}
+          onClick={() => handleViewChange('inbox')}
           className={`px-6 py-3 rounded-xl font-bold transition-all ${activeView === 'inbox'
             ? 'bg-[var(--soup-turquoise)] text-white shadow-md'
             : 'text-gray-500 hover:text-[var(--soup-turquoise)]'

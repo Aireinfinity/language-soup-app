@@ -4,7 +4,7 @@ import Animated, { FadeIn, SlideInDown, SlideOutDown } from 'react-native-reanim
 import { Play, Pause, X } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudioPlayer } from '../contexts/AudioPlayerContext';
-import Slider from '@react-native-community/slider';
+// import Slider from '@react-native-community/slider';
 import * as Haptics from 'expo-haptics';
 
 const SOUP_COLORS = {
@@ -158,7 +158,7 @@ export function MiniAudioPlayer() {
                 </View>
 
                 {/* Progress Bar - Bottom Edge */}
-                <Slider
+                {/* <Slider
                     style={styles.slider}
                     minimumValue={0}
                     maximumValue={duration || 1}
@@ -168,7 +168,7 @@ export function MiniAudioPlayer() {
                     minimumTrackTintColor={SOUP_COLORS.pink}
                     maximumTrackTintColor="rgba(0,0,0,0.08)"
                     thumbTintColor="transparent" // Invisible thumb
-                />
+                /> */}
             </View>
         </Animated.View>
     );

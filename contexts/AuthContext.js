@@ -1,3 +1,4 @@
+import { View, Text } from 'react-native';
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
@@ -23,7 +24,9 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         // Check active sessions and subscribe to auth changes
+        console.log('[AuthContext] Checking session...');
         supabase.auth.getSession().then(({ data: { session } }) => {
+            console.log('[AuthContext] Session retrieved:', session ? 'Found User' : 'No User');
             setSession(session);
             setUser(session?.user ?? null);
             setLoading(false);
