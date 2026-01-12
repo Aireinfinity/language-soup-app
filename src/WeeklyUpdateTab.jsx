@@ -157,17 +157,16 @@ export default function WeeklyUpdateTab() {
 
     const generateMessage = () => {
         const weekNum = Math.ceil((new Date().getDate()) / 7);
-        return `🍜 *Weekly Soup Update (Week ${weekNum})* 🍜\n\n` +
-            `👋 *Community Size:* We are now ${stats.totalUsers} Soupers strong!\n` +
-            `(${stats.humanSoups} Humans 🧑‍🍳 + ${stats.soupAvatars} Avatars 🍅)\n\n` +
-            `💬 *Activity:* ${stats.totalMessages} messages sent this week.\n` +
-            `${stats.voicePercent}% of them were Voice Notes! 🎤\n\n` +
-            `🌍 *Top Languages:*\n` +
+        return `soup update: week ${weekNum} 🥣\n\n` +
+            `we are now ${stats.totalUsers} soupers strong! 👋🏾\n` +
+            `(${stats.humanSoups} humans 🧑🏾‍🍳 + ${stats.soupAvatars} avatars 🥣)\n\n` +
+            `activity: ${stats.totalMessages} messages this week. ${stats.voicePercent}% were voice notes! 🎤\n\n` +
+            `🌍 top languages:\n` +
             stats.topLanguages.map(([l, c]) => `• ${languageFlags[l] || '🌐'} ${l.split(' ')[0]}: ${c}`).join('\n') +
-            (stats.newGroups.length > 0 ? `\n\n✨ *New Groups:* ${stats.newGroups.map(g => `${g.name}`).join(', ')}` : '') +
-            `\n\n🏆 *Top Chatters:*\n` +
+            (stats.newGroups.length > 0 ? `\n\n✨ new groups: ${stats.newGroups.map(g => `${g.name}`).join(', ')}` : '') +
+            `\n\n🏆 top chatters:\n` +
             stats.topChatters.map((c, i) => `${i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'} ${c.name}`).join('\n') +
-            `\n\n🚀 Invite your friends! We are ${stats.progressTo1000}% of the way to 1,000 Soupers!`;
+            `\n\ninvite ur friends! we are ${stats.progressTo1000}% of the way to 1,000 soupers. 🚀`;
     };
 
     const copyToClipboard = () => {
@@ -197,21 +196,21 @@ export default function WeeklyUpdateTab() {
             {/* Header */}
             <div className="flex justify-between items-center">
                 <div>
-                    <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-3">
-                        🍜 Weekly Update
+                    <h1 className="text-3xl font-black text-gray-900 tracking-tight flex items-center gap-3 lowercase">
+                        🥣 weekly update
                         <span className="text-sm font-bold text-gray-400 bg-gray-100 px-3 py-1 rounded-full text-center">
-                            Week {Math.ceil((new Date().getDate()) / 7)}
+                            week {Math.ceil((new Date().getDate()) / 7)}
                         </span>
                     </h1>
-                    <p className="text-gray-500 mt-1">Ready to update the community?</p>
+                    <p className="text-gray-500 mt-1 font-bold">ready to update the community?</p>
                 </div>
                 <div className="flex gap-2">
                     <button
                         onClick={handleBroadcast}
-                        className="flex items-center gap-2 px-6 py-3 bg-[var(--soup-turquoise)] text-white rounded-2xl font-black hover:scale-105 transition-all shadow-lg shadow-[var(--soup-turquoise)]/20"
+                        className="flex items-center gap-2 px-6 py-3 bg-[var(--soup-turquoise)] text-white rounded-2xl font-black hover:scale-105 transition-all shadow-lg shadow-[var(--soup-turquoise)]/20 uppercase text-xs tracking-widest"
                     >
                         <Mic size={18} />
-                        Blast to App 🚀
+                        blast to app 🚀
                     </button>
                 </div>
             </div>
@@ -220,13 +219,13 @@ export default function WeeklyUpdateTab() {
             <div className="bg-white rounded-[32px] p-8 border border-black/5 shadow-sm space-y-6">
                 <div className="flex items-center justify-between">
                     <h2 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                        <Share2 size={14} className="text-[var(--soup-turquoise)]" /> Community Message
+                        <Share2 size={14} className="text-[var(--soup-turquoise)]" /> community message
                     </h2>
                     <button
                         onClick={copyToClipboard}
                         className="text-xs font-black text-[var(--soup-turquoise)] bg-[var(--soup-turquoise)]/10 px-4 py-2 rounded-xl border border-[var(--soup-turquoise)]/20 hover:bg-[var(--soup-turquoise)]/20 transition-all flex items-center gap-2"
                     >
-                        <TrendingUp size={14} /> Copy for WhatsApp/Discord
+                        <TrendingUp size={14} /> copy for whatsapp/discord
                     </button>
                 </div>
 
