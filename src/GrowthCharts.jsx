@@ -78,7 +78,7 @@ export default function GrowthCharts() {
 
     // Soft Launch Configuration
     // Soft Launch Configuration
-    const LAUNCH_DATE = '2026-01-04'; // Week 1 Start
+    const LAUNCH_DATE = '2026-01-03'; // Official Launch Date
 
     // Helper: Get Date Key (YYYY-MM-DD)
     const getDateKey = (date) => {
@@ -206,8 +206,8 @@ export default function GrowthCharts() {
                     title="Daily Active Users"
                     value={metrics.summary.activeUsers}
                     data={metrics.dau || []}
-                    type="area"
-                    color="blue"
+                    type="bar" // Changed to bar for cleaner DAU look
+                    color="turquoise"
                     icon={Users}
                 />
                 <MetricCard
@@ -215,7 +215,7 @@ export default function GrowthCharts() {
                     value={metrics.summary.retentionRate + '%'}
                     data={metrics.retention || []}
                     type="line"
-                    color="indigo"
+                    color="dark"
                     icon={Activity}
                     subtitle="Daily Return Rate"
                 />
@@ -224,7 +224,7 @@ export default function GrowthCharts() {
                     value={metrics.summary.viralShares}
                     data={metrics.shares}
                     type="bar"
-                    color="emerald"
+                    color="turquoise"
                     icon={Share2}
                 />
             </div>
@@ -241,13 +241,13 @@ export default function GrowthCharts() {
                                 {sharer.avatar ? (
                                     <img src={sharer.avatar} className="w-8 h-8 rounded-full object-cover" alt="" />
                                 ) : (
-                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-blue-500 flex items-center justify-center text-white text-xs font-bold">
+                                    <div className="w-8 h-8 rounded-full bg-[var(--soup-turquoise)] flex items-center justify-center text-white text-xs font-bold">
                                         {sharer.name.charAt(0)}
                                     </div>
                                 )}
                                 <div>
                                     <div className="text-xs font-bold text-[var(--soup-dark)] truncate max-w-[100px]">{sharer.name}</div>
-                                    <div className="text-[10px] font-bold text-green-500">{sharer.count} shares</div>
+                                    <div className="text-[10px] font-bold text-[var(--soup-turquoise)]">{sharer.count} shares</div>
                                 </div>
                             </div>
                         ))}
@@ -263,79 +263,96 @@ function MetricCard({ title, value, data, type, color, icon: Icon, subtitle }) {
     const maxValue = Math.max(...data.map(d => d.value), 1);
 
     const colors = {
-        blue: { text: 'text-blue-600', bg: 'bg-blue-500', light: 'bg-blue-50' },
-        indigo: { text: 'text-indigo-600', bg: 'bg-indigo-500', light: 'bg-indigo-50' },
-        emerald: { text: 'text-emerald-600', bg: 'bg-emerald-500', light: 'bg-emerald-50' },
+        turquoise: {
+            text: 'text-[var(--soup-turquoise)]',
+            bg: 'bg-[var(--soup-turquoise)]',
+            light: 'bg-[var(--soup-turquoise)]/10',
+            stroke: 'var(--soup-turquoise)'
+        },
+        dark: {
+            text: 'text-[var(--soup-dark)]',
+            bg: 'bg-[var(--soup-dark)]',
+            light: 'bg-[var(--soup-dark)]/5',
+            stroke: 'var(--soup-dark)'
+        },
+        emerald: { text: 'text-emerald-600', bg: 'bg-emerald-500', light: 'bg-emerald-50', stroke: '#10b981' },
     };
-    const c = colors[color];
+    const c = colors[color] || colors.turquoise;
 
     return (
-        <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-shadow relative group">
+        <div className="bg-white rounded-[32px] border border-black/5 p-6 shadow-sm hover:shadow-lg transition-all relative group overflow-hidden">
             {/* Header */}
             <div className="flex justify-between items-start mb-6 z-10 relative">
                 <div>
-                    <div className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-1">{title}</div>
-                    <div className="text-3xl font-bold text-gray-900 tracking-tight">{value}</div>
-                    {subtitle && <div className="text-xs text-gray-400 mt-1">{subtitle}</div>}
+                    <div className="text-gray-400 text-[10px] font-black uppercase tracking-[0.2em] mb-1">{title}</div>
+                    <div className={`text-4xl font-black ${c.text} tracking-tighter`}>{value}</div>
+                    {subtitle && <div className="text-[10px] text-gray-400 font-bold mt-1 italic">{subtitle}</div>}
                 </div>
-                <div className={`p-2 rounded-lg ${c.light} ${c.text}`}>
-                    <Icon size={18} />
+                <div className={`p-2.5 rounded-2xl ${c.light} ${c.text}`}>
+                    <Icon size={20} />
                 </div>
             </div>
 
             {/* Chart Area */}
-            <div className="h-16 flex items-end gap-1 mt-auto">
+            <div className="h-20 flex items-end gap-1.5 mt-auto relative px-1">
                 {isZero ? (
-                    <div className="w-full text-center text-xs text-gray-300 italic self-center">No data yet</div>
+                    <div className="w-full text-center text-xs text-gray-300 font-bold italic self-center">No data yet 🥣</div>
                 ) : (
-                    data.map((d, i) => (
-                        <div key={i} className="relative flex-1 flex flex-col items-center gap-1 group/bar h-full">
-                            <div className="relative w-full flex items-end h-full">
-                                {/* Bar or Area Chart */}
-                                {(type === 'bar' || type === 'area') && (
-                                    <div
-                                        className={`w-full ${c.bg} rounded-sm opacity-80 group-hover/bar:opacity-100 transition-all ${type === 'area' ? 'rounded-t-md' : ''}`}
-                                        style={{ height: `${(d.value / maxValue) * 100}%` }}
-                                    ></div>
-                                )}
-                                {/* Line Chart (Simplified as dots connected visually) */}
-                                {type === 'line' && (
-                                    <div
-                                        className={`w-2 h-2 rounded-full ${c.bg} mx-auto absolute bottom-0 left-0 right-0 transition-all`}
-                                        style={{ bottom: `${(d.value / maxValue) * 100}%` }}
-                                    >
-                                        <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full ${c.bg} blur-sm opacity-50`}></div>
-                                    </div>
-                                )}
+                    <>
+                        {/* Bars / Dots */}
+                        {data.map((d, i) => (
+                            <div key={i} className="relative flex-1 flex flex-col items-center gap-1 group/bar h-full">
+                                <div className="relative w-full flex items-end h-full justify-center">
+                                    {(type === 'bar' || type === 'area') && (
+                                        <div
+                                            className={`w-full ${c.bg} rounded-t-lg opacity-80 group-hover/bar:opacity-100 transition-all shadow-sm`}
+                                            style={{ height: `${(d.value / maxValue) * 100}%` }}
+                                        />
+                                    )}
+                                    {type === 'line' && (
+                                        <div
+                                            className={`w-3 h-3 rounded-full ${c.bg} border-2 border-white shadow-xl z-20 transition-all group-hover/bar:scale-125`}
+                                            style={{ marginBottom: `calc(${(d.value / maxValue) * 100}% - 6px)` }}
+                                        />
+                                    )}
+                                </div>
+                                {/* Tooltip */}
+                                <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 bg-[var(--soup-dark)] text-white text-[10px] font-black px-2.5 py-1.5 rounded-xl opacity-0 group-hover/bar:opacity-100 pointer-events-none transition-all scale-75 group-hover/bar:scale-100 whitespace-nowrap z-50 shadow-2xl">
+                                    {d.label}: {d.value}{type === 'line' ? '%' : ''}
+                                </div>
                             </div>
-                            {/* Tooltip */}
-                            <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover/bar:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-20">
-                                {d.label}: {d.value}{type === 'line' ? '%' : ''}
-                            </div>
-                        </div>
-                    ))
+                        ))}
+
+                        {/* Line Chart Connector Line */}
+                        {type === 'line' && (
+                            <svg
+                                className="absolute inset-x-0 bottom-0 h-full w-full pointer-events-none z-10"
+                                viewBox="0 0 100 100"
+                                preserveAspectRatio="none"
+                            >
+                                <polyline
+                                    points={data.map((d, i) => {
+                                        const x = (i / (data.length - 1)) * 100;
+                                        const y = 100 - (d.value / maxValue) * 100;
+                                        return `${x},${y}`;
+                                    }).join(' ')}
+                                    fill="none"
+                                    stroke={c.stroke}
+                                    strokeWidth="4"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    className="opacity-20"
+                                />
+                            </svg>
+                        )}
+                    </>
                 )}
             </div>
-            {/* Line Chart Connector Line (Visual decoration) */}
-            {/* Line Chart Connector Line (Visual decoration) */}
-            {type === 'line' && !isZero && (
-                <svg className="absolute bottom-6 left-6 right-6 h-16 w-[calc(100%-3rem)] pointer-events-none opacity-50" preserveAspectRatio="none">
-                    <polyline
-                        points={data.map((d, i) => `${(i / (data.length - 1)) * 100},${100 - (d.value / maxValue) * 100}`).join(' ')}
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="3"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className={c.text}
-                    />
-                </svg>
-            )}
 
             {/* Date range footer */}
-            <div className="flex items-center justify-between text-xs text-gray-400 font-medium pt-3 border-t border-gray-100 mt-4">
-                <span>{data[0]?.label}</span>
-                <span>{data[data.length - 1]?.label}</span>
+            <div className="flex items-center justify-between text-[10px] text-gray-400 font-black pt-4 border-t border-black/5 mt-4">
+                <span className="uppercase tracking-widest">{data[0]?.label}</span>
+                <span className="uppercase tracking-widest">{data[data.length - 1]?.label}</span>
             </div>
         </div>
     );
