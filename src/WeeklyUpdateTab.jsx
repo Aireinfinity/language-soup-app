@@ -39,8 +39,11 @@ export default function WeeklyUpdateTab() {
                 .from('app_users')
                 .select('display_name, avatar_url, learning_languages');
 
-            const testPatterns = /noah|test|bot|delete|system|guest/i;
-            const realUsers = allUsers?.filter(u => !testPatterns.test(u.display_name || '')) || [];
+            // Filter matches GoalsTab.jsx logic exactly
+            const realUsers = allUsers?.filter(u => {
+                const name = (u.display_name || '').toLowerCase();
+                return !name.includes('noah') && !name.includes('bot') && !name.includes('system');
+            }) || [];
 
             // Count avatar types
             const humanSoups = realUsers.filter(u =>
@@ -105,7 +108,10 @@ export default function WeeklyUpdateTab() {
             const topChatters = topSenderIds.map(s => ({
                 ...s,
                 name: topChatterUsers?.find(u => u.id === s.id)?.display_name || 'Unknown'
-            })).filter(c => !testPatterns.test(c.name));
+            })).filter(c => {
+                const name = (c.name || '').toLowerCase();
+                return !name.includes('noah') && !name.includes('bot') && !name.includes('system');
+            });
 
             setStats({
                 totalUsers: realUsers.length,
