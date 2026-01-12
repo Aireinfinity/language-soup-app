@@ -369,37 +369,44 @@ export default function App() {
 
           {/* 🍳 The Kitchen: Engagement & Content */}
           {activeTab === 'kitchen' && (
-            <div className="space-y-8 animate-in fade-in duration-500">
+            <div className="space-y-12 animate-in fade-in duration-500">
               <div className="mb-10">
                 <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">the kitchen 🍳</h1>
                 <p className="text-gray-500 font-bold mt-1">cook up some community vibe.</p>
               </div>
 
-              {/* Top Center Hub: Broadcasts & Groups */}
+              {/* 1. Top Hub: Broadcasts */}
               <div className="bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm">
                 <PillarSubNav
                   options={[
                     { id: 'challenges', label: 'challenges' },
-                    { id: 'announcements', label: 'announcements' },
-                    { id: 'groups', label: 'groups' }
+                    { id: 'announcements', label: 'announcements' }
                   ]}
                   activeId={kitchenSubTab || 'challenges'}
-                  onChange={setKitchenSubTab}
+                  onChange={(id) => setKitchenSubTab(id)}
                 />
                 <div className="p-8">
-                  {(kitchenSubTab === 'challenges' || !kitchenSubTab) && <ChallengesTab user={user} />}
+                  {(kitchenSubTab === 'challenges' || !kitchenSubTab || kitchenSubTab === 'groups') && <ChallengesTab user={user} />}
                   {kitchenSubTab === 'announcements' && <AnnouncementsTab />}
-                  {kitchenSubTab === 'groups' && <GroupsTab />}
                 </div>
               </div>
 
-              {/* Bottom: Weekly Update Tool */}
+              {/* 2. Middle: Weekly Update Tool */}
               <div className="pt-12 border-t border-black/5">
                 <h3 className="text-2xl font-black text-[var(--soup-dark)] mb-6 flex items-center gap-2">
                   <Share2 className="text-[var(--soup-turquoise)]" size={24} />
                   weekly community update
                 </h3>
                 <WeeklyUpdateTab />
+              </div>
+
+              {/* 3. Bottom: Groups Hub */}
+              <div className="pt-12 border-t border-black/5">
+                <h3 className="text-2xl font-black text-[var(--soup-dark)] mb-6 flex items-center gap-2">
+                  <Users className="text-[var(--soup-pink)]" size={24} />
+                  groups management
+                </h3>
+                <GroupsTab />
               </div>
             </div>
           )}
