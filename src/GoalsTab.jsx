@@ -119,7 +119,7 @@ export default function GoalsTab() {
     const goals = [
         {
             quarter: 'Q1',
-            title: 'Stable Launch',
+            title: 'Stable App Launch',
             metric: 'Week 1 Retention',
             current: metrics.day7Retention,
             target: 30,
@@ -130,7 +130,7 @@ export default function GoalsTab() {
         },
         {
             quarter: 'Q2',
-            title: 'Hard GTM to 1k',
+            title: 'Hard GTM (To 1,000)',
             metric: 'Total Users',
             current: metrics.totalUsers,
             target: 1000,
@@ -152,10 +152,10 @@ export default function GoalsTab() {
         },
         {
             quarter: 'Q4',
-            title: 'Year Closeout',
-            metric: 'Active Soupers', // WAU proxy
+            title: 'Ramp Down & Closeout',
+            metric: 'Active Soupers',
             current: metrics.activeSoupers || 0,
-            target: 50, // A good target for a small community
+            target: 50,
             unit: '',
             icon: Target,
             color: 'bg-indigo-500',
