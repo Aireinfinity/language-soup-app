@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Image, Modal, Pressable, ScrollView, ActivityIndicator, Dimensions, TouchableWithoutFeedback } from 'react-native';
+import { getAvatarSource } from '../utils/soupUtils';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -93,7 +94,7 @@ export function ReactionViewerModal({ visible, reactions, users, onClose }) {
                                                 <View style={styles.avatarContainer}>
                                                     {user.avatar_url ? (
                                                         <Image
-                                                            source={{ uri: user.avatar_url }}
+                                                            source={getAvatarSource(user.avatar_url)}
                                                             style={styles.avatar}
                                                         />
                                                     ) : (

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { getAvatarSource } from '../utils/soupUtils';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -50,7 +51,7 @@ export function ReactionDetailsPopup({ visible, reactions, userMap = {}, isMe })
                                 >
                                     {avatarUrl ? (
                                         <Image
-                                            source={{ uri: avatarUrl }}
+                                            source={getAvatarSource(avatarUrl)}
                                             style={styles.avatar}
                                         />
                                     ) : (

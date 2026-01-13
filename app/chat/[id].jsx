@@ -23,6 +23,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { haptics } from '../../utils/haptics';
 import { useQuests } from '../../contexts/QuestContext';
+import { getAvatarSource } from '../../utils/soupUtils';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -366,7 +367,7 @@ export default function ChatScreen() {
             <View style={styles.typingIndicator}>
                 <View style={styles.typingAvatarContainer}>
                     {firstUser.avatar_url ? (
-                        <Image source={{ uri: firstUser.avatar_url }} style={styles.typingAvatar} />
+                        <Image source={getAvatarSource(firstUser.avatar_url)} style={styles.typingAvatar} />
                     ) : (
                         <View style={[styles.typingAvatar, styles.avatarPlaceholder]}>
                             <Text style={styles.avatarText}>{firstUser.display_name?.charAt(0).toUpperCase() || '?'}</Text>

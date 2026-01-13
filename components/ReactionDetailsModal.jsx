@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, Pressable, Image, ScrollView } from 'rea
 import Animated, { SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { X } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import { getAvatarSource } from '../utils/soupUtils';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -66,7 +67,7 @@ export function ReactionDetailsModal({ visible, onClose, reactions, userMap = {}
                                             <View key={reaction.id || index} style={styles.avatarContainer}>
                                                 {avatarUrl ? (
                                                     <Image
-                                                        source={{ uri: avatarUrl }}
+                                                        source={getAvatarSource(avatarUrl)}
                                                         style={styles.avatar}
                                                     />
                                                 ) : (

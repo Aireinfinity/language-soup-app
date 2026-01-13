@@ -10,6 +10,7 @@ import { Share2 } from 'lucide-react-native';
 
 import { getLanguageFlag } from '../utils/languageFlags';
 import { ReactionPicker } from './ReactionPicker';
+import { getAvatarSource } from '../utils/soupUtils';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -150,7 +151,7 @@ export function MessageBubble({
 
     const avatarElement = sender && !isMe && avatarUrl ? (
         <Pressable onPress={() => onAvatarPress && onAvatarPress(sender)}>
-            <Image source={{ uri: avatarUrl }} style={ChatStyles.avatar} />
+            <Image source={getAvatarSource(avatarUrl)} style={ChatStyles.avatar} />
         </Pressable>
     ) : null;
 

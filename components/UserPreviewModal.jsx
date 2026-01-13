@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Image, Pressable, Modal, Alert } from 'react-native';
 import { X } from 'lucide-react-native';
 import { getLanguageFlag } from '../utils/languageFlags';
+import { getAvatarSource } from '../utils/soupUtils';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -42,7 +43,7 @@ export function UserPreviewModal({ visible, user, onClose }) {
                     <View style={styles.avatarContainer}>
                         {user.avatar_url ? (
                             <Image
-                                source={{ uri: user.avatar_url }}
+                                source={getAvatarSource(user.avatar_url)}
                                 style={styles.avatar}
                             />
                         ) : (

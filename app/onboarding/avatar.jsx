@@ -5,12 +5,13 @@ import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Camera } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import { Asset } from 'expo-asset';
 import { decode } from 'base64-arraybuffer';
 import { Colors } from '../../constants/Colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { getAvatarSource } from '../../utils/soupUtils';
 
 // Import delicious soups
 const SOUP_AVATARS = [
@@ -42,9 +43,9 @@ export default function AvatarScreen() {
 
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: 'images',
-                allowsEditing: Platform.OS === 'ios', // Only enable crop editor on iOS (Android UI is inconsistent)
+                allowsEditing: Platform.OS === 'ios',
                 aspect: [1, 1],
-                quality: 0.5, // Reduced quality for faster uploads
+                quality: 0.3, // "Tiny Packet": Highly compressed to ensure safe transfer
             });
 
             if (!result.canceled && result.assets[0]) {
@@ -76,78 +77,66 @@ export default function AvatarScreen() {
     };
 
     const processUpload = async () => {
-        if (!avatarUri) return;
+        // If Custom Photo: Must have URI
+        // If Soup: Must have ID
+        if (isCustomPhoto && !avatarUri) return;
+        if (!isCustomPhoto && !selectedSoupId) return;
 
         setUploading(true);
         try {
-            let base64;
-            let mimeType;
+            // STRATEGY: META-SOUP (No Upload) 🍜
+            // If it's a soup, we just save the ID protocol "soup://id"
+            // If it's a photo, we use "Tiny Packet" (Base64)
 
-            if (isCustomPhoto) {
-                // Read from local file system
-                // Use fetch for reliable base64 conversion on iOS 18
-                const response = await fetch(avatarUri);
-                const blob = await response.blob();
-                const reader = new FileReader();
-                base64 = await new Promise((resolve, reject) => {
-                    reader.onloadend = () => {
-                        const base64data = reader.result.split(',')[1];
-                        resolve(base64data);
-                    };
-                    reader.onerror = reject;
-                    reader.readAsDataURL(blob);
-                });
-                mimeType = 'image/jpeg';
+            let finalAvatarUrl = null;
+
+            if (!isCustomPhoto && selectedSoupId) {
+                // 1. INSTANT SOUP (No Network Upload)
+                console.log(`[Avatar] Instant Soup Strategy: soup://${selectedSoupId}`);
+                finalAvatarUrl = `soup://${selectedSoupId}`;
+
             } else {
-                // Handle soup avatars
-                const selectedSoup = SOUP_AVATARS.find(s => s.id === selectedSoupId);
-                const asset = Asset.fromModule(selectedSoup.source);
-                await asset.downloadAsync();
-
-                // Unified stable approach for both platforms
-                const response = await fetch(asset.localUri || asset.uri);
-                const blob = await response.blob();
-                const reader = new FileReader();
-                base64 = await new Promise((resolve, reject) => {
-                    reader.onloadend = () => {
-                        const base64data = reader.result.split(',')[1];
-                        resolve(base64data);
-                    };
-                    reader.onerror = reject;
-                    reader.readAsDataURL(blob);
+                // 2. TINY PACKET (Photo)
+                const uriToRead = avatarUri;
+                const base64 = await FileSystem.readAsStringAsync(uriToRead, {
+                    encoding: FileSystem.EncodingType.Base64,
                 });
 
-                mimeType = 'image/png';
+                const isJpeg = uriToRead.toLowerCase().endsWith('.jpg') || uriToRead.toLowerCase().endsWith('.jpeg');
+                const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
+                const ext = isJpeg ? 'jpg' : 'png';
+                const filePath = `${user.id}/avatar_${Date.now()}.${ext}`;
+
+                console.log(`[Avatar] Uploading Tiny Packet (${base64.length / 1024} KB)...`);
+
+                const { error: uploadError } = await supabase.storage
+                    .from('avatars')
+                    .upload(filePath, decode(base64), {
+                        contentType: mimeType,
+                        upsert: true,
+                    });
+
+                if (uploadError) throw uploadError;
+
+                const { data: { publicUrl } } = supabase.storage
+                    .from('avatars')
+                    .getPublicUrl(filePath);
+
+                finalAvatarUrl = publicUrl;
             }
 
-            const ext = mimeType === 'image/jpeg' ? 'jpg' : 'png';
-            const filePath = `${user.id}/avatar_${Date.now()}.${ext}`;
-
-            const { error: uploadError } = await supabase.storage
-                .from('avatars')
-                .upload(filePath, decode(base64), {
-                    contentType: mimeType,
-                    upsert: true,
-                });
-
-            if (uploadError) throw uploadError;
-
-            const { data: { publicUrl } } = supabase.storage
-                .from('avatars')
-                .getPublicUrl(filePath);
-
-            // Save to profile
+            // 3. Save to Profile
             await supabase
                 .from('app_users')
-                .update({ avatar_url: publicUrl })
+                .update({ avatar_url: finalAvatarUrl })
                 .eq('id', user.id);
 
-            // router.replace('/(tabs)');
+            // 4. Navigate (Success!)
             router.push('/onboarding/notifications');
 
         } catch (error) {
-            console.error('Avatar upload error:', error);
-            Alert.alert('Error', 'Failed to upload avatar');
+            console.error('[Avatar] Error:', error);
+            Alert.alert('Upload Failed', 'Please try again.');
         } finally {
             setUploading(false);
         }
@@ -163,7 +152,7 @@ export default function AvatarScreen() {
 
                         <Pressable onPress={pickImage} style={styles.avatarContainer}>
                             {avatarUri ? (
-                                <Image source={{ uri: avatarUri }} style={styles.avatar} />
+                                <Image source={getAvatarSource(avatarUri)} style={styles.avatar} />
                             ) : (
                                 <View style={styles.avatarPlaceholder}>
                                     <Camera size={48} color={Colors.textLight} />

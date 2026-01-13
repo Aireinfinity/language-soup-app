@@ -16,6 +16,7 @@ import { Asset } from 'expo-asset';
 import { useQuests } from '../../contexts/QuestContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import GroupAvatar from '../../components/GroupAvatar';
+import { getAvatarSource } from '../../utils/soupUtils';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -366,7 +367,7 @@ export default function ProfileScreen() {
                 <Pressable onPress={showAvatarOptions} style={styles.heroAvatarContainer} disabled={uploading}>
                     {previewAvatar || user?.avatar_url ? (
                         <Image
-                            source={{ uri: previewAvatar || user.avatar_url }}
+                            source={getAvatarSource(previewAvatar || user.avatar_url)}
                             style={[styles.heroAvatar, uploading && { opacity: 0.5 }]}
                         />
                     ) : (

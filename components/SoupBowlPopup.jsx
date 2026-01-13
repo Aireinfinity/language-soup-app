@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Image, ScrollView, Pressable } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { getAvatarSource } from '../utils/soupUtils';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -63,7 +64,7 @@ export function SoupBowlPopup({ visible, reactions, userMap = {}, isMe, onClose 
                                     <View key={reaction.id || index} style={styles.userRow}>
                                         {avatarUrl ? (
                                             <Image
-                                                source={{ uri: avatarUrl }}
+                                                source={getAvatarSource(avatarUrl)}
                                                 style={styles.avatar}
                                             />
                                         ) : (

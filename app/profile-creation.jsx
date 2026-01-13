@@ -10,6 +10,7 @@ import { Colors } from '../constants/Colors';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { decode } from 'base64-arraybuffer';
+import { getAvatarSource } from '../utils/soupUtils';
 
 export default function ProfileCreationScreen() {
     const { user } = useAuth();
@@ -160,7 +161,7 @@ export default function ProfileCreationScreen() {
                         {/* Avatar Picker */}
                         <Pressable onPress={pickImage} style={styles.avatarContainer}>
                             {avatarUri ? (
-                                <Image source={{ uri: avatarUri }} style={styles.avatar} />
+                                <Image source={getAvatarSource(avatarUri)} style={styles.avatar} />
                             ) : (
                                 <View style={styles.avatarPlaceholder}>
                                     <Camera size={40} color={Colors.primary} />

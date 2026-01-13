@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useQuests } from '../contexts/QuestContext';
 import GroupAvatar from '../components/GroupAvatar';
+import { getAvatarSource } from '../utils/soupUtils';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -209,7 +210,7 @@ export default function GroupInfoScreen() {
                     {members.map(member => (
                         <View key={member.id} style={styles.memberRow}>
                             {member.avatar_url ? (
-                                <Image source={{ uri: member.avatar_url }} style={styles.memberAvatar} />
+                                <Image source={getAvatarSource(member.avatar_url)} style={styles.memberAvatar} />
                             ) : (
                                 <View style={[styles.memberAvatar, styles.memberAvatarPlaceholder]}>
                                     <Text style={styles.memberAvatarText}>

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, memo } from 'react';
 import { View, Text, StyleSheet, Image, Pressable, Animated, Easing } from 'react-native';
 import { getLanguageFlag } from '../utils/languageFlags';
+import { getAvatarSource } from '../utils/soupUtils';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -108,7 +109,7 @@ const FloatingAvatar = memo(function FloatingAvatar({ user, index, onPress }) {
             <Pressable onPress={onPress} style={styles.avatarPressable}>
                 {user.avatar_url ? (
                     <Image
-                        source={{ uri: user.avatar_url }}
+                        source={getAvatarSource(user.avatar_url)}
                         style={styles.avatar}
                     />
                 ) : (

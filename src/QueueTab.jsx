@@ -109,10 +109,8 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
         }
 
         const scheduleDate = parseScheduledDateTime(scheduledDay, scheduledTime);
-        if (scheduleDate < new Date()) {
-            alert('Scheduled time must be in the future');
-            return;
-        }
+        // VALIDATION REMOVED: To allow scheduling 'in the past' locally to match Server UTC time.
+        // if (scheduleDate < new Date()) { ... }
 
         setSaving(true);
         try {
@@ -228,8 +226,16 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
 
         // Check cache first
         if (translationCache[challenge.challenge_text]) {
-            setTranslations(translationCache[challenge.challenge_text]);
+            const cachedTranslations = translationCache[challenge.challenge_text];
+            setTranslations(cachedTranslations);
             setTranslating(false);
+
+            // SAVE IMMEDIATELY (Even if cached)
+            // Ensure DB is always in sync with what user sees
+            await supabase
+                .from('app_scheduled_challenges')
+                .update({ translations: cachedTranslations })
+                .eq('id', challenge.id);
             return;
         }
 
@@ -273,11 +279,47 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
             const translationResults = Object.fromEntries(translationPairs);
 
             setTranslations(translationResults);
-            // Cache the translations
+
+            console.log('🔮 Generated Translations:', translationResults); // DEBUG
+
+            // --- SIMPLIFICATION: CONSTRUCT FINAL FORMATTED MESSAGES (WYSIWYG) ---
+            const cleanEnglish = challenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
+            const fullMessages = {};
+
+            // Calculate the exact string for every language
+            uniqueLanguages.forEach(lang => {
+                const isEnglish = lang.toLowerCase() === 'english';
+                const trans = translationResults[lang];
+
+                if (isEnglish) {
+                    fullMessages[lang] = `#challenge\n${cleanEnglish}`;
+                } else {
+                    // Foreign groups get: Header + English + Translation
+                    fullMessages[lang] = `#challenge\n${cleanEnglish}\n${trans || cleanEnglish}`;
+                }
+            });
+
+            console.log('💾 Saving Final WYSIWYG Messages:', fullMessages);
+
+            // UPDATE STATE & CACHE WITH FULL MESSAGES
+            setTranslations(fullMessages);
+
             setTranslationCache(prev => ({
                 ...prev,
-                [challenge.challenge_text]: translationResults
+                [challenge.challenge_text]: fullMessages
             }));
+
+            // SAVE FINAL MESSAGES TO DB
+            const { error: saveError } = await supabase
+                .from('app_scheduled_challenges')
+                .update({
+                    translations: fullMessages
+                })
+                .eq('id', challenge.id);
+
+            if (saveError) console.error('❌ DB Save Failed:', saveError);
+            else console.log('✅ DB Save Success!');
+
         } catch (err) {
             console.error('Translation error:', err);
             alert('Some translations failed. Please try again.');
@@ -287,11 +329,61 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
     };
     const approveChallenge = async () => {
         try {
-            // Just mark as approved - don't send yet
+            // SAFEGUARD: Ensure translations exist before saving
+            let finalTranslations = { ...translations };
+
+            // If we are regenerating (user skipped preview), we need to do the full construction too
+            if (Object.keys(finalTranslations).length === 0) {
+                console.log('Translations missing, generating on fly...');
+                setTranslating(true);
+
+                // 1. Get languages
+                const uniqueLanguages = [...new Set(groups.map(g => g.language))];
+
+                // 2. Translate in parallel
+                const translationPromises = uniqueLanguages.map(async (language) => {
+                    const deeplLang = getDeepLLangCode(language);
+                    const googleLang = getGoogleLangCode(language);
+                    if (!deeplLang && !googleLang) return [language, selectedChallenge.challenge_text];
+                    try {
+                        const { data, error } = await supabase.functions.invoke('translate-text', {
+                            body: { text: selectedChallenge.challenge_text, targetLang: deeplLang }
+                        });
+                        if (!error && !data.error) return [language, data.translatedText];
+                        throw new Error('DeepL failed');
+                    } catch {
+                        const { data } = await supabase.functions.invoke('translate-google', {
+                            body: { text: selectedChallenge.challenge_text, targetLang: googleLang }
+                        });
+                        return [language, data.translatedText];
+                    }
+                });
+
+                const translationPairs = await Promise.all(translationPromises);
+                const rawResults = Object.fromEntries(translationPairs);
+
+                // 3. CONSTRUCT FORMATTED MESSAGES (Same logic as Preview)
+                const cleanEnglish = selectedChallenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
+                uniqueLanguages.forEach(lang => {
+                    const isEnglish = lang.toLowerCase() === 'english';
+                    const trans = rawResults[lang];
+
+                    if (isEnglish) {
+                        finalTranslations[lang] = `#challenge\n${cleanEnglish}`;
+                    } else {
+                        finalTranslations[lang] = `#challenge\n${cleanEnglish}\n${trans || cleanEnglish}`;
+                    }
+                });
+
+                setTranslating(false);
+            }
+
+            // SAVE FINAL MESSAGES TO DB
             await supabase
                 .from('app_scheduled_challenges')
                 .update({
                     status: 'approved',
+                    translations: finalTranslations // Saves full message structure
                 })
                 .eq('id', selectedChallenge.id);
 
@@ -854,13 +946,10 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
                             <div className="mb-8 space-y-3">
                                 {/* Show each group individually with exact format */}
                                 {groups.map((group) => {
-                                    const cleanEnglish = selectedChallenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
-                                    const translation = translations[group.language] || cleanEnglish;
-
-                                    // This is EXACTLY what will be sent
-                                    const exactFormat = group.language.toLowerCase() === 'english'
-                                        ? `#challenge\n${cleanEnglish}`
-                                        : `#challenge\n${cleanEnglish}\n${translation}`;
+                                    // SIMPLIFIED: Just show what is in the "translations" object.
+                                    // It now holds the FULL message (Header + English + Translation).
+                                    // This is true WYSIWYG.
+                                    const exactFormat = translations[group.language] || "Loading...";
 
                                     return (
                                         <div key={group.id} className="p-4 bg-white border-2 border-black/5 rounded-2xl hover:border-[var(--soup-turquoise)]/30 transition-all">

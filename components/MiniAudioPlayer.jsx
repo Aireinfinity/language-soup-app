@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAudioPlayer } from '../contexts/AudioPlayerContext';
 // import Slider from '@react-native-community/slider';
 import * as Haptics from 'expo-haptics';
+import { getAvatarSource } from '../utils/soupUtils';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -85,7 +86,7 @@ export function MiniAudioPlayer() {
                     {/* Avatar */}
                     <View style={styles.avatarContainer}>
                         {currentAudio.senderAvatar ? (
-                            <Image source={{ uri: currentAudio.senderAvatar }} style={styles.avatar} />
+                            <Image source={getAvatarSource(currentAudio.senderAvatar)} style={styles.avatar} />
                         ) : (
                             <View style={[styles.avatar, styles.avatarPlaceholder]}>
                                 <Text style={styles.avatarText}>

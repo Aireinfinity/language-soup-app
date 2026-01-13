@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image, Linking } from 'react-native';
 import { Mail, MessageCircle } from 'lucide-react-native';
 import { Colors } from '../constants/Colors';
+import { getAvatarSource } from '../utils/soupUtils';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -46,7 +47,7 @@ export default function SpeakerCard({ speaker, isOwner = false, onEdit, onDelete
             {/* Avatar & Info */}
             <View style={styles.header}>
                 {speaker.photo_url ? (
-                    <Image source={{ uri: speaker.photo_url }} style={styles.avatar} />
+                    <Image source={getAvatarSource(speaker.photo_url)} style={styles.avatar} />
                 ) : (
                     <View style={[styles.avatar, styles.avatarPlaceholder]}>
                         <Text style={styles.avatarText}>

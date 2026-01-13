@@ -1,21 +1,18 @@
--- EMERGENCY: Disable the broken SQL function immediately
--- This prevents it from sending more untranslated challenges
+-- EMERGENCY STOP: Unschedule EVERYTHING to stop the bleeding
+SELECT cron.unschedule(jobid) FROM cron.job;
 
--- Option 1: Disable the cron job temporarily
-SELECT cron.unschedule(1);
+-- DIAGNOSTICS: Why 74?
+-- 1. How many groups are there?
+SELECT COUNT(*) as total_groups FROM app_groups;
 
--- Option 2: Change the function to do nothing (safer - keeps the cron but stops sending)
-CREATE OR REPLACE FUNCTION auto_send_approved_challenges()
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-AS $$
-BEGIN
-    -- Temporarily disabled - translations need to be added
-    RAISE NOTICE 'Function disabled - use Edge Function for translations';
-    RETURN;
-END;
-$$;
+-- 2. How many groups is the user in? (Replace with your user ID if known, or just list counts)
+SELECT user_id, COUNT(*) as group_count 
+FROM app_group_members 
+GROUP BY user_id 
+ORDER BY group_count DESC 
+LIMIT 5;
 
--- Verify cron is stopped
-SELECT jobid, jobname, active FROM cron.job WHERE jobid = 1;
+-- 3. Did we create 74 challenges?
+SELECT count(*) as recent_challenges 
+FROM app_challenges 
+WHERE created_at > NOW() - INTERVAL '10 minutes';
