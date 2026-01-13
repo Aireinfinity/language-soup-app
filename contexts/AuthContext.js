@@ -125,70 +125,41 @@ export const AuthProvider = ({ children }) => {
     }, [user, loading, segments, profileChecked, bootScreenShown]);
 
     const checkProfileAndRedirect = async (currentUser, inAuthGroup, inOnboarding, currentSegment) => {
-        // For anonymous users (our new flow), check if they have groups
-        if (currentUser.is_anonymous) {
-            try {
-                // Check if user has joined any groups
-                const { data: groups, error } = await supabase
-                    .from('app_group_members')
-                    .select('group_id')
-                    .eq('user_id', currentUser.id)
-                    .limit(1);
+        // SIMPLIFIED LOGIC: If you are authenticated, you are likely good to go.
+        // We trust the Auth Session. The "Doorman" is now more chill.
 
-                if (error) throw error;
-
-                setProfileChecked(true);
-
-                // DIRECT NAVIGATION (Skip Boot Screen here)
-                // If user has groups -> Home. If new -> Group Selection.
-                if (groups && groups.length > 0) {
-                    router.replace('/(tabs)');
-                } else {
-                    router.replace('/group-selection');
-                }
-
-            } catch (error) {
-                console.error('Error checking groups:', error);
-                router.replace('/group-selection');
-            }
-            return;
-        }
-
-        // Legacy: For non-anonymous users (email/password), use old logic
         try {
-            const { data, error } = await supabase
-                .from('app_users')
-                .select('id')
-                .eq('id', currentUser.id)
-                .single();
+            // 1. Check if user has groups (Active Souper Test)
+            const { data: groups } = await supabase
+                .from('app_group_members')
+                .select('group_id')
+                .eq('user_id', currentUser.id)
+                .limit(1);
 
-            const hasProfile = !!data;
+            const hasGroups = groups && groups.length > 0;
+            const hasProfile = true; // Assume profile exists if auth exists (RPC handles creation)
 
-            if (!hasProfile) {
-                // If no profile, force onboarding
-                if (!inOnboarding) {
-                    router.replace('/login');
+            setProfileChecked(true);
+
+            // 2. Navigation Decisions
+            if (hasGroups) {
+                // Determine if we should redirect (only if we are "lost" in onboarding/login)
+                if (inAuthGroup || inOnboarding || currentSegment === 'login' || currentSegment === 'index') {
+                    // Go to Main App
+                    router.replace('/(tabs)');
                 }
             } else {
-                setProfileChecked(true);
-                // If profile exists, show boot screen once, then go to tabs
-                if (inAuthGroup || inOnboarding) {
-                    if (!bootScreenShown) {
-                        // Mark as checked so we don't re-run this
-                        setProfileChecked(true);
-                        // If we're not at the boot screen (/), go there
-                        if (currentSegment !== undefined && currentSegment !== '' && currentSegment !== 'index') {
-                            router.replace('/');
-                        }
-                    } else {
-                        setProfileChecked(true);
-                        router.replace('/(tabs)');
-                    }
+                // New User (No groups joined yet) -> Group Selection
+                // But don't loop if already there
+                if (currentSegment !== 'group-selection' && currentSegment !== 'browse-groups') {
+                    router.replace('/group-selection');
                 }
             }
+
         } catch (error) {
-            console.error('Error checking profile:', error);
-            if (inAuthGroup) router.replace('/(tabs)');
+            console.error('[Auth] Error checking profile:', error);
+            // Fallback: Safe Mode -> Main App
+            router.replace('/(tabs)');
         }
     };
 
