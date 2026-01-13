@@ -21,3 +21,4 @@ Required in Vercel Project Settings:
 *   `VITE_SUPABASE_ANON_KEY`: Your Supabase Anon Key
 
 (Without these, the app will crash on load).
+Deployment heart-check at Tue Jan 13 01:33:08 CET 2026
