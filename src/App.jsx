@@ -376,7 +376,7 @@ export default function App() {
           {activeTab === 'kitchen' && (
             <div className="space-y-16 animate-in fade-in duration-500">
               <div className="mb-6">
-                <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">the kitchen 🍳</h1>
+                <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">the kitchen 🍳💓</h1>
                 <p className="text-gray-500 font-bold mt-1">cook up some community vibe.</p>
               </div>
 
