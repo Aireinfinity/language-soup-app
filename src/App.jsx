@@ -258,11 +258,14 @@ export default function App() {
         }`}>
         <div className="p-8">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[var(--soup-turquoise)] rounded-xl flex items-center justify-center shadow-lg shadow-[var(--soup-turquoise)]/20 overflow-hidden">
+            <div className="w-10 h-10 bg-[var(--soup-turquoise)] rounded-xl flex items-center justify-center shadow-lg shadow-[var(--soup-turquoise)]/20 overflow-hidden relative">
               <img src="/src/assets/branding/ls-icon-bowl.png" alt="Soup Logo" className="w-full h-full object-cover scale-110" />
             </div>
-            <div>
-              <h1 className="text-lg font-black tracking-tight text-[var(--soup-dark)] leading-tight lowercase">language</h1>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1">
+                <h1 className="text-lg font-black tracking-tight text-[var(--soup-dark)] leading-tight lowercase">language</h1>
+                <img src="/src/assets/images/avatars/tomato_soup.png" className="w-4 h-4 rounded-full" alt="decor" />
+              </div>
               <h1 className="text-lg font-black tracking-tight text-[var(--soup-turquoise)] leading-tight lowercase">soup</h1>
             </div>
           </div>
@@ -369,42 +372,84 @@ export default function App() {
           )}
 
           {/* 🍳 The Kitchen: Engagement & Content */}
+          {/* 🍳 The Kitchen: Engagement & Content */}
           {activeTab === 'kitchen' && (
-            <div className="space-y-12 animate-in fade-in duration-500">
-              <div className="mb-10">
+            <div className="space-y-16 animate-in fade-in duration-500">
+              <div className="mb-6">
                 <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">the kitchen 🍳</h1>
                 <p className="text-gray-500 font-bold mt-1">cook up some community vibe.</p>
               </div>
 
               {/* 1. Top Hub: Broadcasts */}
-              <div className="bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm">
-                <PillarSubNav
-                  options={[
-                    { id: 'challenges', label: 'challenges' },
-                    { id: 'announcements', label: 'announcements' }
-                  ]}
-                  activeId={kitchenSubTab || 'challenges'}
-                  onChange={(id) => setKitchenSubTab(id)}
-                />
-                <div className="p-8">
-                  {(kitchenSubTab === 'challenges' || !kitchenSubTab || kitchenSubTab === 'groups') && <ChallengesTab user={user} />}
-                  {kitchenSubTab === 'announcements' && <AnnouncementsTab />}
+              <div className="space-y-6">
+                <h3 className="text-2xl font-black text-[var(--soup-dark)] flex items-center gap-2">
+                  <Megaphone className="text-[var(--soup-pink)]" size={24} />
+                  broadcasts
+                </h3>
+                <div className="bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm">
+                  <PillarSubNav
+                    options={[
+                      { id: 'challenges', label: 'challenges' },
+                      { id: 'announcements', label: 'announcements' }
+                    ]}
+                    activeId={kitchenSubTab || 'challenges'}
+                    onChange={(id) => setKitchenSubTab(id)}
+                  />
+                  <div className="p-8">
+                    {(kitchenSubTab === 'challenges' || !kitchenSubTab || kitchenSubTab === 'groups') && <ChallengesTab user={user} />}
+                    {kitchenSubTab === 'announcements' && <AnnouncementsTab />}
+                  </div>
                 </div>
               </div>
 
               {/* 2. Middle: Weekly Update Tool */}
-              <div className="pt-12 border-t border-black/5">
-                <h3 className="text-2xl font-black text-[var(--soup-dark)] mb-6 flex items-center gap-2">
-                  <Share2 className="text-[var(--soup-turquoise)]" size={24} />
-                  weekly community update
-                </h3>
+              <div className="pt-8 border-t border-black/5">
                 <WeeklyUpdateTab />
               </div>
 
+              {/* ✨ Special: community snapshots & souper vibe ✨ */}
+              <div className="pt-8 border-t border-black/5">
+                <div className="flex justify-between items-end mb-6">
+                  <h3 className="text-2xl font-black text-[var(--soup-dark)] flex items-center gap-2">
+                    <Activity className="text-amber-500" size={24} />
+                    community snapshots
+                  </h3>
+                  <div className="flex -space-x-3">
+                    {[
+                      '/src/assets/images/avatars/tomato_soup.png',
+                      '/src/assets/images/avatars/chicken_soup.png',
+                      '/src/assets/images/avatars/bathtub_soup.png',
+                      '/src/assets/images/avatars/cereal.png'
+                    ].map((avatar, i) => (
+                      <div key={i} className="w-10 h-10 rounded-full border-4 border-[var(--soup-beige)] overflow-hidden shadow-sm">
+                        <img src={avatar} className="w-full h-full object-cover" alt="soup avatar" />
+                      </div>
+                    ))}
+                    <div className="w-10 h-10 rounded-full border-4 border-[var(--soup-beige)] bg-white flex items-center justify-center text-[10px] font-black text-gray-400">
+                      +1k
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 overflow-x-auto pb-6 -mx-4 px-4 no-scrollbar">
+                  {[
+                    '/src/assets/branding/uploaded_image_1_1768252912948.png',
+                    '/src/assets/branding/uploaded_image_0_1768252733011.png',
+                    '/src/assets/branding/uploaded_image_2_1768252912948.png',
+                    '/src/assets/branding/uploaded_image_0_1768260317915.png',
+                    '/src/assets/branding/uploaded_image_1768242014329.png'
+                  ].map((img, i) => (
+                    <div key={i} className="flex-none w-64 h-64 bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm group">
+                      <img src={img} alt={`snapshot ${i}`} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* 3. Bottom: Groups Hub */}
-              <div className="pt-12 border-t border-black/5">
+              <div className="pt-8 border-t border-black/5">
                 <h3 className="text-2xl font-black text-[var(--soup-dark)] mb-6 flex items-center gap-2">
-                  <Users className="text-[var(--soup-pink)]" size={24} />
+                  <Users className="text-[var(--soup-turquoise)]" size={24} />
                   groups management
                 </h3>
                 <GroupsTab />
@@ -438,11 +483,25 @@ export default function App() {
 
           {/* 📈 The Garden: Growth & Marketing */}
           {activeTab === 'garden' && (
-            <div className="space-y-8 animate-in fade-in duration-500">
-              <div className="mb-10">
+            <div className="space-y-12 animate-in fade-in duration-500">
+              <div className="mb-6">
                 <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">the garden 📈</h1>
                 <p className="text-gray-500 font-bold mt-1">seeds of growth.</p>
               </div>
+
+              {/* marketing banner */}
+              <div className="w-full h-48 bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm relative group">
+                <img
+                  src="/src/assets/marketing_concepts/feature_graphic_final_v2_1768138772345.png"
+                  className="w-full h-full object-cover opacity-90 group-hover:scale-105 transition-transform duration-700"
+                  alt="Soup Vision"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
+                <div className="absolute bottom-6 left-8">
+                  <p className="text-[10px] font-black text-white uppercase tracking-[0.2em]">vision: community mission 2026</p>
+                </div>
+              </div>
+
               <MarketingTab />
             </div>
           )}
