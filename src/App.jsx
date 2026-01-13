@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
 import { BarChart3, Users, MessageSquare, LifeBuoy, LogOut, Search, Zap, Megaphone, TrendingUp, Activity, MessageCircle, Layers, Menu, X, Target, DollarSign, Share2 } from 'lucide-react';
