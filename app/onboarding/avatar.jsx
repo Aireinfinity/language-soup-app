@@ -96,27 +96,45 @@ export default function AvatarScreen() {
                 finalAvatarUrl = `soup://${selectedSoupId}`;
 
             } else {
-                // 2. TINY PACKET (Photo)
-                const uriToRead = avatarUri;
-                const base64 = await FileSystem.readAsStringAsync(uriToRead, {
-                    encoding: FileSystem.EncodingType.Base64,
-                });
+                // 2. TINY PACKET (Photo) - Using Raw Wire Strategy
+                // Bypass supabase-js client to fix [StorageUnknownError: Network request failed]
 
-                const isJpeg = uriToRead.toLowerCase().endsWith('.jpg') || uriToRead.toLowerCase().endsWith('.jpeg');
+                const isJpeg = avatarUri.toLowerCase().endsWith('.jpg') || avatarUri.toLowerCase().endsWith('.jpeg');
                 const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
                 const ext = isJpeg ? 'jpg' : 'png';
-                const filePath = `${user.id}/avatar_${Date.now()}.${ext}`;
+                const fileName = `avatar_${Date.now()}.${ext}`;
+                const filePath = `${user.id}/${fileName}`;
 
-                console.log(`[Avatar] Uploading Tiny Packet (${base64.length / 1024} KB)...`);
+                console.log(`[Avatar] Uploading Raw Wire FormData...`);
 
-                const { error: uploadError } = await supabase.storage
-                    .from('avatars')
-                    .upload(filePath, decode(base64), {
-                        contentType: mimeType,
-                        upsert: true,
-                    });
+                const formData = new FormData();
+                formData.append('file', {
+                    uri: avatarUri,
+                    name: fileName,
+                    type: mimeType,
+                });
 
-                if (uploadError) throw uploadError;
+                const SUPABASE_URL = 'https://uspegyneclgkscxwmomn.supabase.co';
+
+                // CRITICAL FIX: Use the USER'S access token
+                const { data: { session } } = await supabase.auth.getSession();
+                const accessToken = session?.access_token;
+
+                if (!accessToken) throw new Error('No auth session found');
+
+                // Direct REST API Upload
+                const response = await fetch(`${SUPABASE_URL}/storage/v1/object/avatars/${filePath}`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                    },
+                    body: formData,
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Upload failed');
+                }
 
                 const { data: { publicUrl } } = supabase.storage
                     .from('avatars')

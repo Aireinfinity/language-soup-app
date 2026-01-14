@@ -284,26 +284,51 @@ export default function ProfileScreen() {
     const uploadAvatar = async (uri, isCustomPhoto = true) => {
         setUploading(true);
         try {
-            let base64;
-
-            // Universal upload logic (FileSystem works for both iOS and Android if URI is local)
-            base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
+            // "Raw Wire" Strategy: Bypass supabase-js client completely for upload
+            // This fixes the [StorageUnknownError: Network request failed] on Android
 
             const ext = isCustomPhoto ? 'jpg' : 'png';
-            const mimeType = isCustomPhoto ? 'image/jpeg' : 'image/png';
-            const filePath = `${authUser.id}/avatar-${Date.now()}.${ext}`;
+            const fileName = `avatar-${Date.now()}.${ext}`;
+            const filePath = `${authUser.id}/${fileName}`;
 
-            const { error: uploadError } = await supabase.storage.from('avatars')
-                .upload(filePath, decode(base64), { contentType: mimeType, upsert: true });
+            const formData = new FormData();
+            formData.append('file', {
+                uri: uri,
+                name: fileName,
+                type: isCustomPhoto ? 'image/jpeg' : 'image/png',
+            });
 
-            if (uploadError) {
-                console.error('Storage upload error:', uploadError);
-                throw uploadError;
+            const SUPABASE_URL = 'https://uspegyneclgkscxwmomn.supabase.co';
+
+            // CRITICAL FIX: Use the USER'S access token, NOT the anon key
+            // The RLS policy checks for auth.uid(), so we need the user's identity
+            const { data: { session } } = await supabase.auth.getSession();
+            const accessToken = session?.access_token;
+
+            if (!accessToken) throw new Error('No auth session found');
+
+            // 1. Upload directly via REST API with User Token
+            const response = await fetch(`${SUPABASE_URL}/storage/v1/object/avatars/${filePath}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`, // <--- THIS IS THE FIX
+                    // 'apikey': SUPABASE_ANON_KEY, // Not strictly needed if Bearer is valid, but safe to keep
+                },
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Upload failed');
             }
 
+            // 2. Get Public URL (Low risk, standard client is fine here)
             const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
+
+            // 3. Update Profile
             await supabase.from('app_users').update({ avatar_url: publicUrl }).eq('id', authUser.id);
             setUser(prev => ({ ...prev, avatar_url: publicUrl }));
+
         } catch (error) {
             console.error('Avatar upload failed:', error);
             Alert.alert('Error', `Failed to upload avatar: ${error.message || 'Unknown error'}`);

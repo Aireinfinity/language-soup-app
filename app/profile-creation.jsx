@@ -89,21 +89,39 @@ export default function ProfileCreationScreen() {
             // Upload avatar if selected (optional - skip if storage fails)
             if (avatarUri) {
                 try {
-                    const base64 = await FileSystem.readAsStringAsync(avatarUri, {
-                        encoding: 'base64',
+                    // "Raw Wire" FormData Strategy
+                    console.log('[Avatar] Starting Raw Wire Upload...');
+
+                    const fileName = `avatar.jpg`;
+                    const filePath = `${user.id}/${fileName}`;
+
+                    const formData = new FormData();
+                    formData.append('file', {
+                        uri: avatarUri,
+                        name: fileName,
+                        type: 'image/jpeg',
                     });
 
-                    const filePath = `${user.id}/avatar.jpg`;
+                    const SUPABASE_URL = 'https://uspegyneclgkscxwmomn.supabase.co';
 
-                    const { error: uploadError } = await supabase.storage
-                        .from('avatars')
-                        .upload(filePath, decode(base64), {
-                            contentType: 'image/jpeg',
-                            upsert: true,
-                        });
+                    // CRITICAL FIX: Use the USER'S access token
+                    const { data: { session } } = await supabase.auth.getSession();
+                    const accessToken = session?.access_token;
 
-                    if (uploadError) {
-                        console.warn('Avatar upload failed, continuing without avatar:', uploadError);
+                    if (!accessToken) throw new Error('No auth session found');
+
+                    const response = await fetch(`${SUPABASE_URL}/storage/v1/object/avatars/${filePath}`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'x-upsert': 'true',
+                        },
+                        body: formData,
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        console.warn('Avatar upload failed:', errorData);
                     } else {
                         const { data: { publicUrl } } = supabase.storage
                             .from('avatars')
