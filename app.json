@@ -65,7 +65,8 @@
         {
           "photosPermission": "Allow Language Soup to access your photos to set your profile picture"
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "platforms": [
       "ios",
@@ -81,7 +82,10 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/affb0dd3-57d0-467c-b84c-d08c10e3b9ce"
+      "url": "https://u.expo.dev/affb0dd3-57d0-467c-b84c-d08c10e3b9ce",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
     }
   }
 }
