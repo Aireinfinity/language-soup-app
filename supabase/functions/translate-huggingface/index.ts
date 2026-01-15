@@ -53,7 +53,8 @@ serve(async (req) => {
                 model: modelId,
                 messages: messages,
                 max_tokens: 500,
-                temperature: 0.1
+                temperature: 0.3, // Increased from 0.1 to add variety
+                frequency_penalty: 0.5 // Penalty to prevent word repetition
             })
         })
 
