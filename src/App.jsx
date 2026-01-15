@@ -3,14 +3,12 @@ import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
 import { BarChart3, Users, MessageSquare, LifeBuoy, LogOut, Search, Zap, Megaphone, TrendingUp, Activity, MessageCircle, Layers, Menu, X, Target, DollarSign, Share2 } from 'lucide-react';
 import ChallengesTab from './ChallengesTab';
-import AnnouncementsTab from './AnnouncementsTab';
-import MarketingTab from './MarketingTab';
-import GrowthCharts from './GrowthCharts';
 import SupportInbox from './SupportInbox';
 import SupportTabSimplified from './SupportTabSimplified';
 import GoalsTab from './GoalsTab';
 import FinancesTab from './FinancesTab';
-import WeeklyUpdateTab from './WeeklyUpdateTab';
+import GrowthCharts from './GrowthCharts';
+import MarketingTab from './MarketingTab';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -25,6 +23,57 @@ export default function App() {
 
   const [kitchenSubTab, setKitchenSubTab] = useState('challenges');
   const [fireSubTab, setFireSubTab] = useState('support');
+  const [unreadSupportCount, setUnreadSupportCount] = useState(0);
+
+  useEffect(() => {
+    loadUnreadSupportCount();
+
+    // Subscribe to new support messages for notification badge
+    const channel = supabase
+      .channel('support-notifications')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'app_support_messages' }, (payload) => {
+        if (!payload.new.from_admin) {
+          loadUnreadSupportCount();
+        }
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  const loadUnreadSupportCount = async () => {
+    try {
+      // Noah's IDs to ignore
+      const adminIds = ['32ac1943-aa68-4025-b4d9-3aa7ef129fb1', '29864936-719c-483b-ac6a-4d06084a48fe'];
+
+      const { data, error } = await supabase
+        .from('app_support_messages')
+        .select('user_id, from_admin')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Logic: A thread is "unread" if the latest message is NOT from admin
+      // and NOT from Noah himself as a user (though usually he'd be admin)
+      const threads = new Map();
+      data.forEach(msg => {
+        if (!threads.has(msg.user_id)) {
+          threads.set(msg.user_id, msg.from_admin);
+        }
+      });
+
+      let count = 0;
+      threads.forEach((lastFromAdmin, userId) => {
+        if (!lastFromAdmin && !adminIds.includes(userId)) {
+          count++;
+        }
+      });
+
+      setUnreadSupportCount(count);
+    } catch (err) {
+      console.error('Error counting unread support:', err);
+    }
+  };
 
   // Sync URL when activeTab changes
   useEffect(() => {
@@ -198,8 +247,8 @@ export default function App() {
       <div className="min-h-screen flex items-center justify-center p-4 bg-[var(--soup-beige)]">
         <div className="bg-white rounded-3xl shadow-sm p-10 w-full max-w-md border border-black/5">
           <div className="text-center mb-10">
-            <div className="w-16 h-16 bg-[var(--soup-turquoise)] rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-[var(--soup-turquoise)]/20">
-              <span className="text-3xl">🍜</span>
+            <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg border border-black/5 overflow-hidden">
+              <img src="/src/assets/ls-icon-bowl.png" className="w-full h-full object-cover scale-110" alt="Logo" />
             </div>
             <h1 className="text-4xl font-extrabold mb-2 text-[var(--soup-dark)] tracking-tight">
               LANGUAGE SOUP
@@ -257,16 +306,13 @@ export default function App() {
       <div className={`w-64 bg-white border-r border-black/5 flex flex-col shadow-sm z-40 fixed lg:static h-full transition-transform duration-300 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}>
         <div className="p-8">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[var(--soup-turquoise)] rounded-xl flex items-center justify-center shadow-lg shadow-[var(--soup-turquoise)]/20 overflow-hidden relative">
-              <img src="/src/assets/branding/ls-icon-bowl.png" alt="Soup Logo" className="w-full h-full object-cover scale-110" />
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm border border-black/5 overflow-hidden transition-transform hover:scale-110 duration-500">
+              <img src="/src/assets/ls-icon-bowl.png" alt="Soup Logo" className="w-full h-full object-cover scale-110" />
             </div>
             <div className="flex flex-col">
-              <div className="flex items-center gap-1">
-                <h1 className="text-lg font-black tracking-tight text-[var(--soup-dark)] leading-tight lowercase">language</h1>
-                <img src="/src/assets/images/avatars/tomato_soup.png" className="w-4 h-4 rounded-full" alt="decor" />
-              </div>
-              <h1 className="text-lg font-black tracking-tight text-[var(--soup-turquoise)] leading-tight lowercase">soup</h1>
+              <h1 className="text-xl font-black tracking-tight text-[var(--soup-dark)] leading-none lowercase">language</h1>
+              <h1 className="text-xl font-black tracking-tight text-[var(--soup-turquoise)] leading-none lowercase">soup</h1>
             </div>
           </div>
           <p className="text-[10px] font-bold text-gray-400 mt-2 tracking-widest uppercase">Admin Dashboard</p>
@@ -275,8 +321,8 @@ export default function App() {
         <nav className="flex-1 px-4 space-y-1 mt-2">
           {[
             { id: 'castle', label: 'the castle', icon: Target },
-            { id: 'kitchen', label: 'the kitchen', icon: Share2 },
-            { id: 'fire_station', label: 'fire station', icon: LifeBuoy, badge: pendingRequestsCount },
+            { id: 'kitchen', label: 'the kitchen', icon: Share2, badge: pendingRequestsCount },
+            { id: 'fire_station', label: 'fire station', icon: LifeBuoy, badge: unreadSupportCount },
             { id: 'garden', label: 'the garden', icon: TrendingUp },
           ].map((item) => (
             <button
@@ -296,8 +342,8 @@ export default function App() {
               </div>
               {item.badge > 0 && (
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${activeTab === item.id
-                  ? 'bg-white text-[var(--soup-turquoise)]'
-                  : 'bg-red-500 text-white'
+                  ? 'bg-white text-[var(--soup-pink)]'
+                  : 'bg-[var(--soup-pink)] text-white'
                   }`}>
                   {item.badge}
                 </span>
@@ -342,7 +388,18 @@ export default function App() {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto flex flex-col">
+      <div className="flex-1 overflow-auto flex flex-col relative">
+        {/* Top Branding Badge (Desktop only) */}
+        <div className="hidden lg:flex fixed top-8 right-8 z-50 items-center gap-3 bg-white/80 backdrop-blur-md px-5 py-3 rounded-2xl border border-black/5 shadow-sm animate-in slide-in-from-top-4 duration-1000">
+          <div className="w-8 h-8 rounded-full overflow-hidden shadow-sm">
+            <img src="/src/assets/ls-icon-bowl.png" className="w-full h-full object-cover scale-110" alt="Logo" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black uppercase tracking-widest text-[var(--soup-turquoise)] leading-tight">Admin Hub</span>
+            <span className="text-[10px] font-bold text-gray-400 leading-tight">v1.2 // soup is hot 🍲</span>
+          </div>
+        </div>
+
         <main className="p-4 lg:p-10 max-w-7xl w-full mx-auto flex-1 mt-16 lg:mt-0">
           {/* 🏰 The Castle: Insights & Goals */}
           {(activeTab === 'castle' || activeTab === 'overview') && (
@@ -389,62 +446,19 @@ export default function App() {
                 <div className="bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm">
                   <PillarSubNav
                     options={[
-                      { id: 'challenges', label: 'challenges' },
-                      { id: 'announcements', label: 'announcements' }
+                      { id: 'challenges', label: 'challenges' }
                     ]}
                     activeId={kitchenSubTab || 'challenges'}
                     onChange={(id) => setKitchenSubTab(id)}
                   />
                   <div className="p-8">
-                    {(kitchenSubTab === 'challenges' || !kitchenSubTab || kitchenSubTab === 'groups') && <ChallengesTab user={user} />}
-                    {kitchenSubTab === 'announcements' && <AnnouncementsTab />}
+                    {(kitchenSubTab === 'challenges' || !kitchenSubTab) && <ChallengesTab user={user} />}
                   </div>
                 </div>
               </div>
 
               {/* 2. Middle: Weekly Update Tool */}
-              <div className="pt-8 border-t border-black/5">
-                <WeeklyUpdateTab />
-              </div>
 
-              {/* ✨ Special: community snapshots & souper vibe ✨ */}
-              <div className="pt-8 border-t border-black/5">
-                <div className="flex justify-between items-end mb-6">
-                  <h3 className="text-2xl font-black text-[var(--soup-dark)] flex items-center gap-2">
-                    <Activity className="text-amber-500" size={24} />
-                    community snapshots
-                  </h3>
-                  <div className="flex -space-x-3">
-                    {[
-                      '/src/assets/images/avatars/tomato_soup.png',
-                      '/src/assets/images/avatars/chicken_soup.png',
-                      '/src/assets/images/avatars/bathtub_soup.png',
-                      '/src/assets/images/avatars/cereal.png'
-                    ].map((avatar, i) => (
-                      <div key={i} className="w-10 h-10 rounded-full border-4 border-[var(--soup-beige)] overflow-hidden shadow-sm">
-                        <img src={avatar} className="w-full h-full object-cover" alt="soup avatar" />
-                      </div>
-                    ))}
-                    <div className="w-10 h-10 rounded-full border-4 border-[var(--soup-beige)] bg-white flex items-center justify-center text-[10px] font-black text-gray-400">
-                      +1k
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-4 overflow-x-auto pb-6 -mx-4 px-4 no-scrollbar">
-                  {[
-                    '/src/assets/branding/uploaded_image_1_1768252912948.png',
-                    '/src/assets/branding/uploaded_image_0_1768252733011.png',
-                    '/src/assets/branding/uploaded_image_2_1768252912948.png',
-                    '/src/assets/branding/uploaded_image_0_1768260317915.png',
-                    '/src/assets/branding/uploaded_image_1768242014329.png'
-                  ].map((img, i) => (
-                    <div key={i} className="flex-none w-64 h-64 bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm group">
-                      <img src={img} alt={`snapshot ${i}`} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                    </div>
-                  ))}
-                </div>
-              </div>
 
               {/* 3. Bottom: Groups Hub */}
               <div className="pt-8 border-t border-black/5">
@@ -474,7 +488,7 @@ export default function App() {
                   onChange={setFireSubTab}
                 />
                 <div className="p-8">
-                  {(fireSubTab === 'support' || !fireSubTab) && <SupportTab />}
+                  {(fireSubTab === 'support' || !fireSubTab) && <SupportTab unreadCount={unreadSupportCount} />}
                   {fireSubTab === 'users' && <UsersTab />}
                 </div>
               </div>
@@ -487,19 +501,6 @@ export default function App() {
               <div className="mb-6">
                 <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">the garden 📈</h1>
                 <p className="text-gray-500 font-bold mt-1">seeds of growth.</p>
-              </div>
-
-              {/* marketing banner */}
-              <div className="w-full h-48 bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm relative group">
-                <img
-                  src="/src/assets/marketing_concepts/feature_graphic_final_v2_1768138772345.png"
-                  className="w-full h-full object-cover opacity-90 group-hover:scale-105 transition-transform duration-700"
-                  alt="Soup Vision"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
-                <div className="absolute bottom-6 left-8">
-                  <p className="text-[10px] font-black text-white uppercase tracking-[0.2em]">vision: community mission 2026</p>
-                </div>
               </div>
 
               <MarketingTab />
@@ -517,8 +518,8 @@ export default function App() {
             </div>
           )}
         </main>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 }
 
@@ -875,7 +876,7 @@ function OverviewTab() {
         <StatCard
           label="Soupers"
           value={stats.totalUsers}
-          color="sky"
+          color="turquoise"
           icon={Users}
         />
         <StatCard
@@ -887,13 +888,13 @@ function OverviewTab() {
         <StatCard
           label="Messages"
           value={stats.totalMessages}
-          color="indigo"
+          color="turquoise"
           icon={MessageCircle}
         />
         <StatCard
           label="Groups"
           value={stats.totalGroups}
-          color="amber"
+          color="green"
           icon={Layers}
         />
       </div>
@@ -917,10 +918,9 @@ function OverviewTab() {
 
 function StatCard({ label, value, color, icon: Icon }) {
   const colorStyles = {
-    sky: 'text-[var(--soup-turquoise)] bg-sky-50',
-    pink: 'text-[var(--soup-pink)] bg-pink-50',
-    indigo: 'text-indigo-500 bg-indigo-50',
-    amber: 'text-amber-500 bg-amber-50',
+    turquoise: 'text-[var(--soup-turquoise)] bg-[var(--soup-turquoise)]/10',
+    pink: 'text-[var(--soup-pink)] bg-[var(--soup-pink)]/10',
+    green: 'text-[var(--soup-green)] bg-[var(--soup-green)]/10',
   };
 
   return (
@@ -1082,171 +1082,162 @@ function GroupsTab() {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
-      {/* List Column */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden flex flex-col h-[600px]">
-        {/* Toggle Header */}
-        <div className="px-6 py-4 bg-gray-50 border-b flex items-center justify-between">
-          <div className="flex gap-4">
-            <button
-              onClick={() => setActiveView('active')}
-              className={`font-bold pb-1 transition ${activeView === 'active' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              Active Groups ({groups.length})
-            </button>
-            <button
-              onClick={() => setActiveView('requests')}
-              className={`font-bold pb-1 transition ${activeView === 'requests' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-            >
-              Requests ({requests.length})
-            </button>
-          </div>
-          {activeView === 'active' && (
-            <button
-              onClick={() => openCreateModal({ language: '', requests: [] })}
-              className="px-4 py-2 bg-[var(--soup-turquoise)] text-white rounded-lg text-sm font-bold hover:opacity-90 transition"
-            >
-              + Create Group
-            </button>
-          )}
-        </div>
-
-        {/* List Content */}
-        <div className="flex-1 overflow-y-auto divide-y divide-gray-200">
-          {activeView === 'active' ? (
-            groups.map((group) => (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* List Column */}
+        <div className="bg-white rounded-[32px] border border-black/5 shadow-sm overflow-hidden flex flex-col h-[700px]">
+          {/* Toggle Header */}
+          <div className="px-8 py-6 bg-[var(--soup-beige)]/30 border-b border-black/5 flex items-center justify-between">
+            <div className="flex gap-6">
               <button
-                key={group.id}
-                onClick={() => handleGroupClick(group)}
-                className={`w-full text-left px-6 py-4 hover:bg-gray-50 transition ${selectedGroup?.id === group.id ? 'bg-blue-50' : ''}`}
+                onClick={() => setActiveView('active')}
+                className={`text-sm font-black uppercase tracking-widest pb-1 transition-all ${activeView === 'active' ? 'text-[var(--soup-turquoise)] border-b-2 border-[var(--soup-turquoise)]' : 'text-gray-400 hover:text-gray-600'}`}
               >
-                <div className="font-medium text-gray-900">{group.name}</div>
-                <div className="text-sm text-gray-600 mt-1">
-                  {group.language} • {group.member_count} members
-                </div>
+                Active Groups ({groups.length})
               </button>
-            ))
-          ) : (
-            requests.length === 0 ? (
-              <div className="p-8 text-center text-gray-500 italic">No pending requests yet. 🍜</div>
-            ) : requests.map((req, i) => (
-              <div key={i} className="px-6 py-5 border-b border-gray-100 last:border-0 hover:bg-gray-50/80 transition flex items-start gap-4">
-                {/* User Avatar */}
-                <div className="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 flex-shrink-0 overflow-hidden shadow-sm">
-                  {req.user?.avatar_url ? (
-                    <img src={req.user.avatar_url} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-blue-500 font-bold text-xs">
-                      {req.user?.display_name?.charAt(0) || '?'}
-                    </div>
-                  )}
-                </div>
+              <button
+                onClick={() => setActiveView('requests')}
+                className={`text-sm font-black uppercase tracking-widest pb-1 transition-all flex items-center gap-2 ${activeView === 'requests' ? 'text-[var(--soup-turquoise)] border-b-2 border-[var(--soup-turquoise)]' : 'text-gray-400 hover:text-gray-600'}`}
+              >
+                <span>Requests ({requests.length})</span>
+                {requests.length > 0 && (
+                  <span className="w-2 h-2 rounded-full bg-[var(--soup-pink)] animate-pulse"></span>
+                )}
+              </button>
+            </div>
+            {activeView === 'active' && (
+              <button
+                onClick={() => openCreateModal({ language: '', requests: [] })}
+                className="px-6 py-3 bg-[var(--soup-turquoise)] text-white rounded-xl text-xs font-black uppercase tracking-wider hover:scale-105 active:scale-95 transition-all shadow-md shadow-[var(--soup-turquoise)]/20"
+              >
+                + Create Group
+              </button>
+            )}
+          </div>
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-bold text-gray-900 truncate flex-1">
-                      {req.user?.display_name || 'Anonymous'}
-                    </span>
-                    <span className="text-[10px] font-medium text-gray-400 ml-2 uppercase tracking-tight">
-                      {new Date(req.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </span>
+          {/* List Content */}
+          <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
+            {activeView === 'active' ? (
+              groups.map((group) => (
+                <button
+                  key={group.id}
+                  onClick={() => handleGroupClick(group)}
+                  className={`w-full text-left px-8 py-6 hover:bg-gray-50 transition-all ${selectedGroup?.id === group.id ? 'bg-blue-50/50 border-l-4 border-l-[var(--soup-turquoise)]' : 'border-l-4 border-l-transparent'}`}
+                >
+                  <div className="font-bold text-gray-900 text-lg">{group.name}</div>
+                  <div className="text-sm font-medium text-gray-500 mt-1 flex items-center gap-2">
+                    <span className="px-2 py-0.5 bg-gray-100 rounded-md text-[10px] uppercase font-black tracking-wider">{group.language}</span>
+                    <span>•</span>
+                    <span>{group.member_count} members</span>
                   </div>
-
-                  <div className="mb-2">
-                    <span className="inline-block px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-[11px] font-bold uppercase tracking-wider mb-1">
-                      {req.language_name || 'Unknown'}
-                    </span>
-                    {req.message && req.message !== "No message" && (
-                      <div className="text-gray-600 text-[13px] leading-relaxed italic border-l-2 border-gray-100 pl-3 py-1 mt-1">
-                        "{req.message}"
+                </button>
+              ))
+            ) : (
+              requests.length === 0 ? (
+                <div className="p-12 text-center text-gray-400 font-bold italic">No pending requests yet. 🍜</div>
+              ) : requests.map((req, i) => (
+                <div key={i} className="px-8 py-6 border-b border-gray-100 last:border-0 hover:bg-gray-50/80 transition flex items-start gap-4">
+                  {/* User Avatar */}
+                  <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-100 flex-shrink-0 overflow-hidden shadow-sm">
+                    {req.user?.avatar_url ? (
+                      <img src={req.user.avatar_url} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-blue-500 font-bold text-lg">
+                        {req.user?.display_name?.charAt(0) || '?'}
                       </div>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 mt-3">
-                    {req.language_name && (
-                      <button
-                        onClick={() => openCreateModal({ language: req.language_name, requests: [req] })}
-                        className="px-4 py-1.5 bg-green-500 text-white rounded-lg text-xs font-bold hover:bg-green-600 shadow-sm transition active:scale-95"
-                      >
-                        Create Group
-                      </button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <h4 className="font-bold text-gray-900 truncate">@{req.user?.display_name || 'anonymous'}</h4>
+                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{new Date(req.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <div className="inline-flex items-center px-3 py-1 bg-[var(--soup-turquoise)]/10 text-[var(--soup-turquoise)] rounded-lg text-xs font-black uppercase tracking-wider mb-3">
+                      wants {req.language}
+                    </div>
+                    {req.notes && (
+                      <p className="text-sm text-gray-600 bg-gray-50 p-4 rounded-2xl italic font-medium leading-relaxed mb-4">
+                        "{req.notes}"
+                      </p>
                     )}
-                    <button
-                      onClick={() => deleteRequest(req.id)}
-                      className="text-gray-300 hover:text-red-500 p-1.5 hover:bg-red-50 rounded-lg transition"
-                      title="Delete Request"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                    </button>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => openCreateModal({ language: req.language, requests: [req] })}
+                        className="px-4 py-2 bg-[var(--soup-turquoise)] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-sm"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => deleteRequest(req.id)}
+                        className="px-4 py-2 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-all"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
                   </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Selected Group Detail Column */}
+        <div className="bg-white rounded-[32px] border border-black/5 shadow-sm overflow-hidden flex flex-col h-[700px]">
+          {selectedGroup ? (
+            <>
+              <div className="px-8 py-6 bg-gray-50/50 border-b border-black/5">
+                <h3 className="text-2xl font-black text-gray-900 tracking-tight">{selectedGroup.name}</h3>
+                <p className="text-sm font-bold text-gray-400 mt-1 uppercase tracking-widest">{selectedGroup.language} Soup • {members.length} active soupers</p>
+              </div>
+              <div className="flex-1 overflow-y-auto p-8">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {members.map((member, i) => (
+                    <div key={i} className="flex flex-col items-center p-4 bg-gray-50/50 rounded-[24px] border border-black/5 group hover:bg-white hover:shadow-md transition-all">
+                      <div className="w-16 h-16 rounded-full bg-white border-2 border-white shadow-sm overflow-hidden mb-3 group-hover:scale-110 transition-transform">
+                        {member.avatar_url ? (
+                          <img src={member.avatar_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-300 font-bold text-xl uppercase italic">
+                            {member.display_name?.charAt(0) || '?'}
+                          </div>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest text-center truncate w-full">
+                        {member.display_name?.split(' ')[0] || 'souper'}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))
-          )
-          }
-        </div>
-      </div>
-
-      {/* Details/Members Column (Only visible when a group is selected in Active view) */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden h-[600px] flex flex-col">
-        <div className="px-6 py-4 bg-gray-50 border-b">
-          <h2 className="font-bold text-gray-900">
-            {activeView === 'requests' ? 'Info' : (selectedGroup ? `${selectedGroup.name} Members` : 'Select a group')}
-          </h2>
-        </div>
-
-        {activeView === 'requests' ? (
-          <div className="p-6 text-gray-600">
-            <p>Accepting a language request will:</p>
-            <ul className="list-disc ml-5 mt-2 space-y-1">
-              <li>Create a new public group for that language</li>
-              <li>Mark all pending requests for that language as "approved"</li>
-              <li>(Future) Automatically invite interested users</li>
-            </ul>
-          </div>
-        ) : (
-          selectedGroup && (
-            <div className="flex-1 overflow-y-auto divide-y divide-gray-200">
-              {members.length === 0 ? (
-                <div className="px-6 py-8 text-center text-gray-600">
-                  No members yet
-                </div>
-              ) : (
-                members.map((member, i) => (
-                  <div key={i} className="px-6 py-4">
-                    <div className="font-medium text-gray-900">
-                      {member.display_name || 'Unknown'}
-                    </div>
-                    {member.email && (
-                      <div className="text-sm text-gray-600">{member.email}</div>
-                    )}
-                  </div>
-                ))
-              )}
+            </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center opacity-20 py-20">
+              <Users size={64} className="text-gray-300 mb-4" />
+              <p className="text-sm font-black text-gray-400 uppercase tracking-widest">Select a group to see its vibe</p>
             </div>
-          )
-        )}
+          )}
+        </div>
       </div>
 
       {/* Create Group Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h3 className="text-xl font-bold mb-4">Create New Group</h3>
-
-            <div className="space-y-4">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center p-6 z-[9999]">
+          <div className="bg-white rounded-[48px] shadow-2xl max-w-md w-full p-12 animate-in zoom-in-95 duration-300">
+            <h3 className="text-3xl font-black text-gray-900 mb-8 tracking-tight">Cook up a Group 🥘</h3>
+            <div className="space-y-6">
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Language</label>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 block ml-1">Language</label>
                 <input
                   type="text"
                   value={newGroupLanguage}
                   onChange={(e) => setNewGroupLanguage(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-lg bg-gray-50"
+                  className="w-full px-6 py-4 bg-gray-50 border-2 border-transparent focus:border-[var(--soup-turquoise)]/30 focus:bg-white rounded-2xl focus:ring-0 text-lg font-bold transition-all"
+                  placeholder="e.g. Spanish"
                 />
               </div>
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Group Name</label>
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 block ml-1">Group Name</label>
                 <input
                   type="text"
                   value={newGroupName}
@@ -1256,19 +1247,19 @@ function GroupsTab() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 mt-6">
+            <div className="flex items-center gap-4 mt-10">
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium"
+                className="flex-1 py-4 text-gray-400 font-black uppercase text-xs tracking-widest hover:text-gray-600 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleCreateGroup}
                 disabled={creatingGroup}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition flex items-center gap-2"
+                className="flex-2 px-10 py-4 bg-black text-white rounded-[24px] font-black hover:scale-105 active:scale-95 transition-all shadow-xl shadow-black/20 flex items-center justify-center gap-3 disabled:opacity-50"
               >
-                {creatingGroup ? 'Creating...' : 'Create Group'}
+                {creatingGroup ? '...' : 'Create 🚀'}
               </button>
             </div>
           </div>
@@ -1279,7 +1270,7 @@ function GroupsTab() {
 }
 
 // Support Tab - Trello-style Ticket Board
-function SupportTab() {
+function SupportTab({ unreadCount }) {
   const [activeView, setActiveView] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('view') || 'tickets';
@@ -1307,12 +1298,17 @@ function SupportTab() {
         </button>
         <button
           onClick={() => handleViewChange('inbox')}
-          className={`px-6 py-3 rounded-xl font-bold transition-all ${activeView === 'inbox'
+          className={`px-6 py-3 rounded-xl font-bold transition-all flex items-center gap-2 ${activeView === 'inbox'
             ? 'bg-[var(--soup-turquoise)] text-white shadow-md'
             : 'text-gray-500 hover:text-[var(--soup-turquoise)]'
             }`}
         >
-          💬 Inbox
+          <span>💬 Inbox</span>
+          {unreadCount > 0 && (
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${activeView === 'inbox' ? 'bg-white text-[var(--soup-turquoise)]' : 'bg-[var(--soup-turquoise)] text-white'}`}>
+              {unreadCount}
+            </span>
+          )}
         </button>
       </div>
 

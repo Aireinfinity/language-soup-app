@@ -2,17 +2,16 @@
 @import "tailwindcss";
 
 :root {
-  --soup-blue: #00aedf;
-  --soup-turquoise: #00aedf;
-  --soup-dark: #1b1b2f;
-  --soup-beige: #fef6e4;
-  --soup-green: #19b091;
+  --soup-turquoise: #00adef;
   --soup-pink: #ec008b;
+  --soup-green: #19b091;
+  --soup-linen: #FDF5E6;
+  --soup-dark: #1b1b2f;
 }
 
 body {
   font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background-color: var(--soup-beige);
+  background-color: var(--soup-linen);
   color: var(--soup-dark);
   min-height: 100vh;
 }

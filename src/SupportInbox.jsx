@@ -51,11 +51,12 @@ export default function SupportInbox() {
 
             if (error) throw error;
 
-            // Group by user
+            // Group by user, filtering out Noah
+            const adminIds = ['32ac1943-aa68-4025-b4d9-3aa7ef129fb1', '29864936-719c-483b-ac6a-4d06084a48fe'];
             const threadMap = new Map();
 
             data.forEach(msg => {
-                if (!threadMap.has(msg.user_id)) {
+                if (!threadMap.has(msg.user_id) && !adminIds.includes(msg.user_id)) {
                     threadMap.set(msg.user_id, {
                         userId: msg.user_id,
                         userName: msg.app_users?.display_name || 'Anonymous',
@@ -63,7 +64,7 @@ export default function SupportInbox() {
                         lastMessage: msg.content,
                         lastMessageTime: msg.created_at,
                         isLastFromAdmin: msg.from_admin,
-                        unreadCount: 0 // Could calculate this if we had a read status
+                        unreadCount: 0
                     });
                 }
             });
@@ -125,6 +126,28 @@ export default function SupportInbox() {
         }
     };
 
+    const handlePromoteToTicket = async (msg) => {
+        try {
+            const title = msg.content.length > 50 ? msg.content.substring(0, 47) + '...' : msg.content;
+            const { error } = await supabase
+                .from('app_support_messages')
+                .update({
+                    is_ticket: true,
+                    title: title,
+                    status: 'new',
+                    priority: 'P2'
+                })
+                .eq('id', msg.id);
+
+            if (error) throw error;
+            loadMessages(activeThread.userId);
+            alert('Promoted to ticket! 🎫 Check the Tickets board.');
+        } catch (err) {
+            console.error('Error promoting:', err);
+            alert('Failed to promote to ticket');
+        }
+    };
+
     const scrollToBottom = () => {
         setTimeout(() => {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -181,11 +204,14 @@ export default function SupportInbox() {
                                         <h3 className="font-bold text-gray-900 truncate">{thread.userName}</h3>
                                         <span className="text-[10px] font-medium text-gray-400">{new Date(thread.lastMessageTime).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
                                     </div>
-                                    <p className="text-sm text-gray-500 truncate font-medium">
+                                    <p className={`text-sm truncate font-medium ${!thread.isLastFromAdmin ? 'text-gray-900 font-bold' : 'text-gray-500'}`}>
                                         {thread.isLastFromAdmin && <span className="text-[var(--soup-turquoise)]">You: </span>}
                                         {thread.lastMessage}
                                     </p>
                                 </div>
+                                {!thread.isLastFromAdmin && (
+                                    <div className="w-3 h-3 rounded-full bg-[var(--soup-turquoise)] shadow-sm shadow-[var(--soup-turquoise)]/20 animate-pulse mt-2"></div>
+                                )}
                             </button>
                         ))
                     )}
@@ -239,12 +265,27 @@ export default function SupportInbox() {
                                     <div key={msg.id || index} className={`flex ${isAdmin ? 'justify-end' : 'justify-start'}`}>
                                         <div className={`max-w-[70%] group flex flex-col ${isAdmin ? 'items-end' : 'items-start'}`}>
                                             <div
-                                                className={`px-5 py-3 rounded-2xl shadow-sm text-sm font-medium leading-relaxed ${isAdmin
+                                                className={`px-5 py-3 rounded-2xl shadow-sm text-sm font-medium leading-relaxed relative group/msg ${isAdmin
                                                     ? 'bg-[var(--soup-turquoise)] text-white rounded-br-none'
                                                     : 'bg-white text-gray-800 border border-black/5 rounded-bl-none'
                                                     }`}
                                             >
                                                 {msg.content}
+                                                {!isAdmin && !msg.is_ticket && (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handlePromoteToTicket(msg);
+                                                        }}
+                                                        className="absolute -right-12 top-1/2 -translate-y-1/2 p-2 bg-white text-[10px] font-black uppercase tracking-widest text-[var(--soup-turquoise)] border border-black/5 rounded-xl shadow-sm opacity-0 group-hover/msg:opacity-100 transition-all hover:scale-110 active:scale-95 whitespace-nowrap"
+                                                        title="Turn into a ticket"
+                                                    >
+                                                        🎫 Ticket
+                                                    </button>
+                                                )}
+                                                {msg.is_ticket && (
+                                                    <div className="absolute -right-8 top-1/2 -translate-y-1/2 text-lg" title="This is a ticket!">🎫</div>
+                                                )}
                                             </div>
                                             <span className="text-[10px] text-gray-400 mt-1 px-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 {formatTime(msg.created_at)}
