@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
 import { Calendar, Trash2, Send, Clock, CheckCircle, Edit2, X, Check } from 'lucide-react';
 import { predictResponseRate, logChallengeSent } from './soupPredictor';
+import { translateText } from './translationHelper';
 
 export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLangCode, handleSendToGroups }) {
     const [queuedChallenges, setQueuedChallenges] = useState([]);
@@ -247,31 +248,14 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
 
             // Translate all languages in PARALLEL for speed!
             const translationPromises = uniqueLanguages.map(async (language) => {
-                const deeplLang = getDeepLLangCode(language);
-                const googleLang = getGoogleLangCode(language);
-
-                if (!deeplLang && !googleLang) {
-                    return [language, challenge.challenge_text];
-                }
-
-                try {
-                    // Try DeepL first
-                    const { data, error } = await supabase.functions.invoke('translate-text', {
-                        body: { text: challenge.challenge_text, targetLang: deeplLang }
-                    });
-
-                    if (!error && !data.error) {
-                        return [language, data.translatedText];
-                    } else {
-                        throw new Error('DeepL failed');
-                    }
-                } catch {
-                    // Fallback to Google
-                    const { data } = await supabase.functions.invoke('translate-google', {
-                        body: { text: challenge.challenge_text, targetLang: googleLang }
-                    });
-                    return [language, data.translatedText];
-                }
+                const translated = await translateText(
+                    challenge.challenge_text,
+                    language,
+                    getDeepLLangCode,
+                    getGoogleLangCode,
+                    supabase
+                );
+                return [language, translated];
             });
 
             // Wait for all translations to complete
@@ -342,21 +326,14 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
 
                 // 2. Translate in parallel
                 const translationPromises = uniqueLanguages.map(async (language) => {
-                    const deeplLang = getDeepLLangCode(language);
-                    const googleLang = getGoogleLangCode(language);
-                    if (!deeplLang && !googleLang) return [language, selectedChallenge.challenge_text];
-                    try {
-                        const { data, error } = await supabase.functions.invoke('translate-text', {
-                            body: { text: selectedChallenge.challenge_text, targetLang: deeplLang }
-                        });
-                        if (!error && !data.error) return [language, data.translatedText];
-                        throw new Error('DeepL failed');
-                    } catch {
-                        const { data } = await supabase.functions.invoke('translate-google', {
-                            body: { text: selectedChallenge.challenge_text, targetLang: googleLang }
-                        });
-                        return [language, data.translatedText];
-                    }
+                    const translated = await translateText(
+                        selectedChallenge.challenge_text,
+                        language,
+                        getDeepLLangCode,
+                        getGoogleLangCode,
+                        supabase
+                    );
+                    return [language, translated];
                 });
 
                 const translationPairs = await Promise.all(translationPromises);
@@ -411,35 +388,14 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
             const uniqueLanguages = [...new Set(groups.map(g => g.language))];
 
             const translationPromises = uniqueLanguages.map(async (language) => {
-                if (language.toLowerCase() === 'english') {
-                    return [language, cleanEnglish];
-                }
-
-                const deeplLang = getDeepLLangCode(language);
-                const googleLang = getGoogleLangCode(language);
-
-                if (!deeplLang && !googleLang) {
-                    return [language, cleanEnglish];
-                }
-
-                try {
-                    // Try DeepL first
-                    const { data, error } = await supabase.functions.invoke('translate-text', {
-                        body: { text: cleanEnglish, targetLang: deeplLang }
-                    });
-
-                    if (!error && !data.error) {
-                        return [language, data.translatedText];
-                    } else {
-                        throw new Error('DeepL failed');
-                    }
-                } catch {
-                    // Fallback to Google
-                    const { data } = await supabase.functions.invoke('translate-google', {
-                        body: { text: cleanEnglish, targetLang: googleLang }
-                    });
-                    return [language, data.translatedText];
-                }
+                const translated = await translateText(
+                    cleanEnglish,
+                    language,
+                    getDeepLLangCode,
+                    getGoogleLangCode,
+                    supabase
+                );
+                return [language, translated];
             });
 
             const translationPairs = await Promise.all(translationPromises);

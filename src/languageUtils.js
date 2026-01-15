@@ -39,6 +39,9 @@ export const getDeepLLangCode = (groupLanguage) => {
 };
 
 export const getGoogleLangCode = (groupLanguage) => {
+    // NUCLEAR DEBUG: Log everything immediately
+    console.log(`☢️ getGoogleLangCode INPUT: "${groupLanguage}"`, groupLanguage.split('').map(c => c.charCodeAt(0)));
+
     const lang = groupLanguage.toLowerCase();
     // European languages
     if (lang.includes('spanish') || lang.includes('español')) return 'es';
@@ -89,6 +92,13 @@ export const getGoogleLangCode = (groupLanguage) => {
     if (lang.includes('zulu')) return 'zu';
     if (lang.includes('afrikaans')) return 'af';
 
+    // Generic check for Mooré (Robust for both NFC and NFD)
+    // "Mooré" contains "moor", "Moore" contains "moor"
+    if (lang.includes('moor') || lang.includes('mossi')) return 'mos';
+
+    // Explicit variations (just in case)
+    if (lang.includes('mooré') || lang.includes('moore') || lang.includes('mossi')) return 'mos';
+
     // Other languages
     if (lang.includes('hebrew') || lang.includes('עברית')) return 'iw';
     if (lang.includes('persian') || lang.includes('فارسی') || lang.includes('farsi')) return 'fa';
@@ -135,7 +145,10 @@ export const getGoogleLangCode = (groupLanguage) => {
         'basque': 'eu',
         'catalan': 'ca',
         'corsican': 'co',
-        'maltese': 'mt'
+        'maltese': 'mt',
+        'mooré': 'mos',
+        'moore': 'mos',
+        'mossi': 'mos'
     };
 
     if (autoDetect[firstWord]) {

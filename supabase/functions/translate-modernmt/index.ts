@@ -1,4 +1,3 @@
-
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
 const corsHeaders = {
@@ -22,34 +21,53 @@ serve(async (req) => {
             )
         }
 
-        console.log(`Google Translating to ${targetLang}: "${text}"`)
+        console.log(`ModernMT Translating to ${targetLang}: "${text}"`)
 
-        // Official Google Cloud Translation API - 500k characters/month FREE
-        const apiKey = Deno.env.get('GOOGLE_TRANSLATE_API_KEY')
+        // ModernMT API - 150k words/month FREE
+        const apiKey = Deno.env.get('MODERNMT_API_KEY')
 
         if (!apiKey) {
-            throw new Error('GOOGLE_TRANSLATE_API_KEY not configured')
+            throw new Error('MODERNMT_API_KEY not configured')
         }
 
-        const url = `https://translation.googleapis.com/language/translate/v2?key=${apiKey}`
+        const url = 'https://api.modernmt.com/translate'
 
         const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                q: text,
-                target: targetLang.toLowerCase(),
-                format: 'text'
-            })
+            method: 'GET',
+            headers: {
+                'MMT-ApiKey': apiKey,
+                'MMT-Platform': 'language-soup',
+                'MMT-PlatformVersion': '1.0'
+            },
+            // ModernMT uses query params
+            // Format: ?q=text&source=en&target=mos
         })
 
-        const result = await response.json()
+        // Construct URL with query params
+        const params = new URLSearchParams({
+            q: text,
+            source: 'en',
+            target: targetLang.toLowerCase()
+        })
+
+        const fullUrl = `${url}?${params}`
+
+        const translationResponse = await fetch(fullUrl, {
+            method: 'GET',
+            headers: {
+                'MMT-ApiKey': apiKey,
+                'MMT-Platform': 'language-soup',
+                'MMT-PlatformVersion': '1.0'
+            }
+        })
+
+        const result = await translationResponse.json()
 
         if (result.error) {
             throw new Error(result.error.message || 'Translation failed')
         }
 
-        const translatedText = result.data.translations[0].translatedText
+        const translatedText = result.data.translation
 
         return new Response(
             JSON.stringify({ translatedText }),
@@ -57,7 +75,7 @@ serve(async (req) => {
         )
 
     } catch (error) {
-        console.error('Translation error:', error)
+        console.error('ModernMT translation error:', error)
         return new Response(
             JSON.stringify({ error: error.message }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

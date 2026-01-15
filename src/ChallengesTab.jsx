@@ -4,6 +4,7 @@ import { Zap, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import LiveFeedTab from './LiveFeedTab';
 import QueueTab from './QueueTab';
 import { getDeepLLangCode, getGoogleLangCode } from './languageUtils';
+import { translateText } from './translationHelper';
 
 // Official Language Soup Bot ID (Fixed UUID)
 const SYSTEM_BOT_ID = '00000000-0000-0000-0000-000000000000';
@@ -304,58 +305,24 @@ export default function ChallengesTab({ user }) {
             console.log('📍 Selected group:', group);
             console.log('🌍 Group language:', group?.language);
 
-            const deeplLang = getDeepLLangCode(group?.language || '');
+            // Use unified translation helper
+            const translated = await translateText(
+                challengeText,
+                group?.language || '',
+                getDeepLLangCode,
+                getGoogleLangCode,
+                supabase
+            );
+
+            // Special handling for Mooré to show community label
             const googleLang = getGoogleLangCode(group?.language || '');
-
-            console.log('🔷 DeepL language code:', deeplLang);
-            console.log('🌐 Google language code:', googleLang);
-
-            if (!deeplLang && !googleLang) {
-                console.error('❌ No valid language code found!');
-                alert(`Could not determine target language for group: ${group?.language}`);
-                return;
+            if (googleLang === 'mos') {
+                setChallengeText(prev => `${prev}\n\n${translated}\n\n✨ Community-powered translation`);
+            } else {
+                setChallengeText(prev => `${prev}\n\n${translated}`);
             }
 
-            // Try DeepL first (better quality)
-            try {
-                console.log('🔷 Trying DeepL translation...');
-                console.log('Request payload:', { text: challengeText, targetLang: deeplLang });
-
-                const { data, error } = await supabase.functions.invoke('translate-text', {
-                    body: { text: challengeText, targetLang: deeplLang }
-                });
-
-                console.log('DeepL response data:', data);
-                console.log('DeepL response error:', error);
-
-                if (error) throw error;
-                if (data.error) throw new Error(data.error);
-
-                setChallengeText(prev => `${prev}\n\n${data.translatedText}`);
-                console.log('✅ DeepL translation successful!');
-                return; // Success! Exit here
-
-            } catch (deeplError) {
-                console.warn('⚠️ DeepL failed, falling back to Google Translate:', deeplError.message);
-                console.warn('Full DeepL error:', deeplError);
-
-                // Fallback to Google Translate
-                console.log('🌐 Trying Google Translate...');
-                console.log('Request payload:', { text: challengeText, targetLang: googleLang });
-
-                const { data, error } = await supabase.functions.invoke('translate-google', {
-                    body: { text: challengeText, targetLang: googleLang }
-                });
-
-                console.log('Google response data:', data);
-                console.log('Google response error:', error);
-
-                if (error) throw error;
-                if (data.error) throw new Error(data.error);
-
-                setChallengeText(prev => `${prev}\n\n${data.translatedText}`);
-                console.log('✅ Google Translate successful!');
-            }
+            console.log('✅ Translation successful!');
 
         } catch (err) {
             console.error('❌ Translation error:', err);

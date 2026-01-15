@@ -1,9 +1,13 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
-// TODO: Move this to Supabase Secret (Deno.env.get('DEEPL_API_KEY')) for production security!
-const DEEPL_API_KEY = '29649ac5-c890-4715-877c-3a1ac797cce6:fx'
+// DeepL API - 500k characters/month FREE
+const DEEPL_API_KEY = Deno.env.get('DEEPL_API_KEY')
 const DEEPL_API_URL = 'https://api-free.deepl.com/v2/translate'
+
+if (!DEEPL_API_KEY) {
+    console.error('⚠️ DEEPL_API_KEY not configured in Supabase secrets')
+}
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -17,16 +21,27 @@ serve(async (req) => {
     }
 
     try {
-        const { text, targetLang } = await req.json()
+        const bodyText = await req.text(); // Read text once
+        console.log('Received raw body:', bodyText);
+
+        let body;
+        try {
+            body = JSON.parse(bodyText);
+        } catch (e) {
+            console.error('Failed to parse JSON body:', e);
+            throw new Error('Invalid JSON body');
+        }
+
+        const { text, targetLang } = body;
+        console.log(`Parsed request - Text: "${text}", Target: "${targetLang}"`);
 
         if (!text || !targetLang) {
+            console.error('Missing required fields');
             return new Response(
-                JSON.stringify({ error: 'Missing text or targetLang' }),
+                JSON.stringify({ error: 'Missing text or targetLang', received: body }),
                 { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
         }
-
-        console.log(`Translating to ${targetLang}: "${text}"`)
 
         const params = new URLSearchParams()
         params.append('auth_key', DEEPL_API_KEY)

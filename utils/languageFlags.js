@@ -118,6 +118,10 @@ export const languageFlags = {
     'ქართული': '🇬🇪',
     'Armenian': '🇦🇲',
     'Հայերեն': '🇦🇲',
+    'Mooré': '🇧🇫',
+    'Moore': '🇧🇫',
+    'Mossi': '🇧🇫',
+
 
     // Sign languages - use hand emoji
     'ASL': '🤟',
