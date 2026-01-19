@@ -22,10 +22,10 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
     const [showOptIn, setShowOptIn] = useState(false);
     const [hasOptedIn, setHasOptedIn] = useState(null);
 
-    // Feature flag check - TEMPORARILY DISABLED FOR TESTING
-    // if (!BETA_USERS.includes(userId)) {
-    //     return null;
-    // }
+    // Feature flag check
+    if (!BETA_USERS.includes(userId)) {
+        return null;
+    }
 
     const checkOptInStatus = async () => {
         const { data } = await supabase
