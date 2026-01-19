@@ -38,59 +38,13 @@ serve(async (req) => {
         for (const challenge of challenges) {
             console.log(`Processing challenge: ${challenge.id}`)
 
-            // Remove #challenge prefix if user already typed it
-            const cleanEnglish = challenge.challenge_text.replace(/^#challenge\s*/i, '').trim()
+            // 🛡️ TRUST THE DASHBOARD (The "Big Brain" fix)
+            // Use the pre-calculated translations saved in the database
+            const translations = challenge.translations || {}
 
-            // Get unique languages and translate in PARALLEL (like dashboard)
-            const uniqueLanguages = [...new Set(groups.map(g => g.language))]
-
-            const translationPromises = uniqueLanguages.map(async (language) => {
-                if (language.toLowerCase() === 'english') {
-                    return [language, cleanEnglish]
-                }
-
-                const deeplLang = getDeepLLangCode(language)
-                const googleLang = getGoogleLangCode(language)
-
-                if (!deeplLang && !googleLang) {
-                    return [language, cleanEnglish]
-                }
-
-                try {
-                    // Try DeepL first
-                    const deeplResponse = await fetch('https://api-free.deepl.com/v2/translate', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: `auth_key=${DEEPL_API_KEY}&text=${encodeURIComponent(cleanEnglish)}&target_lang=${deeplLang}`
-                    })
-                    const deeplData = await deeplResponse.json()
-                    if (deeplData.translations && deeplData.translations[0]) {
-                        return [language, deeplData.translations[0].text]
-                    }
-                    throw new Error('DeepL failed')
-                } catch {
-                    // Fallback to Google
-                    const googleResponse = await fetch(`https://translation.googleapis.com/language/translate/v2?key=${GOOGLE_API_KEY}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ q: cleanEnglish, target: googleLang })
-                    })
-                    const googleData = await googleResponse.json()
-                    return [language, googleData.data.translations[0].translatedText]
-                }
-            })
-
-            const translationPairs = await Promise.all(translationPromises)
-            const translationResults = Object.fromEntries(translationPairs)
-
-            // Send to all groups with proper format (EXACTLY like dashboard)
+            // Send to all groups with proper format (already calculated by dashboard)
             for (const group of groups) {
-                const translation = translationResults[group.language]
-
-                // Format: #challenge\n[english]\n[translation]
-                const finalText = group.language.toLowerCase() === 'english'
-                    ? `#challenge\n${cleanEnglish}`
-                    : `#challenge\n${cleanEnglish}\n${translation}`
+                const finalText = translations[group.language] || challenge.challenge_text
 
                 await supabase.from('app_challenges').insert({
                     group_id: group.id,

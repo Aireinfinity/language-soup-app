@@ -1,0 +1,156 @@
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+
+const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+serve(async (req) => {
+    if (req.method === 'OPTIONS') {
+        return new Response('ok', { headers: corsHeaders })
+    }
+
+    try {
+        const { audioUrl, language, userId } = await req.json()
+
+        console.log('Voice feedback request:', { audioUrl, language, userId })
+
+        // Step 1: Download audio from Supabase Storage
+        const audioResponse = await fetch(audioUrl)
+        const audioBlob = await audioResponse.blob()
+
+        // Step 2: Transcribe with Hugging Face Whisper
+        const HF_TOKEN = Deno.env.get('HUGGINGFACE_API_TOKEN')
+        const whisperResponse = await fetch(
+            'https://api-inference.huggingface.co/models/openai/whisper-large-v3',
+            {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${HF_TOKEN}` },
+                body: audioBlob,
+            }
+        )
+        const whisperResult = await whisperResponse.json()
+        const transcription = whisperResult.text || ''
+
+        console.log('Transcription:', transcription)
+
+        // Step 3: Get corrections from Groq Llama 3
+        const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY')
+        const correctionPrompt = `You are a ${language} language teacher. A student said: "${transcription}"
+
+Analyze this and respond in JSON format:
+{
+  "is_correct": true/false,
+  "corrected": "corrected version or same if perfect",
+  "explanation": "brief tip (max 50 chars) or empty if perfect"
+}
+
+Keep explanations SHORT and helpful. If grammar is perfect, set is_correct to true and leave explanation empty.`
+
+        const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${GROQ_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model: 'llama-3.1-70b-versatile',
+                messages: [{ role: 'user', content: correctionPrompt }],
+                temperature: 0.3,
+            }),
+        })
+        const groqResult = await groqResponse.json()
+        const correctionText = groqResult.choices[0].message.content
+
+        // Parse JSON response
+        let correction
+        try {
+            correction = JSON.parse(correctionText)
+        } catch (e) {
+            correction = { is_correct: true, corrected: transcription, explanation: '' }
+        }
+
+        console.log('Correction:', correction)
+
+        // Step 4: Generate pronunciation with ElevenLabs
+        const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY')
+        const textToSpeak = correction.corrected
+
+        const elevenLabsResponse = await fetch(
+            'https://api.elevenlabs.io/v1/text-to-speech/pNInz6obpgDQGcFmaJgB', // Rachel voice
+            {
+                method: 'POST',
+                headers: {
+                    'xi-api-key': ELEVENLABS_API_KEY,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    text: textToSpeak,
+                    model_id: 'eleven_multilingual_v2',
+                    voice_settings: {
+                        stability: 0.5,
+                        similarity_boost: 0.75,
+                    },
+                }),
+            }
+        )
+
+        const pronunciationAudio = await elevenLabsResponse.arrayBuffer()
+
+        // Step 5: Upload pronunciation to Supabase Storage
+        const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
+        const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+        const supabase = createClient(supabaseUrl, supabaseKey)
+
+        const fileName = `pronunciation_${userId}_${Date.now()}.mp3`
+        const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('voice-memos')
+            .upload(`pronunciations/${fileName}`, pronunciationAudio, {
+                contentType: 'audio/mpeg',
+            })
+
+        if (uploadError) throw uploadError
+
+        const { data: urlData } = supabase.storage
+            .from('voice-memos')
+            .getPublicUrl(`pronunciations/${fileName}`)
+
+        const pronunciationUrl = urlData.publicUrl
+
+        // Step 6: Save to database if user opted in
+        const { data: userData } = await supabase
+            .from('app_users')
+            .select('share_voice_feedback')
+            .eq('id', userId)
+            .single()
+
+        if (userData?.share_voice_feedback) {
+            await supabase.from('app_voice_feedback_data').insert({
+                user_id: userId,
+                language,
+                transcription,
+                corrected: correction.corrected,
+                has_errors: !correction.is_correct,
+            })
+        }
+
+        return new Response(
+            JSON.stringify({
+                transcription,
+                corrected: correction.corrected,
+                hasErrors: !correction.is_correct,
+                explanation: correction.explanation,
+                pronunciationUrl,
+                confidence: 95, // Whisper doesn't return confidence, using high default
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+    } catch (error) {
+        console.error('Error:', error)
+        return new Response(
+            JSON.stringify({ error: error.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+    }
+})

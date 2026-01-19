@@ -72,6 +72,12 @@ serve(async (req) => {
 
             // Send to all groups with proper format
             for (const group of groups) {
+                // 🛡️ TEST FILTER: ONLY INSERT INTO NOAH'S TEST GROUP
+                if (group.name !== "noah's test group solo") {
+                    console.log(`🛡️ Skipping group: ${group.name}`)
+                    continue
+                }
+
                 const translation = translations[group.language];
 
                 // Format: #challenge\n[english]\n[translation]
@@ -92,6 +98,8 @@ serve(async (req) => {
                     console.error(`Failed to insert challenge for group ${group.id}:`, challengeError);
                     continue;
                 }
+
+                console.log(`✅ Inserted into: ${group.name}`)
             }
 
             // Collect all unique users across all groups for deduplication

@@ -7,6 +7,7 @@ import { MessageActionMenu } from './MessageActionMenu';
 import { ReactionViewerModal } from "./ReactionViewerModal";
 import { shareChallenge } from '../lib/shareChallenge';
 import { Share2 } from 'lucide-react-native';
+import { VoiceFeedbackButton } from './VoiceFeedbackButton';
 
 import { getLanguageFlag } from '../utils/languageFlags';
 import { ReactionPicker } from './ReactionPicker';
@@ -196,6 +197,17 @@ export function MessageBubble({
                         senderStatus={sender?.status_text}
                         groupName={groupName}
                     />
+
+                    {/* Voice Feedback Button - Feature flagged for beta */}
+                    {isMe && (
+                        <VoiceFeedbackButton
+                            audioUrl={message.media_url || message.content}
+                            language={groupLanguage}
+                            userId={message.sender_id}
+                            groupLanguage={groupLanguage}
+                        />
+                    )}
+
                     {isMe && (
                         <Pressable
                             style={styles.shareButton}
