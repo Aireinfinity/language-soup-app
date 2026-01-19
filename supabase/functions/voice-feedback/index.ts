@@ -20,7 +20,7 @@ serve(async (req) => {
         const audioBlob = await audioResponse.blob()
 
         // Step 2: Transcribe with Hugging Face Whisper
-        const HF_TOKEN = Deno.env.get('HUGGINGFACE_API_TOKEN')
+        const HF_TOKEN = Deno.env.get('HUGGINGFACE_API_KEY')
         const whisperResponse = await fetch(
             'https://api-inference.huggingface.co/models/openai/whisper-large-v3',
             {
