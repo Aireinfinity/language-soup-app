@@ -144,7 +144,8 @@ serve(async (req) => {
                         sound: 'default',
                         title: 'mmm goood soup!',
                         body: `${randomEmoji} new challenges just dropped!`,
-                        data: { type: 'challenge' }
+                        data: { type: 'challenge' },
+                        channelId: 'default', // Required for Android
                     }));
 
                     await fetch('https://exp.host/--/api/v2/push/send', {

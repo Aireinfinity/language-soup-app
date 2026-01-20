@@ -29,6 +29,9 @@
       },
       "package": "com.aireinfinity.languagesoup",
       "versionCode": 23,
+      "notification": {
+        "icon": "./assets/notification-icon.png"
+      },
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
