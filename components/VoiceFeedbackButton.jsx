@@ -33,8 +33,6 @@ const feedbackCache = {};
 export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage }) {
     const [showModal, setShowModal] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [transcription, setTranscription] = useState('');
-    const [correction, setCorrection] = useState(null);
     const [pronunciationUrl, setPronunciationUrl] = useState(null);
     const [showCorrections, setShowCorrections] = useState(false);
     const [confidence, setConfidence] = useState(1.0);
@@ -106,13 +104,17 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
             const cached = feedbackCache[audioUrl];
             setTranscription(cached.transcription);
             setCorrection(cached.correction);
-            setPronunciationUrl(cached.pronunciationUrl); // Might be null initially
             setConfidence(cached.confidence);
+            if (cached.audioBase64) {
+                setPronunciationUrl(`data:audio/mp3;base64,${cached.audioBase64}`);
+            } else {
+                setPronunciationUrl(null);
+            }
             setShowCorrections(true);
             setLoading(false);
 
             // If cached but missing audio, fetch it?
-            if (!cached.pronunciationUrl && cached.correction && cached.correction.corrected) {
+            if (!cached.audioBase64 && cached.correction && cached.correction.corrected) {
                 // Background fetch audio
                 supabase.functions.invoke('voice-feedback', {
                     body: {
@@ -121,9 +123,10 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
                         language: groupLanguage || language,
                     },
                 }).then(({ data, error }) => {
-                    if (data?.pronunciationUrl) {
-                        setPronunciationUrl(data.pronunciationUrl);
-                        feedbackCache[audioUrl].pronunciationUrl = data.pronunciationUrl;
+                    if (data?.audioBase64) {
+                        const uri = `data:audio/mp3;base64,${data.audioBase64}`;
+                        setPronunciationUrl(uri);
+                        feedbackCache[audioUrl].audioBase64 = data.audioBase64;
                     }
                 });
             }
@@ -160,7 +163,8 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
                 transcription: analyzeData.transcription,
                 correction: analyzeData.correction,
                 confidence: analyzeData.confidence,
-                pronunciationUrl: null
+                confidence: analyzeData.confidence,
+                audioBase64: null
             };
 
             // STEP 2: AUDIO (Pronunciation) - Background
@@ -173,10 +177,11 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
                     },
                 });
 
-                if (audioData?.pronunciationUrl) {
-                    setPronunciationUrl(audioData.pronunciationUrl);
+                if (audioData?.audioBase64) {
+                    const uri = `data:audio/mp3;base64,${audioData.audioBase64}`;
+                    setPronunciationUrl(uri);
                     // Update cache with full data
-                    feedbackCache[audioUrl].pronunciationUrl = audioData.pronunciationUrl;
+                    feedbackCache[audioUrl].audioBase64 = audioData.audioBase64;
                 }
             }
 
@@ -203,8 +208,9 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
                 animationType="slide"
                 onRequestClose={() => setShowModal(false)}
             >
-                <Pressable style={styles.modalOverlay} onPress={() => setShowModal(false)}>
-                    <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+                <View style={styles.modalOverlay}>
+                    <Pressable style={styles.backdrop} onPress={() => setShowModal(false)} />
+                    <View style={styles.modalContent}>
                         {/* Header */}
                         <View style={styles.header}>
                             <View style={styles.headerTitleContainer}>
@@ -339,7 +345,7 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
                             )}
                         </ScrollView>
                     </View>
-                </Pressable>
+                </View>
             </Modal >
         </>
     );
@@ -599,6 +605,9 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'flex-end',
+    },
+    backdrop: {
+        ...StyleSheet.absoluteFillObject,
     },
     modalContent: {
         backgroundColor: '#fff',

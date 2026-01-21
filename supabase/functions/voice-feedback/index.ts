@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -87,23 +88,9 @@ serve(async (req) => {
             if (!elevenLabsResponse.ok) throw new Error('ElevenLabs API failed')
 
             const pronunciationAudio = await elevenLabsResponse.arrayBuffer()
-            const fileName = `pronunciation_${Date.now()}.mp3`
-            const { data: uploadData, error: uploadError } = await supabase
-                .storage
-                .from('voice-memos') // Using the existing bucket
-                .upload(`pronunciations/${fileName}`, pronunciationAudio, {
-                    contentType: 'audio/mpeg',
-                    upsert: false
-                })
+            const audioBase64 = encode(new Uint8Array(pronunciationAudio))
 
-            if (uploadError) throw uploadError
-
-            const { data: { publicUrl } } = supabase
-                .storage
-                .from('voice-memos')
-                .getPublicUrl(`pronunciations/${fileName}`)
-
-            return new Response(JSON.stringify({ pronunciationUrl: publicUrl }), {
+            return new Response(JSON.stringify({ audioBase64 }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             })
         }
@@ -175,7 +162,7 @@ serve(async (req) => {
         2. STRICT CONSTRAINT: Keep the user's original sentence structure EXACTLY the same. Only correct the specific words that are wrong. Do NOT paraphrase or rewrite the sentence style.
         3. Provide the corrected version.
         4. Explanation: Provide a brief friendly feedback.
-        5. Translanguaging: If helpful, explicitly explain the concept using ${userLangString} grammar comparisons.
+        5. TRANSLANGUAGING: ALWAYS use the user's known languages (${userLangString}) to explain the error. Compare the ${language} grammar to how they would say it in their native language. Make this the core of your explanation.
 
         Return JSON ONLY:
         {
@@ -214,7 +201,8 @@ serve(async (req) => {
             transcription,
             correction,
             avgConfidence,
-            pronunciationUrl: null // Frontend triggers step 2
+            avgConfidence,
+            audioBase64: null // Frontend triggers step 2
         }
 
         return new Response(JSON.stringify(responseData), {
