@@ -67,18 +67,66 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
         }
     };
 
+    // Memoize Diff and Score for clean rendering
+    const diff = useMemo(() => {
+        if (!transcription || !correction?.corrected) return [];
+        return computeDiff(transcription, correction.corrected);
+    }, [transcription, correction]);
+
+    const accuracyScore = useMemo(() => {
+        if (diff.length === 0) return 100;
+
+        let common = 0, added = 0, removed = 0;
+        diff.forEach(part => {
+            const val = part.value || part.text || '';
+            const count = val.trim() ? val.trim().split(/\s+/).length : 0;
+            if (count === 0) return;
+
+            if (part.type === 'unchanged' || part.type === 'common') common += count;
+            else if (part.type === 'removed') removed += count;
+            else if (part.type === 'added') added += count;
+        });
+
+        const totalOriginal = common + removed;
+        const totalCorrected = common + added;
+        const denominator = Math.max(totalOriginal, totalCorrected);
+
+        return denominator > 0 ? Math.round((common / denominator) * 100) : 100;
+    }, [diff]);
+
+    const isPerfect = useMemo(() => {
+        return diff.length > 0 && diff.every(part => part.type === 'unchanged' || part.type === 'common');
+    }, [diff]);
+
     const handlePress = async () => {
         setShowModal(true);
 
-        // Check cache first
-        if (feedbackCache[audioUrl]) {
+        // Check cache first (Support partial cache?)
+        if (feedbackCache[audioUrl] && feedbackCache[audioUrl].transcription) {
             const cached = feedbackCache[audioUrl];
             setTranscription(cached.transcription);
             setCorrection(cached.correction);
-            setPronunciationUrl(cached.pronunciationUrl);
+            setPronunciationUrl(cached.pronunciationUrl); // Might be null initially
             setConfidence(cached.confidence);
             setShowCorrections(true);
             setLoading(false);
+
+            // If cached but missing audio, fetch it?
+            if (!cached.pronunciationUrl && cached.correction && cached.correction.corrected) {
+                // Background fetch audio
+                supabase.functions.invoke('voice-feedback', {
+                    body: {
+                        text: cached.correction.corrected,
+                        task: 'pronunciation',
+                        language: groupLanguage || language,
+                    },
+                }).then(({ data, error }) => {
+                    if (data?.pronunciationUrl) {
+                        setPronunciationUrl(data.pronunciationUrl);
+                        feedbackCache[audioUrl].pronunciationUrl = data.pronunciationUrl;
+                    }
+                });
+            }
             return;
         }
 
@@ -89,120 +137,53 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
         setShowCorrections(false);
 
         try {
-            const { data, error } = await supabase.functions.invoke('voice-feedback', {
-                body: { audioUrl, language: groupLanguage || language, userId },
+            // STEP 1: ANALYZE (Transcription + Correction)
+            const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke('voice-feedback', {
+                body: {
+                    audioUrl,
+                    language: groupLanguage || language,
+                    userId,
+                    task: 'analyze'
+                },
             });
 
-            if (error) throw error;
+            if (analyzeError) throw analyzeError;
 
-            // Cache the results
+            setTranscription(analyzeData.transcription);
+            setCorrection(analyzeData.correction);
+            setConfidence(analyzeData.confidence || 0.95);
+            setLoading(false); // Optimistic UI: Show text immediately
+            setShowCorrections(true);
+
+            // Update cache with partial data
             feedbackCache[audioUrl] = {
-                transcription: data.transcription,
-                correction: data.correction,
-                pronunciationUrl: data.pronunciationUrl,
-                confidence: data.confidence || 1.0,
+                transcription: analyzeData.transcription,
+                correction: analyzeData.correction,
+                confidence: analyzeData.confidence,
+                pronunciationUrl: null
             };
 
-            // Show everything at once (no typewriter effect)
-            setTranscription(data.transcription);
-            setCorrection(data.correction);
-            setPronunciationUrl(data.pronunciationUrl);
-            setConfidence(data.confidence || 1.0);
-            setShowCorrections(true);
-            setLoading(false);
+            // STEP 2: AUDIO (Pronunciation) - Background
+            if (analyzeData.correction?.corrected) {
+                const { data: audioData, error: audioError } = await supabase.functions.invoke('voice-feedback', {
+                    body: {
+                        text: analyzeData.correction.corrected,
+                        task: 'pronunciation',
+                        language: groupLanguage || language,
+                    },
+                });
+
+                if (audioData?.pronunciationUrl) {
+                    setPronunciationUrl(audioData.pronunciationUrl);
+                    // Update cache with full data
+                    feedbackCache[audioUrl].pronunciationUrl = audioData.pronunciationUrl;
+                }
+            }
 
         } catch (error) {
             console.error('Voice feedback error:', error);
-            alert('Could not process audio. Please try again.');
-            setShowModal(false);
-        } finally {
             setLoading(false);
         }
-    };
-
-    const computeDiff = (original, corrected) => {
-        if (!original || !corrected) return [];
-
-        const originalWords = original.trim().split(/\s+/);
-        const correctedWords = corrected.trim().split(/\s+/);
-        const diff = [];
-        let i = 0;
-        let j = 0;
-
-        while (i < originalWords.length || j < correctedWords.length) {
-            if (i >= originalWords.length) {
-                // Collect all remaining added words into a phrase
-                const addedPhrase = [];
-                while (j < correctedWords.length) {
-                    addedPhrase.push(correctedWords[j]);
-                    j++;
-                }
-                diff.push({ type: 'added', text: addedPhrase.join(' ') });
-            } else if (j >= correctedWords.length) {
-                // Collect all remaining removed words into a phrase
-                const removedPhrase = [];
-                while (i < originalWords.length) {
-                    removedPhrase.push(originalWords[i]);
-                    i++;
-                }
-                diff.push({ type: 'removed', text: removedPhrase.join(' ') });
-            } else if (originalWords[i].toLowerCase() === correctedWords[j].toLowerCase()) {
-                // Words match - add as unchanged
-                diff.push({ type: 'unchanged', text: originalWords[i] });
-                i++;
-                j++;
-            } else {
-                // Words differ - collect consecutive changes into phrases (max 5 words)
-                const MAX_CHUNK_SIZE = 5;
-                const removedPhrase = [];
-                const addedPhrase = [];
-
-                // Collect consecutive removed words
-                const startI = i;
-                while (i < originalWords.length &&
-                    removedPhrase.length < MAX_CHUNK_SIZE &&
-                    (j >= correctedWords.length ||
-                        originalWords[i].toLowerCase() !== correctedWords[j].toLowerCase())) {
-                    removedPhrase.push(originalWords[i]);
-                    i++;
-
-                    // Look ahead to see if we're about to match
-                    if (i < originalWords.length && j < correctedWords.length) {
-                        // Check if next word matches - if so, stop collecting
-                        if (originalWords[i].toLowerCase() === correctedWords[j].toLowerCase()) {
-                            break;
-                        }
-                    }
-                }
-
-                // Collect consecutive added words
-                const startJ = j;
-                while (j < correctedWords.length &&
-                    addedPhrase.length < MAX_CHUNK_SIZE &&
-                    (i >= originalWords.length ||
-                        originalWords[i].toLowerCase() !== correctedWords[j].toLowerCase())) {
-                    addedPhrase.push(correctedWords[j]);
-                    j++;
-
-                    // Look ahead to see if we're about to match
-                    if (i < originalWords.length && j < correctedWords.length) {
-                        // Check if next word matches - if so, stop collecting
-                        if (originalWords[i].toLowerCase() === correctedWords[j].toLowerCase()) {
-                            break;
-                        }
-                    }
-                }
-
-                // Add the phrases as a single change
-                if (removedPhrase.length > 0) {
-                    diff.push({ type: 'removed', text: removedPhrase.join(' ') });
-                }
-                if (addedPhrase.length > 0) {
-                    diff.push({ type: 'added', text: addedPhrase.join(' ') });
-                }
-            }
-        }
-        return diff;
     };
 
     return (
@@ -223,7 +204,7 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
                 onRequestClose={() => setShowModal(false)}
             >
                 <Pressable style={styles.modalOverlay} onPress={() => setShowModal(false)}>
-                    <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+                    <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
                         {/* Header */}
                         <View style={styles.header}>
                             <View style={styles.headerTitleContainer}>
@@ -258,34 +239,29 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
 
                                     {/* Transcription with corrections */}
                                     <View style={styles.transcriptionBox}>
-                                        <Text style={styles.label}>YOU SAID:</Text>
+                                        <View style={styles.transcriptionHeader}>
+                                            <Text style={styles.label}>YOU SAID:</Text>
+                                        </View>
                                         <View style={styles.transcriptionTextContainer}>
                                             {showCorrections && correction ? (
-                                                (() => {
-                                                    const diff = computeDiff(transcription, correction.corrected);
-                                                    const isPerfect = diff.every(part => part.type === 'common');
-
-                                                    if (isPerfect) {
-                                                        return (
-                                                            <View style={styles.perfectMatch}>
-                                                                <Text style={styles.perfectMatchText}>✨ No corrections needed!</Text>
-                                                                <Text style={styles.originalText}>{transcription}</Text>
-                                                            </View>
-                                                        );
-                                                    }
-
-                                                    return (
-                                                        <Text style={styles.transcriptionText}>
-                                                            {diff.map((part, index) => (
+                                                isPerfect ? (
+                                                    <View style={styles.perfectMatch}>
+                                                        <Text style={styles.perfectMatchText}>✨ No corrections needed!</Text>
+                                                        <Text style={styles.originalText}>{transcription}</Text>
+                                                    </View>
+                                                ) : (
+                                                    <Text style={styles.transcriptionText}>
+                                                        {diff.map((part, index) => (
+                                                            part.type === 'added' ? null : (
                                                                 <AnimatedWord
                                                                     key={index}
                                                                     part={part}
                                                                     index={index}
                                                                 />
-                                                            ))}
-                                                        </Text>
-                                                    );
-                                                })()
+                                                            )
+                                                        ))}
+                                                    </Text>
+                                                )
                                             ) : (
                                                 <Text style={styles.transcriptionText}>
                                                     {transcription}
@@ -294,12 +270,43 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
                                         </View>
                                     </View>
 
+                                    {/* Explanation / Summary (Translanguaging) */}
+                                    {correction?.explanation && (
+                                        <View style={styles.explanationBox}>
+                                            <View style={styles.correctionRow}>
+                                                <Text style={styles.correctionLabel}>✅ BETTER:</Text>
+                                                <Text style={styles.correctionText}>
+                                                    {diff.map((part, index) => (
+                                                        part.type === 'removed' ? null : (
+                                                            <Text
+                                                                key={index}
+                                                                style={part.type === 'added' ? { color: SOUP_COLORS.green, fontWeight: 'bold' } : {}}
+                                                            >
+                                                                {part.text}{' '}
+                                                            </Text>
+                                                        )
+                                                    ))}
+                                                </Text>
+                                            </View>
+                                            <View style={styles.divider} />
+                                            <Text style={styles.explanationLabel}>💡 FEEDBACK</Text>
+                                            <Text style={styles.explanationText}>
+                                                {correction.explanation}
+                                            </Text>
+                                        </View>
+                                    )}
+
                                     {/* Audio Player */}
-                                    {pronunciationUrl && (
+                                    {pronunciationUrl ? (
                                         <CorrectionAudioPlayer
                                             url={pronunciationUrl}
-                                            duration={10} // We don't have exact duration, estimate
+                                            duration={10}
                                         />
+                                    ) : (
+                                        <View style={styles.audioLoading}>
+                                            <ActivityIndicator size="small" color={SOUP_COLORS.blue} />
+                                            <Text style={styles.audioLoadingText}>Generating pronunciation...</Text>
+                                        </View>
                                     )}
 
                                     {/* Feedback Section */}
@@ -331,12 +338,64 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
                                 </>
                             )}
                         </ScrollView>
-                    </Pressable>
+                    </View>
                 </Pressable>
-            </Modal>
+            </Modal >
         </>
     );
 }
+
+// Logic for computing differences between strings
+// Logic for computing differences between strings
+const computeDiff = (original, corrected) => {
+    if (!original || !corrected) return [];
+
+    // Helper to strip punctuation for comparison
+    const clean = (w) => w ? w.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, "") : "";
+
+    const originalWords = original.trim().split(/\s+/);
+    const correctedWords = corrected.trim().split(/\s+/);
+    const diff = [];
+    let i = 0;
+    let j = 0;
+
+    while (i < originalWords.length || j < correctedWords.length) {
+        if (i >= originalWords.length) {
+            // Added
+            diff.push({ type: 'added', text: correctedWords[j] });
+            j++;
+        } else if (j >= correctedWords.length) {
+            // Removed
+            diff.push({ type: 'removed', text: originalWords[i] });
+            i++;
+        } else if (clean(originalWords[i]) === clean(correctedWords[j])) {
+            // Unchanged (Use original text to keep casing/punctuation)
+            diff.push({ type: 'unchanged', text: originalWords[i] });
+            i++;
+            j++;
+        } else {
+            // Difference found - Simple lookahead (1 word) to regain sync
+            // Check if matches next word in original (Deletion)
+            if (i + 1 < originalWords.length && clean(originalWords[i + 1]) === clean(correctedWords[j])) {
+                diff.push({ type: 'removed', text: originalWords[i] });
+                i++;
+            }
+            // Check if matches next word in corrected (Addition)
+            else if (j + 1 < correctedWords.length && clean(originalWords[i]) === clean(correctedWords[j + 1])) {
+                diff.push({ type: 'added', text: correctedWords[j] });
+                j++;
+            }
+            // Substitution (Remove + Add)
+            else {
+                diff.push({ type: 'removed', text: originalWords[i] });
+                diff.push({ type: 'added', text: correctedWords[j] });
+                i++;
+                j++;
+            }
+        }
+    }
+    return diff;
+};
 
 // Animated word component for smooth red/green appearance
 const AnimatedWord = ({ part, index }) => {
@@ -436,11 +495,7 @@ const CorrectionAudioPlayer = ({ url, duration }) => {
         if (!sound || !durationMillis) return;
 
         const { locationX } = event.nativeEvent;
-        // event.nativeEvent.target.offsetWidth is not reliable in React Native,
-        // typically you'd use onLayout to get the width of the container.
-        // For simplicity, assuming a fixed width or getting it from a ref.
-        // For this fix, I'll assume it's a placeholder and keep the original logic.
-        const containerWidth = event.nativeEvent.target.offsetWidth || 300;
+        const containerWidth = 300; // Simplified placeholder
         const newProgress = locationX / containerWidth;
         const newPosition = newProgress * durationMillis;
 
@@ -508,12 +563,11 @@ const WaveformBar = ({ index, totalBars, height, progress }) => {
 
 const styles = StyleSheet.create({
     button: {
-        // marginTop removed to align with parent
         alignSelf: 'flex-start',
         backgroundColor: SOUP_COLORS.pink,
-        borderRadius: 12, // Reduced from 16
-        paddingVertical: 5, // Reduced from 6
-        paddingHorizontal: 8, // Reduced from 10
+        borderRadius: 12,
+        paddingVertical: 5,
+        paddingHorizontal: 8,
         shadowColor: '#ec008b',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.2,
@@ -526,7 +580,7 @@ const styles = StyleSheet.create({
     },
     buttonText: {
         color: '#fff',
-        fontSize: 11, // Reduced from 12
+        fontSize: 11,
         fontWeight: '700',
     },
     newBadge: {
@@ -534,10 +588,10 @@ const styles = StyleSheet.create({
         paddingHorizontal: 4,
         paddingVertical: 1,
         borderRadius: 4,
-        marginLeft: 4, // Reduced gap
+        marginLeft: 4,
     },
     newBadgeText: {
-        fontSize: 8, // Reduced from 9
+        fontSize: 8,
         fontWeight: '800',
         color: SOUP_COLORS.pink,
     },
@@ -552,8 +606,9 @@ const styles = StyleSheet.create({
         borderTopRightRadius: 24,
         paddingTop: 20,
         paddingHorizontal: 20,
-        paddingBottom: 40,
-        maxHeight: '70%',
+        paddingBottom: 0, // Let ScrollView handle bottom padding
+        height: '90%',
+        maxHeight: '90%',
     },
     header: {
         flexDirection: 'row',
@@ -589,6 +644,10 @@ const styles = StyleSheet.create({
     },
     content: {
         padding: 16,
+        flex: 1,
+    },
+    scrollContent: {
+        paddingBottom: 60,
     },
     loadingContainer: {
         alignItems: 'center',
@@ -606,7 +665,8 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         borderLeftWidth: 4,
         borderLeftColor: SOUP_COLORS.blue,
-        marginBottom: 24,
+        borderLeftColor: SOUP_COLORS.blue,
+        marginBottom: 12,
     },
     label: {
         fontSize: 12,
@@ -616,8 +676,8 @@ const styles = StyleSheet.create({
         letterSpacing: 1,
     },
     transcriptionText: {
-        fontSize: 18,
-        lineHeight: 28,
+        fontSize: 16, // Reduced from 18
+        lineHeight: 24,
         color: '#333',
         flexWrap: 'wrap',
     },
@@ -700,6 +760,59 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         height: 24,
     },
+    transcriptionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    scoreBadge: {
+        backgroundColor: '#E6FFFA', // Light green
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: SOUP_COLORS.green,
+    },
+    scoreText: {
+        fontSize: 11,
+        fontWeight: '800',
+        color: SOUP_COLORS.green,
+    },
+    audioLoading: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+        backgroundColor: '#f9f9f9',
+        borderRadius: 12,
+        gap: 10,
+    },
+    audioLoadingText: {
+        color: '#666',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    explanationBox: {
+        marginTop: 16,
+        padding: 16,
+        backgroundColor: '#EBF8FF', // Light Blue
+        borderRadius: 12,
+        borderLeftWidth: 4,
+        borderLeftColor: SOUP_COLORS.blue,
+    },
+    explanationLabel: {
+        fontSize: 11,
+        fontWeight: '900',
+        color: SOUP_COLORS.blue,
+        marginBottom: 6,
+        letterSpacing: 0.5,
+    },
+    explanationText: {
+        fontSize: 14, // Reduced from 15
+        lineHeight: 20,
+        color: '#2c3e50',
+    },
     waveBar: {
         width: 3,
         borderRadius: 1.5,
@@ -752,5 +865,30 @@ const styles = StyleSheet.create({
         color: SOUP_COLORS.green,
         textAlign: 'center',
         paddingVertical: 10,
+    },
+    correctionRow: {
+        marginBottom: 12,
+        backgroundColor: '#fff',
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: SOUP_COLORS.green,
+    },
+    correctionLabel: {
+        fontSize: 10,
+        fontWeight: '900',
+        color: SOUP_COLORS.green,
+        marginBottom: 4,
+        letterSpacing: 0.5,
+    },
+    correctionText: {
+        fontSize: 16,
+        color: '#2c3e50',
+        fontWeight: '600',
+    },
+    divider: {
+        height: 1,
+        backgroundColor: 'rgba(0,173,239,0.2)',
+        marginVertical: 12,
     },
 });
