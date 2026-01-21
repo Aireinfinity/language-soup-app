@@ -198,31 +198,28 @@ export function MessageBubble({
                         groupName={groupName}
                     />
 
-                    {/* Voice Feedback Button - Feature flagged for beta */}
-                    {isMe && (
-                        <VoiceFeedbackButton
-                            audioUrl={message.media_url || message.content}
-                            language={groupLanguage}
-                            userId={message.sender_id}
-                            groupLanguage={groupLanguage}
-                        />
-                    )}
+                    {/* Action Buttons Row - Only for voice messages */}
+                    {isMe && message.media_url && (
+                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                            <Pressable
+                                style={styles.shareButton}
+                                onPress={() => {
+                                    const { haptics } = require('../utils/haptics');
+                                    haptics.medium();
+                                    setShowSharePreview(true);
+                                }}
+                            >
+                                <Text style={styles.shareButtonEmoji}>🔥</Text>
+                                <Text style={styles.shareButtonText}>Challenge a Friend</Text>
+                            </Pressable>
 
-                    {isMe && (
-                        <Pressable
-                            style={styles.shareButton}
-                            onPress={() => {
-                                const { haptics } = require('../utils/haptics');
-                                haptics.medium();
-                                setShowSharePreview(true);
-                            }}
-                        >
-                            <View style={styles.newBadge}>
-                                <Text style={styles.newBadgeText}>NEW!</Text>
-                            </View>
-                            <Text style={styles.shareButtonEmoji}>🔥</Text>
-                            <Text style={styles.shareButtonText}>Challenge a Friend?</Text>
-                        </Pressable>
+                            <VoiceFeedbackButton
+                                audioUrl={message.media_url || message.content}
+                                language={groupLanguage}
+                                userId={message.sender_id}
+                                groupLanguage={groupLanguage}
+                            />
+                        </View>
                     )}
 
                     {/* Share Preview Modal */}
@@ -553,45 +550,36 @@ const styles = StyleSheet.create({
     shareButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-        paddingVertical: 12,
-        paddingHorizontal: 18,
-        marginTop: 8,
-        alignSelf: 'flex-end',
-        borderRadius: 24,
-        backgroundColor: '#ec008b',
-        shadowColor: '#ec008b',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.4,
-        shadowRadius: 6,
-        elevation: 5,
-        position: 'relative',
+        gap: 4,
+        paddingVertical: 5,
+        paddingHorizontal: 8,
+        borderRadius: 12,
+        backgroundColor: '#FDF5E6', // Cream color
     },
     newBadge: {
         position: 'absolute',
-        top: -6,
-        left: -6,
+        top: -4,
+        left: -4,
         backgroundColor: '#00aedf',
-        paddingHorizontal: 8,
+        paddingHorizontal: 6,
         paddingVertical: 2,
         borderRadius: 8,
         borderWidth: 2,
         borderColor: '#fff',
     },
     newBadgeText: {
-        fontSize: 9,
+        fontSize: 8,
         fontWeight: '900',
         color: '#fff',
         letterSpacing: 0.5,
     },
     shareButtonEmoji: {
-        fontSize: 18,
+        fontSize: 12,
     },
     shareButtonText: {
-        fontSize: 15,
-        color: '#fff',
-        fontWeight: '800',
-        letterSpacing: 0.3,
+        fontSize: 11,
+        color: '#000', // Black text on cream
+        fontWeight: '700',
     },
     modalOverlay: {
         flex: 1,
