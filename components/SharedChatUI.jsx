@@ -85,6 +85,7 @@ export function SharedChatUI({
     groupName = null,
     groupLanguage = null,
     onAvatarPress,
+    onShowInspiration, // New Prop
 }) {
     // ========== INTERNAL STATE (Self-Contained) ==========
     const [replyTo, setReplyTo] = useState(null); // { messageId, content, senderName }
@@ -329,6 +330,7 @@ export function SharedChatUI({
                 groupName={groupName}
                 groupLanguage={groupLanguage}
                 onAvatarPress={onAvatarPress}
+                onShowInspiration={onShowInspiration}
             />
         );
     };

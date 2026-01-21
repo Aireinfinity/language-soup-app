@@ -7,10 +7,11 @@ import { MessageActionMenu } from './MessageActionMenu';
 import { ReactionViewerModal } from "./ReactionViewerModal";
 import { shareChallenge } from '../lib/shareChallenge';
 import { Share2 } from 'lucide-react-native';
-import { VoiceFeedbackButton } from './VoiceFeedbackButton';
-
 import { getLanguageFlag } from '../utils/languageFlags';
+import { VoiceFeedbackButton } from './VoiceFeedbackButton';
+import { InspirationInline } from './InspirationInline';
 import { ReactionPicker } from './ReactionPicker';
+
 import { getAvatarSource } from '../utils/soupUtils';
 
 const SOUP_COLORS = {
@@ -35,7 +36,8 @@ export function MessageBubble({
     onDelete,
     groupName = null,
     groupLanguage = null,
-    isSpotlight = false
+    isSpotlight = false,
+    onShowInspiration // New Prop
 }) {
     const [showActionMenu, setShowActionMenu] = useState(false);
     const [showSharePreview, setShowSharePreview] = useState(false);
@@ -323,20 +325,41 @@ export function MessageBubble({
                     )}
                 </View>
             ) : message.message_type === 'system' ? (
-                <Text style={[styles.systemMessageText, isMe && { color: '#fff' }]}>
-                    {message.content}
-                </Text>
-            ) : (
-                <Text style={[
-                    ChatStyles.messageText,
-                    isMe && ChatStyles.messageTextMe
-                ]}>
-                    {message.content}
-                    {message.edited_at && (
-                        <Text style={[styles.editedLabel, isMe && { color: '#fff' }]}> Edited</Text>
+                <View>
+                    <Text style={[styles.systemMessageText, isMe && { color: '#fff' }]}>
+                        {message.content}
+                    </Text>
+                    {/* Inline Inspiration Component (System) */}
+                    {message.challenge_metadata && (
+                        <InspirationInline
+                            metadata={message.challenge_metadata}
+                            language={groupLanguage}
+                        />
                     )}
-                </Text>
+                </View>
+            ) : (
+                <View>
+                    <Text style={[
+                        ChatStyles.messageText,
+                        isMe && ChatStyles.messageTextMe
+                    ]}>
+                        {message.content}
+                        {message.edited_at && (
+                            <Text style={[styles.editedLabel, isMe && { color: '#fff' }]}> Edited</Text>
+                        )}
+                    </Text>
+                    {/* Inline Inspiration Component (Text) */}
+                    {message.challenge_metadata && (
+                        <InspirationInline
+                            metadata={message.challenge_metadata}
+                            language={groupLanguage}
+                        />
+                    )}
+                </View>
             )}
+
+
+
 
             {/* Reactions summary */}
             {Object.keys(reactionSummary).length > 0 && (
@@ -807,10 +830,33 @@ const styles = StyleSheet.create({
         borderWidth: 1,
     },
     fullscreenOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.95)',
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    inspirationBubbleButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#fff',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        gap: 6,
+        marginTop: 8,
+        alignSelf: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    inspirationBubbleEmoji: {
+        fontSize: 16,
+    },
+    inspirationBubbleText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: SOUP_COLORS.blue,
     },
     fullscreenImage: {
         width: '100%',

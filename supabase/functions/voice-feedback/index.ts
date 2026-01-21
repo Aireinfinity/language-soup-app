@@ -29,45 +29,34 @@ serve(async (req) => {
             console.log('Generating pronunciation for:', text.substring(0, 50))
             const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY')
 
-            // Map languages to native-sounding voices (Female defaults)
-            // IDs from ElevenLabs optimized for respective languages
+            // SCALABLE VOICE MAP:
+            // "Tell ElevenLabs exactly who to be based on the group language."
             const VOICE_MAP: Record<string, string> = {
-                'French': 'AZnzlk1XvdvUeBnXmlld', // Domi (Respectful, standard French)
-                'Spanish': 'ThT5KcBeYPX3keUQqHPh', // Dorothy (Pleasant)
-                'German': 'ThT5KcBeYPX3keUQqHPh', // Dorothy
-                'Italian': 'AZnzlk1XvdvUeBnXmlld', // Domi works well for Romance
-                'Portuguese': 'AZnzlk1XvdvUeBnXmlld',
-                'English': '21m00Tcm4TlvDq8ikWAM' // Rachel
+                // EUROPEAN
+                'French': 'AZnzlk1XvdvUeBnXmlld', // Domi (Native Parisian)
+                'Spanish': 'ThT5KcBeYPX3keUQqHPh', // Dorothy (Native Spanish)
+                'German': 'ThT5KcBeYPX3keUQqHPh', // Dorothy (Good German)
+                'Italian': 'AZnzlk1XvdvUeBnXmlld', // Domi (Good Italian)
+                'Portuguese': 'AZnzlk1XvdvUeBnXmlld', // Domi (Eu-PT)
+
+                // ASIAN / MIDDLE EASTERN
+                'Farsi': 'EXAVITQu4vr4xnSDxMaL', // Sarah (Best Multilingual for non-EU)
+                'Persian': 'EXAVITQu4vr4xnSDxMaL', // Sarah
+                'Hindi': 'EXAVITQu4vr4xnSDxMaL',   // Sarah
+                'Japanese': 'EXAVITQu4vr4xnSDxMaL', // Sarah
+                'Chinese': 'EXAVITQu4vr4xnSDxMaL', // Sarah
+
+                // DEFAULT
+                'English': '21m00Tcm4TlvDq8ikWAM' // Rachel (American)
             };
 
-            // Detect language from text if possible, or use passed language param? 
-            // We don't have language param in 'pronunciation' body currently!
-            // We need to pass it from frontend.
-            // For now, default to Domi if text looks French? No that's hard.
-            // Wait, frontend passes 'text' and 'task'. It DOES NOT pass 'language' in Step 2663 layout.
-            // I must update Frontend to pass language in pronunciation step.
-
-            // Assuming I fix frontend:
-            // const voiceId = VOICE_MAP[language] || '21m00Tcm4TlvDq8ikWAM';
-
-            // BUT simpler: Use 'eleven_turbo_v2_5' which has better accent handling for Rachel.
-            // AND I will change default voice to 'Sarah' (EXAVITQu4vr4xnSDxMaL) which is often more neutral?
-            // User specifically complained about Rachel + French -> Quebecois.
-
-            // Plan: Update Frontend to pass `language` to pronunciation task.
-            // Update Backend to use mapped Voice ID.
-
-            // For this specific 'pronunciation' block, I don't see 'language' distructured in line 15.
-            // Line 15: const { audioUrl, language, userId, task ... } 
-            // So 'language' IS available if passed in body.
-
-            // Let's use the map.
-            // If language is missing, default to Rachel.
-
             const targetLang = language || 'English';
-            // Simple normalization
-            const langKey = Object.keys(VOICE_MAP).find(k => targetLang.toLowerCase().includes(k.toLowerCase())) || 'English';
-            const voiceId = VOICE_MAP[langKey] || '21m00Tcm4TlvDq8ikWAM';
+            // Find voice by fuzzy matching language name (e.g. "French" matches "French")
+            // Default to Sarah (Multilingual) if no specific match found
+            const langKey = Object.keys(VOICE_MAP).find(k => targetLang.toLowerCase().includes(k.toLowerCase())) || 'Default';
+            const voiceId = VOICE_MAP[langKey] || 'EXAVITQu4vr4xnSDxMaL'; // Sarah is the global fallback
+
+            console.log(`[Pronunciation] Using Native Voice: ${voiceId} (${langKey}) on Multilingual V2`);
 
             const elevenLabsResponse = await fetch(
                 `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
@@ -79,7 +68,7 @@ serve(async (req) => {
                     },
                     body: JSON.stringify({
                         text: text,
-                        model_id: 'eleven_turbo_v2_5', // Speed + Multilingual
+                        model_id: 'eleven_multilingual_v2', // The "Website Quality" Model
                         voice_settings: { stability: 0.5, similarity_boost: 0.75 },
                     }),
                 }
@@ -88,9 +77,23 @@ serve(async (req) => {
             if (!elevenLabsResponse.ok) throw new Error('ElevenLabs API failed')
 
             const pronunciationAudio = await elevenLabsResponse.arrayBuffer()
-            const audioBase64 = encode(new Uint8Array(pronunciationAudio))
+            const fileName = `pronunciation_${Date.now()}.mp3`
+            const { data: uploadData, error: uploadError } = await supabase
+                .storage
+                .from('voice-memos')
+                .upload(`pronunciations/${fileName}`, pronunciationAudio, {
+                    contentType: 'audio/mpeg',
+                    upsert: false
+                })
 
-            return new Response(JSON.stringify({ audioBase64 }), {
+            if (uploadError) throw uploadError
+
+            const { data: { publicUrl } } = supabase
+                .storage
+                .from('voice-memos')
+                .getPublicUrl(`pronunciations/${fileName}`)
+
+            return new Response(JSON.stringify({ pronunciationUrl: publicUrl }), {
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             })
         }
@@ -152,24 +155,24 @@ serve(async (req) => {
         // Step 4: Correct grammar with Groq (Llama 3)
         const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY')
 
-        const systemPrompt = `Role: You are a friendly, chill community member in a language learning app. You are analyzing a voice memo.
-        User Input: "${transcription}"
-        Target Language: ${language || 'English'}
-        User's Known Languages: ${userLangString}
+        const systemPrompt = `You are a strict language teacher. Find ALL errors.
 
-        Task:
-        1. Identify small errors (grammar, vocab). 
-        2. STRICT CONSTRAINT: Keep the user's original sentence structure EXACTLY the same. Only correct the specific words that are wrong. Do NOT paraphrase or rewrite the sentence style.
-        3. Provide the corrected version.
-        4. Explanation: Provide a brief friendly feedback.
-        5. TRANSLANGUAGING: ALWAYS use the user's known languages (${userLangString}) to explain the error. Compare the ${language} grammar to how they would say it in their native language. Make this the core of your explanation.
+Student said: "${transcription}"
+Target Language: ${language || 'English'}
+Student's Native Languages: ${userLangString}
 
-        Return JSON ONLY:
-        {
-            "corrected": "string",
-            "explanation": "string", 
-            "is_correct": boolean
-        }`
+CRITICAL RULES:
+1. Look for ANY grammar, vocabulary, pronunciation, or word choice errors
+2. If you find errors: Fix ONLY the wrong words. Keep sentence structure identical.
+3. If truly perfect: Return the exact same text
+4. TRANSLANGUAGING: You MUST write the explanation primarily in ${userLangString} (or English if unclear). Explain the ${language} error by comparing it to how they would say it in ${userLangString}.
+
+Return JSON:
+{
+    "corrected": "fixed text with ONLY wrong words changed",
+    "explanation": "Explanation written in ${userLangString} comparing the grammar",
+    "is_correct": false
+}`
 
         const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
@@ -180,7 +183,7 @@ serve(async (req) => {
             body: JSON.stringify({
                 model: 'llama-3.3-70b-versatile',
                 messages: [{ role: 'user', content: systemPrompt }],
-                temperature: 0.3,
+                temperature: 0.1,
             }),
         })
 
@@ -189,10 +192,26 @@ serve(async (req) => {
         const groqResult = await groqResponse.json()
         const correctionText = groqResult.choices[0].message.content
 
+        console.log('=== LLAMA RAW RESPONSE ===')
+        console.log(correctionText)
+
         let correction
         try {
             correction = JSON.parse(correctionText)
+
+            // FAIL-SAFE: If text changed, it IS NOT correct, regardless of what Llama thinks
+            if (correction.corrected.trim().toLowerCase() !== transcription.trim().toLowerCase()) {
+                console.log('Text changed -> Forcing is_correct = false');
+                correction.is_correct = false;
+            }
+
+            console.log('=== PARSED CORRECTION ===')
+            console.log('is_correct:', correction.is_correct)
+            console.log('corrected:', correction.corrected)
+            console.log('explanation:', correction.explanation)
         } catch (e) {
+            console.log('=== JSON PARSE ERROR ===')
+            console.log(e)
             correction = { is_correct: true, corrected: transcription, explanation: '' }
         }
 
@@ -201,8 +220,7 @@ serve(async (req) => {
             transcription,
             correction,
             avgConfidence,
-            avgConfidence,
-            audioBase64: null // Frontend triggers step 2
+            pronunciationUrl: null // Frontend triggers step 2
         }
 
         return new Response(JSON.stringify(responseData), {

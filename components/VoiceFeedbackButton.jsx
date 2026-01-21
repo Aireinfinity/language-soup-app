@@ -33,6 +33,8 @@ const feedbackCache = {};
 export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage }) {
     const [showModal, setShowModal] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [transcription, setTranscription] = useState('');
+    const [correction, setCorrection] = useState(null);
     const [pronunciationUrl, setPronunciationUrl] = useState(null);
     const [showCorrections, setShowCorrections] = useState(false);
     const [confidence, setConfidence] = useState(1.0);
@@ -93,8 +95,8 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
     }, [diff]);
 
     const isPerfect = useMemo(() => {
-        return diff.length > 0 && diff.every(part => part.type === 'unchanged' || part.type === 'common');
-    }, [diff]);
+        return correction?.is_correct === true;
+    }, [correction]);
 
     const handlePress = async () => {
         setShowModal(true);
@@ -114,7 +116,7 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
             setLoading(false);
 
             // If cached but missing audio, fetch it?
-            if (!cached.audioBase64 && cached.correction && cached.correction.corrected) {
+            if (!cached.pronunciationUrl && cached.correction && cached.correction.corrected) {
                 // Background fetch audio
                 supabase.functions.invoke('voice-feedback', {
                     body: {
@@ -123,10 +125,9 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
                         language: groupLanguage || language,
                     },
                 }).then(({ data, error }) => {
-                    if (data?.audioBase64) {
-                        const uri = `data:audio/mp3;base64,${data.audioBase64}`;
-                        setPronunciationUrl(uri);
-                        feedbackCache[audioUrl].audioBase64 = data.audioBase64;
+                    if (data?.pronunciationUrl) {
+                        setPronunciationUrl(data.pronunciationUrl);
+                        feedbackCache[audioUrl].pronunciationUrl = data.pronunciationUrl;
                     }
                 });
             }
@@ -152,6 +153,11 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
 
             if (analyzeError) throw analyzeError;
 
+            console.log('=== FRONTEND RECEIVED ===');
+            console.log('Transcription:', analyzeData.transcription);
+            console.log('Correction:', analyzeData.correction);
+            console.log('is_correct:', analyzeData.correction?.is_correct);
+
             setTranscription(analyzeData.transcription);
             setCorrection(analyzeData.correction);
             setConfidence(analyzeData.confidence || 0.95);
@@ -163,8 +169,7 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
                 transcription: analyzeData.transcription,
                 correction: analyzeData.correction,
                 confidence: analyzeData.confidence,
-                confidence: analyzeData.confidence,
-                audioBase64: null
+                pronunciationUrl: null
             };
 
             // STEP 2: AUDIO (Pronunciation) - Background
@@ -177,11 +182,10 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
                     },
                 });
 
-                if (audioData?.audioBase64) {
-                    const uri = `data:audio/mp3;base64,${audioData.audioBase64}`;
-                    setPronunciationUrl(uri);
+                if (audioData?.pronunciationUrl) {
+                    setPronunciationUrl(audioData.pronunciationUrl);
                     // Update cache with full data
-                    feedbackCache[audioUrl].audioBase64 = audioData.audioBase64;
+                    feedbackCache[audioUrl].pronunciationUrl = audioData.pronunciationUrl;
                 }
             }
 
@@ -276,8 +280,8 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
                                         </View>
                                     </View>
 
-                                    {/* Explanation / Summary (Translanguaging) */}
-                                    {correction?.explanation && (
+                                    {/* Explanation / Summary (Translanguaging) - ALWAYS SHOW */}
+                                    {correction?.explanation && !isPerfect && (
                                         <View style={styles.explanationBox}>
                                             <View style={styles.correctionRow}>
                                                 <Text style={styles.correctionLabel}>✅ BETTER:</Text>
@@ -295,6 +299,16 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
                                                 </Text>
                                             </View>
                                             <View style={styles.divider} />
+                                            <Text style={styles.explanationLabel}>💡 FEEDBACK</Text>
+                                            <Text style={styles.explanationText}>
+                                                {correction.explanation}
+                                            </Text>
+                                        </View>
+                                    )}
+
+                                    {/* Positive feedback for perfect sentences */}
+                                    {correction?.explanation && isPerfect && (
+                                        <View style={styles.explanationBox}>
                                             <Text style={styles.explanationLabel}>💡 FEEDBACK</Text>
                                             <Text style={styles.explanationText}>
                                                 {correction.explanation}

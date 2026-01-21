@@ -1,7 +1,9 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { Colors } from '../constants/Colors';
+import { Ionicons } from '@expo/vector-icons';
+import { InspirationModal } from './InspirationModal';
 
 const CARD_COLORS = [
     '#00adef', // Blue
@@ -9,10 +11,11 @@ const CARD_COLORS = [
     '#19b091', // Teal
 ];
 
-export function ChallengeCard({ title, description, timeLeft, style }) {
+export function ChallengeCard({ title, description, timeLeft, style, metadata, language }) {
     // Pick a random color based on title length to be deterministic but varied
     const colorIndex = title.length % CARD_COLORS.length;
     const backgroundColor = CARD_COLORS[colorIndex];
+    const [showInspiration, setShowInspiration] = useState(false);
 
     return (
         <View style={[styles.card, { backgroundColor }, style]}>
@@ -24,7 +27,23 @@ export function ChallengeCard({ title, description, timeLeft, style }) {
                     </View>
                 </View>
                 <ThemedText style={styles.description}>{description}</ThemedText>
+
+                {/* Inspiration Button */}
+                <TouchableOpacity
+                    style={styles.inspirationButton}
+                    onPress={() => setShowInspiration(true)}
+                >
+                    <Ionicons name="bulb-outline" size={16} color="#FFF" />
+                    <ThemedText style={styles.inspirationText}>Need ideas?</ThemedText>
+                </TouchableOpacity>
             </View>
+
+            <InspirationModal
+                visible={showInspiration}
+                onClose={() => setShowInspiration(false)}
+                metadata={metadata}
+                language={language}
+            />
         </View>
     );
 }
@@ -71,5 +90,21 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: 'rgba(255, 255, 255, 0.9)',
         lineHeight: 24,
+        marginBottom: 16,
+    },
+    inspirationButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 20,
+        alignSelf: 'flex-start',
+        gap: 6,
+    },
+    inspirationText: {
+        color: '#FFFFFF',
+        fontWeight: '600',
+        fontSize: 14,
     },
 });
