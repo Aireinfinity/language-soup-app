@@ -264,10 +264,12 @@ Return STRICT JSON:
 CONTEXT from Original Challenge:
 - The user was asked: "${context.prompt || 'Unknown Challenge'}"
 - A suggested starter phrase was: "${context.starter_phrase || 'None'}"
+- Suggested vocabulary words were: ${context.vocab_bank ? context.vocab_bank.map((v: any) => `${v.word} (${v.translation})`).join(', ') : 'None'}
 
 Use this context to be smarter:
-- If they use words from the starter phrase, that is GOOD.
+- If they use words from the starter phrase or vocabulary, that is GOOD.
 - If their sentence answers the prompt, mark it as relevant.
+- Use the suggested vocabulary to help decipher unclear audio (e.g. if audio sounds like a suggested word, it probably is that word).
 `
         }
 

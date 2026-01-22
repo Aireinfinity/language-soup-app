@@ -224,7 +224,8 @@ export function MessageBubble({
                                 // CONTEXT INJECTION (Frontend Only)
                                 challengeContext={{
                                     prompt: currentChallenge?.prompt_text,
-                                    starter_phrase: message.challenge_metadata?.starter_phrase
+                                    starter_phrase: message.challenge_metadata?.starter_phrase || currentChallenge?.metadata?.starter_phrase,
+                                    vocab_bank: message.challenge_metadata?.vocab_bank || currentChallenge?.metadata?.vocab_bank
                                 }}
                             />
                         </View>

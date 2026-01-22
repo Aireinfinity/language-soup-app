@@ -272,14 +272,14 @@ export default function ChatScreen() {
                 });
             })
             .on('postgres_changes', {
-                event: 'INSERT',
+                event: '*',
                 schema: 'public',
                 table: 'app_challenges',
                 filter: `group_id=eq.${groupId}`,
             }, async (payload) => {
                 const { data: challenges } = await supabase
                     .from('app_challenges')
-                    .select('id, prompt_text, created_at') // TEST MODE: Removed metadata
+                    .select('id, prompt_text, created_at, metadata') // Fetch metadata
                     .eq('group_id', groupId)
                     .order('created_at', { ascending: false });
                 if (challenges && challenges.length > 0) {
