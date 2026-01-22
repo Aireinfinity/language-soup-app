@@ -37,6 +37,7 @@ export function MessageBubble({
     groupName = null,
     groupLanguage = null,
     isSpotlight = false,
+    currentChallenge = null, // Fix: Add prop
     onShowInspiration // New Prop
 }) {
     const [showActionMenu, setShowActionMenu] = useState(false);
@@ -220,6 +221,11 @@ export function MessageBubble({
                                 language={groupLanguage}
                                 userId={message.sender_id}
                                 groupLanguage={groupLanguage}
+                                // CONTEXT INJECTION (Frontend Only)
+                                challengeContext={{
+                                    prompt: currentChallenge?.prompt_text,
+                                    starter_phrase: message.challenge_metadata?.starter_phrase
+                                }}
                             />
                         </View>
                     )}
@@ -330,12 +336,16 @@ export function MessageBubble({
                         {message.content}
                     </Text>
                     {/* Inline Inspiration Component (System) */}
-                    {message.challenge_metadata && (
-                        <InspirationInline
-                            metadata={message.challenge_metadata}
-                            language={groupLanguage}
-                        />
-                    )}
+                    {sender?.display_name?.toLowerCase() === 'language soup' &&
+                        (message.challenge_metadata || (message.content && message.content.toLowerCase().includes('#challenge'))) && (
+                            <InspirationInline
+                                metadata={message.challenge_metadata}
+                                language={groupLanguage}
+                                // Pass generation context
+                                prompt={message.challenge_prompt || currentChallenge?.prompt_text}
+                                challengeId={message.challenge_id || currentChallenge?.id}
+                            />
+                        )}
                 </View>
             ) : (
                 <View>
@@ -349,12 +359,16 @@ export function MessageBubble({
                         )}
                     </Text>
                     {/* Inline Inspiration Component (Text) */}
-                    {message.challenge_metadata && (
-                        <InspirationInline
-                            metadata={message.challenge_metadata}
-                            language={groupLanguage}
-                        />
-                    )}
+                    {sender?.display_name?.toLowerCase() === 'language soup' &&
+                        (message.challenge_metadata || (message.content && message.content.toLowerCase().includes('#challenge'))) && (
+                            <InspirationInline
+                                metadata={message.challenge_metadata}
+                                language={groupLanguage}
+                                // Pass generation context
+                                prompt={message.challenge_prompt || currentChallenge?.prompt_text}
+                                challengeId={message.challenge_id || currentChallenge?.id}
+                            />
+                        )}
                 </View>
             )}
 

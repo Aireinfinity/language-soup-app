@@ -91,7 +91,7 @@ export default function GroupAvatar({ language, size = 60 }) {
     const flag = LANGUAGE_FLAGS[language?.toLowerCase()] || '🌍';
     const pattern = FLAG_PATTERNS[language?.toLowerCase()] || FLAG_PATTERNS['default'];
 
-    console.log('🍜 GroupAvatar rendering:', { language, flag, size, pattern });
+
 
     const renderFlagBackground = () => {
         if (pattern.type === 'solid') {

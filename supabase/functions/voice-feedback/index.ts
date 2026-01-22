@@ -13,7 +13,7 @@ serve(async (req) => {
     }
 
     try {
-        const { audioUrl, language, userId, task = 'analyze', text, correctionObj } = await req.json()
+        const { audioUrl, language, userId, task = 'analyze', text, correctionObj, context, prompt, challengeId } = await req.json()
 
         console.log('Voice feedback request:', { task, userId })
 
@@ -29,34 +29,19 @@ serve(async (req) => {
             console.log('Generating pronunciation for:', text.substring(0, 50))
             const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY')
 
-            // SCALABLE VOICE MAP:
-            // "Tell ElevenLabs exactly who to be based on the group language."
-            const VOICE_MAP: Record<string, string> = {
-                // EUROPEAN
-                'French': 'AZnzlk1XvdvUeBnXmlld', // Domi (Native Parisian)
-                'Spanish': 'ThT5KcBeYPX3keUQqHPh', // Dorothy (Native Spanish)
-                'German': 'ThT5KcBeYPX3keUQqHPh', // Dorothy (Good German)
-                'Italian': 'AZnzlk1XvdvUeBnXmlld', // Domi (Good Italian)
-                'Portuguese': 'AZnzlk1XvdvUeBnXmlld', // Domi (Eu-PT)
+            // SCALABLE VOICE STRATEGY:
+            // 1. English -> Rachel (Standard American)
+            // 2. Everything Else -> Sarah (Multilingual)
+            // Sarah adapts to the target language accent better than forced personas.
 
-                // ASIAN / MIDDLE EASTERN
-                'Farsi': 'EXAVITQu4vr4xnSDxMaL', // Sarah (Best Multilingual for non-EU)
-                'Persian': 'EXAVITQu4vr4xnSDxMaL', // Sarah
-                'Hindi': 'EXAVITQu4vr4xnSDxMaL',   // Sarah
-                'Japanese': 'EXAVITQu4vr4xnSDxMaL', // Sarah
-                'Chinese': 'EXAVITQu4vr4xnSDxMaL', // Sarah
+            let voiceId = 'EXAVITQu4vr4xnSDxMaL'; // Default to Sarah (Multilingual)
 
-                // DEFAULT
-                'English': '21m00Tcm4TlvDq8ikWAM' // Rachel (American)
-            };
+            // If explicitly English, use Rachel
+            if (language && language.toLowerCase().includes('english')) {
+                voiceId = '21m00Tcm4TlvDq8ikWAM';
+            }
 
-            const targetLang = language || 'English';
-            // Find voice by fuzzy matching language name (e.g. "French" matches "French")
-            // Default to Sarah (Multilingual) if no specific match found
-            const langKey = Object.keys(VOICE_MAP).find(k => targetLang.toLowerCase().includes(k.toLowerCase())) || 'Default';
-            const voiceId = VOICE_MAP[langKey] || 'EXAVITQu4vr4xnSDxMaL'; // Sarah is the global fallback
-
-            console.log(`[Pronunciation] Using Native Voice: ${voiceId} (${langKey}) on Multilingual V2`);
+            console.log(`[Pronunciation] Generating for ${language || 'Auto'} using Voice: ${voiceId === '21m00Tcm4TlvDq8ikWAM' ? 'Rachel' : 'Sarah'}`);
 
             const elevenLabsResponse = await fetch(
                 `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
@@ -74,7 +59,11 @@ serve(async (req) => {
                 }
             )
 
-            if (!elevenLabsResponse.ok) throw new Error('ElevenLabs API failed')
+            if (!elevenLabsResponse.ok) {
+                const errText = await elevenLabsResponse.text()
+                console.error('ElevenLabs Error:', errText)
+                throw new Error(`ElevenLabs API failed: ${elevenLabsResponse.status} - ${errText}`)
+            }
 
             const pronunciationAudio = await elevenLabsResponse.arrayBuffer()
             const fileName = `pronunciation_${Date.now()}.mp3`
@@ -98,6 +87,117 @@ serve(async (req) => {
             })
         }
 
+
+
+        // ==========================================
+        // TASK: GENERATE HINTS (Inspiration)
+        // ==========================================
+        if (task === 'generate_hints') {
+            const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY')
+
+            if (!GROQ_API_KEY) {
+                console.error('❌ Missing GROQ_API_KEY')
+                return new Response(JSON.stringify({ error: "Server Error: Missing GROQ_API_KEY in Secrets" }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                })
+            }
+
+            if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
+                return new Response(JSON.stringify({ error: "Missing Prompt", starter_phrase: "..." }), {
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+                })
+            }
+
+            const targetLang = language || 'Target Language'
+
+            // FETCH USER LANGUAGES for definitions
+            let definitionsLang = 'English';
+            if (userId) {
+                const { data: userData } = await supabase
+                    .from('app_users')
+                    .select('fluent_languages, learning_languages')
+                    .eq('id', userId)
+                    .single();
+
+                if (userData) {
+                    const allLangs = [...(userData.fluent_languages || []), ...(userData.learning_languages || [])];
+                    // Remove target language from definitions (e.g. don't define German in German)
+                    const filtered = allLangs.filter(l => !l.toLowerCase().includes(targetLang.toLowerCase()));
+                    if (filtered.length > 0) {
+                        definitionsLang = filtered.join(', '); // e.g. "English, Spanish"
+                    }
+                }
+            }
+
+            console.log(`Generating hints for prompt: "${prompt}" in ${targetLang}. Definitions in: ${definitionsLang}`)
+
+            const hintSystemPrompt = `You are a helpful language tutor. 
+The student needs help answering this challenge: "${prompt}"
+Target Language: ${targetLang}
+
+Generate:
+1. A simple starter phrase (1 sentence) they can use.
+2. 3 useful vocabulary words related to the topic.
+
+CRITICAL: Provide translations for the vocabulary in: ${definitionsLang}.
+If multiple languages are listed (e.g. English, Spanish), provide BOTH translations formatted as "English / Spanish".
+
+Return STRICT JSON:
+{
+    "starter_phrase": "The phrase in ${targetLang}",
+    "vocab_bank": [
+        { "word": "Word1 in ${targetLang}", "translation": "Meaning in ${definitionsLang}" },
+        { "word": "Word2", "translation": "Meaning in ${definitionsLang}" },
+        { "word": "Word3", "translation": "Meaning in ${definitionsLang}" }
+    ]
+}`
+
+            const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${GROQ_API_KEY}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    model: 'llama-3.3-70b-versatile',
+                    messages: [{ role: 'user', content: hintSystemPrompt }],
+                    temperature: 0.3,
+                    response_format: { type: "json_object" }
+                }),
+            })
+
+            if (!groqResponse.ok) {
+                const errText = await groqResponse.text()
+                console.error('Groq Error:', errText)
+                throw new Error(`Groq API failed: ${groqResponse.status} - ${errText}`)
+            }
+
+            const groqResult = await groqResponse.json()
+            const resultJSON = JSON.parse(groqResult.choices[0].message.content)
+
+            // CACHE THE RESULT: Future loads will use this metadata
+            if (challengeId) {
+                console.log(`Caching metadata for challenge: ${challengeId}`)
+                await supabase
+                    .from('app_challenges')
+                    .update({ metadata: resultJSON })
+                    .eq('id', challengeId)
+            }
+
+            return new Response(JSON.stringify(resultJSON), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            })
+        }
+
+        // CORRECTION: My previous logic on line 16 destructured `text` but not `prompt`.
+        // I need to update the destructuring to include `prompt`.
+
+        if (task === 'generate_hints') {
+            const promptText = text || (await req.json()).prompt || "Say something" // Fallback mayhem if I don't fix line 16
+
+            // Let's rely on my ability to fix line 16 in a separate edit or assume I can access it.
+            // Actually, I will update line 16 first to be safe, then add this block.
+        }
         // ==========================================
         // TASK: ANALYZE (Transcription + Correction)
         // ==========================================
@@ -155,11 +255,28 @@ serve(async (req) => {
         // Step 4: Correct grammar with Groq (Llama 3)
         const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY')
 
+        // const { context } = await req.json() // REMOVED: Already parsed at top
+
+        // Context String Construction
+        let contextString = ""
+        if (context) {
+            contextString = `
+CONTEXT from Original Challenge:
+- The user was asked: "${context.prompt || 'Unknown Challenge'}"
+- A suggested starter phrase was: "${context.starter_phrase || 'None'}"
+
+Use this context to be smarter:
+- If they use words from the starter phrase, that is GOOD.
+- If their sentence answers the prompt, mark it as relevant.
+`
+        }
+
         const systemPrompt = `You are a strict language teacher. Find ALL errors.
 
 Student said: "${transcription}"
 Target Language: ${language || 'English'}
 Student's Native Languages: ${userLangString}
+${contextString}
 
 CRITICAL RULES:
 1. Look for ANY grammar, vocabulary, pronunciation, or word choice errors

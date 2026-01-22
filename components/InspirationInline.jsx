@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { Audio } from 'expo-av';
 import { Play, Pause, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
+import { ThumbsUp, ThumbsDown } from 'lucide-react-native';
 
 const SOUP_COLORS = {
     pink: '#ec008b',
@@ -10,13 +11,21 @@ const SOUP_COLORS = {
     cream: '#FDF5E6',
 };
 
-export function InspirationInline({ metadata, language }) {
-    console.log('🥣 [InspirationInline] Mounting with language:', language, typeof language);
+export function InspirationInline({ metadata: initialMetadata, language, prompt, challengeId }) {
+    console.log('🥣 [InspirationInline] Mounting. Meta:', !!initialMetadata, 'Prompt:', !!prompt);
+
+    // Use initial metadata OR localized generated metadata
+    const [metadata, setMetadata] = useState(initialMetadata);
     const [expanded, setExpanded] = useState(false);
+
+    // Audio State
     const [sound, setSound] = useState(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [isLoadingAudio, setIsLoadingAudio] = useState(false);
     const [audioUrl, setAudioUrl] = useState(null);
+
+    // Generation State
+    const [isGenerating, setIsGenerating] = useState(false);
 
     // Unload sound on unmount
     useEffect(() => {
@@ -26,6 +35,130 @@ export function InspirationInline({ metadata, language }) {
             }
         };
     }, [sound]);
+
+    // Fun loading messages
+    const LOADING_MESSAGES = [
+        "Going to Trader Joe's...",
+        "Going to Erewhon...",
+        "Foraging in the garden...",
+        "Haggling at the farmer's market...",
+        "Checking the pantry...",
+        "Simmering the broth...",
+        "Chopping fresh ingredients...",
+        "Asking grandma for the recipe...",
+        "Waiting for the soup to cool..."
+    ];
+    const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
+
+    // User ID State (for personalized translations)
+    const [userId, setUserId] = useState(null);
+
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data }) => {
+            if (data?.user?.id) setUserId(data.user.id);
+        });
+    }, []);
+
+    // Feedback State
+    const [feedbackStatus, setFeedbackStatus] = useState(null); // 'positive', 'negative', 'submitted'
+
+    // Reset feedback when generating new hints
+    useEffect(() => {
+        if (isGenerating) {
+            setFeedbackStatus(null);
+        }
+    }, [isGenerating]);
+
+    const submitFeedback = async (isPositive) => {
+        setFeedbackStatus(isPositive ? 'positive' : 'negative');
+        try {
+            const { error } = await supabase.from('app_feature_feedback').insert({
+                // user_id: userId, // Wait, I don't have userId prop here? I need to check props.
+                // If userId is missing, maybe just omit it or rely on RLS/Auth context if available?
+                // Actually, InspirationInline might not receive userId. 
+                // Let me check props: { metadata, language, prompt, challengeId }
+                // Use a simplified logging if no User ID, or ignore it.
+                // Actually, usually Supabase client in React Native might not auth automatically if not authenticated?
+                // I'll skip user_id if not present, but use feature_name.
+                feature_name: 'soup_hints',
+                rating: isPositive ? 5 : 1,
+                feedback_text: isPositive ? 'Helpful hint' : 'Unhelpful hint',
+                metadata: { prompt, language }
+            });
+
+            if (error) throw error;
+
+            setTimeout(() => {
+                setFeedbackStatus('submitted');
+            }, 800);
+        } catch (err) {
+            console.error('Feedback error:', err);
+        }
+    };
+
+    const handleExpand = async () => {
+        try {
+            // If we already have VALID data, just toggle
+            if (metadata && metadata.starter_phrase) {
+                setExpanded(!expanded);
+                return;
+            }
+
+            // If no data (or empty data), we need to GENERATE it!
+            if (!isGenerating) {
+                // Pick a new random message
+                setLoadingMessage(LOADING_MESSAGES[Math.floor(Math.random() * LOADING_MESSAGES.length)]);
+                setExpanded(true);
+                await generateHints();
+            }
+        } catch (error) {
+            console.error('🥣 [InspirationInline] Expand Error:', error);
+        }
+    };
+    // ... (skip down to loading text)
+    // actually I'll use multi_replace if needed, but here I can target the component chunks.
+    // Wait, I can't target multiple disjoint blocks with replace_file_content.
+    // I will use multi_replace_file_content.
+
+    const generateHints = async () => {
+        if (!prompt) {
+            console.warn('Cannot generate hints without a prompt');
+            return;
+        }
+
+        setIsGenerating(true);
+        try {
+            const payload = {
+                task: 'generate_hints',
+                prompt: prompt,
+                language: language || 'Target Language',
+                challengeId: challengeId,
+                userId: userId // Pass confirmed User ID
+            };
+            console.log('🥣 [InspirationInline] Requesting Generation:', JSON.stringify(payload, null, 2));
+
+            const { data, error } = await supabase.functions.invoke('voice-feedback', {
+                body: payload
+            });
+
+            if (error) {
+                console.error('🥣 [InspirationInline] Supabase Function Error:', error);
+                throw error;
+            }
+
+            console.log('🥣 [InspirationInline] Received Data:', JSON.stringify(data, null, 2));
+
+            if (data && data.starter_phrase) {
+                setMetadata(data);
+            } else {
+                console.warn('🥣 [InspirationInline] Data missing starter_phrase');
+            }
+        } catch (err) {
+            console.error('🥣 [InspirationInline] GENERATION EXCEPTION:', err);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
 
     const handlePlay = async () => {
         try {
@@ -47,7 +180,7 @@ export function InspirationInline({ metadata, language }) {
                     body: {
                         text: metadata.starter_phrase,
                         task: 'pronunciation',
-                        language: language || 'French' // Default fallback
+                        language: language // Let backend handle default (Multilingual)
                     }
                 });
 
@@ -60,8 +193,37 @@ export function InspirationInline({ metadata, language }) {
                 await playSound(audioUrl);
             }
         } catch (error) {
-            console.error('Audio playback error:', error);
+            console.error('Audio playback error (ElevenLabs):', error);
             setIsLoadingAudio(false);
+
+            // FALLBACK: Use Native Device Text-to-Speech (free, infinite lang support)
+            // This rescues Farsi, Thai, etc. 
+            try {
+                // If ElevenLabs fails, we don't want to alert "Error", we want to just play SOMETHING.
+                console.log('🥣 [InspirationInline] Falling back to Expo Speech');
+
+                // SAFE IMPORT: Only load if module exists (prevents crash on old dev clients)
+                let Speech;
+                try {
+                    Speech = require('expo-speech');
+                } catch (e) {
+                    console.warn('Expo Speech module not found (Native Rebuild Required)');
+                }
+
+                if (Speech && Speech.speak) {
+                    Speech.speak(metadata.starter_phrase, {
+                        language: language === 'Farsi' ? 'fa' : undefined, // Farsi code
+                        // Basic undefined lets the phone Auto-Detect based on text usually, 
+                        // or allows us to pass locale if we have it map (e.g. 'es', 'fr').
+                    });
+                } else {
+                    console.warn('Speech fallback unavailable');
+                    Alert.alert("Audio Error", "Could not generate audio (Native module missing).");
+                }
+            } catch (speechError) {
+                console.error('Native Speech failed too:', speechError);
+                Alert.alert("Audio Error", "Could not generate audio. Please check your connection.");
+            }
         }
     };
 
@@ -94,11 +256,14 @@ export function InspirationInline({ metadata, language }) {
             {/* Pink Trigger Button / Header */}
             <Pressable
                 style={[styles.headerButton, expanded && styles.headerButtonExpanded]}
-                onPress={() => setExpanded(!expanded)}
+                onPress={handleExpand}
             >
                 <View style={styles.headerContent}>
                     <Text style={styles.headerEmoji}>🥣</Text>
                     <Text style={styles.headerText}>Need some ingredients?</Text>
+                    <View style={styles.newBadge}>
+                        <Text style={styles.newBadgeText}>NEW</Text>
+                    </View>
                 </View>
                 {expanded ? <ChevronUp size={16} color="#fff" /> : <ChevronDown size={16} color="#fff" />}
             </Pressable>
@@ -106,39 +271,79 @@ export function InspirationInline({ metadata, language }) {
             {/* Expanded Content */}
             {expanded && (
                 <View style={styles.contentPanel}>
-                    {/* Starter Phrase Section */}
-                    <View style={styles.phraseContainer}>
-                        <View style={styles.phraseTextContainer}>
-                            <Text style={styles.label}>TRY SAYING:</Text>
-                            <Text style={styles.phraseText}>"{metadata.starter_phrase}"</Text>
+                    {isGenerating ? (
+                        <View style={styles.loadingContainer}>
+                            <ActivityIndicator size="small" color={SOUP_COLORS.pink} />
+                            <Text style={styles.loadingText}>{loadingMessage}</Text>
                         </View>
-                        <Pressable
-                            style={styles.playButton}
-                            onPress={handlePlay}
-                            disabled={isLoadingAudio}
-                        >
-                            {isLoadingAudio ? (
-                                <ActivityIndicator size="small" color="#fff" />
-                            ) : isPlaying ? (
-                                <Pause size={20} color="#fff" fill="#fff" />
-                            ) : (
-                                <Play size={20} color="#fff" fill="#fff" />
-                            )}
-                        </Pressable>
-                    </View>
-
-                    <View style={styles.divider} />
-
-                    {/* Vocab List */}
-                    <View style={styles.vocabContainer}>
-                        <Text style={styles.label}>USEFUL WORDS:</Text>
-                        {metadata.vocab_bank && metadata.vocab_bank.map((item, index) => (
-                            <View key={index} style={styles.vocabItem}>
-                                <Text style={styles.vocabWord}>{item.word}</Text>
-                                <Text style={styles.vocabTranslation}>({item.translation})</Text>
+                    ) : (metadata && metadata.starter_phrase) ? (
+                        <>
+                            {/* Starter Phrase Section */}
+                            <View style={styles.phraseContainer}>
+                                <View style={styles.phraseTextContainer}>
+                                    <Text style={styles.label}>TRY SAYING:</Text>
+                                    <Text style={styles.phraseText}>"{metadata.starter_phrase}"</Text>
+                                </View>
+                                <Pressable
+                                    style={styles.playButton}
+                                    onPress={handlePlay}
+                                    disabled={isLoadingAudio}
+                                >
+                                    {isLoadingAudio ? (
+                                        <ActivityIndicator size="small" color="#fff" />
+                                    ) : isPlaying ? (
+                                        <Pause size={20} color="#fff" fill="#fff" />
+                                    ) : (
+                                        <Play size={20} color="#fff" fill="#fff" />
+                                    )}
+                                </Pressable>
                             </View>
-                        ))}
-                    </View>
+
+                            <View style={styles.divider} />
+
+                            {/* Vocab List */}
+                            <View style={styles.vocabContainer}>
+                                <Text style={styles.label}>USEFUL WORDS:</Text>
+                                {metadata.vocab_bank && metadata.vocab_bank.map((item, index) => (
+                                    <View key={index} style={styles.vocabItem}>
+                                        <Text style={styles.vocabWord}>{item.word}</Text>
+                                        <Text style={styles.vocabTranslation}>({item.translation})</Text>
+                                    </View>
+                                ))}
+                            </View>
+                        </>
+                    ) : (
+                        <View style={styles.loadingContainer}>
+                            <Text style={styles.loadingText}>No hints available for this challenge.</Text>
+                        </View>
+                    )}
+
+                    {/* Feedback Section (Only show if we have content) */}
+                    {metadata && metadata.starter_phrase && !isGenerating && (
+                        <View style={styles.feedbackContainer}>
+                            {feedbackStatus === 'submitted' ? (
+                                <Text style={styles.feedbackCheck}>✓ Thanks!</Text>
+                            ) : (
+                                <>
+                                    <Text style={styles.feedbackLabel}>Helpful?</Text>
+                                    <View style={styles.feedbackButtons}>
+                                        <Pressable
+                                            onPress={() => submitFeedback(false)}
+                                            style={[styles.feedbackBtn, feedbackStatus === 'negative' && styles.feedbackBtnActive]}
+                                        >
+                                            <ThumbsDown size={14} color={feedbackStatus === 'negative' ? '#fff' : '#999'} />
+                                        </Pressable>
+                                        <Pressable
+                                            onPress={() => submitFeedback(true)}
+                                            style={[styles.feedbackBtn, feedbackStatus === 'positive' && styles.feedbackBtnActive]}
+                                        >
+                                            <ThumbsUp size={14} color={feedbackStatus === 'positive' ? '#fff' : '#999'} />
+                                        </Pressable>
+                                    </View>
+                                </>
+                            )}
+                        </View>
+                    )}
                 </View>
             )}
         </View>
@@ -247,4 +452,55 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: '#666',
     },
+    newBadge: {
+        backgroundColor: '#fff',
+        paddingHorizontal: 4,
+        paddingVertical: 1,
+        borderRadius: 4,
+        marginLeft: 6,
+    },
+    newBadgeText: {
+        fontSize: 8,
+        fontWeight: '800',
+        color: SOUP_COLORS.pink,
+    },
+    loadingContainer: {
+        padding: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    loadingText: {
+        marginTop: 8,
+        color: SOUP_COLORS.pink,
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    feedbackContainer: {
+        marginTop: 12,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 8,
+    },
+    feedbackLabel: {
+        fontSize: 10,
+        color: '#999',
+    },
+    feedbackButtons: {
+        flexDirection: 'row',
+        gap: 6,
+    },
+    feedbackBtn: {
+        padding: 4,
+        borderRadius: 12,
+        backgroundColor: '#f0f0f0',
+    },
+    feedbackBtnActive: {
+        backgroundColor: SOUP_COLORS.pink,
+    },
+    feedbackCheck: {
+        fontSize: 10,
+        color: SOUP_COLORS.pink,
+        fontWeight: 'bold',
+    }
 });

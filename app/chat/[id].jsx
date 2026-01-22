@@ -339,34 +339,27 @@ export default function ChatScreen() {
                 .eq('group_id', groupId)
                 .order('created_at', { ascending: true });
             if (messagesData) {
-                // Create lookup map for challenge metadata
+                // Create lookup map for challenge metadata & prompts
                 const challengeMetadataMap = {};
+                const challengePromptMap = {};
                 if (challenges) {
                     challenges.forEach(c => {
                         challengeMetadataMap[c.id] = c.metadata;
+                        challengePromptMap[c.id] = c.prompt_text;
                     });
                 }
 
                 // Handle deleted users by providing fallback data
                 const messagesWithFallback = messagesData.map(msg => {
-                    // TEST MODE: Force inject metadata for Noah's group if missing
-                    let meta = msg.challenge_id ? challengeMetadataMap[msg.challenge_id] : null;
-
-                    if (!meta && group.name.toLowerCase().includes('noah') && msg.content && msg.content.toLowerCase().includes('#challenge')) {
-                        meta = {
-                            starter_phrase: "Je voudrais un croissant.",
-                            vocab_bank: [
-                                { word: "Le pain", translation: "Bread" },
-                                { word: "La boulangerie", translation: "Bakery" },
-                                { word: "Délicieux", translation: "Delicious" }
-                            ]
-                        };
-                    }
+                    // Start with DB metadata
+                    const meta = msg.challenge_id ? challengeMetadataMap[msg.challenge_id] : null;
+                    const prompt = msg.challenge_id ? challengePromptMap[msg.challenge_id] : null;
 
                     return {
                         ...msg,
-                        // Inject metadata
+                        // Inject metadata & prompt context
                         challenge_metadata: meta,
+                        challenge_prompt: prompt,
                         sender: msg.sender || {
                             display_name: 'Deleted User',
                             avatar_url: null,
@@ -762,6 +755,7 @@ export default function ChatScreen() {
                 messages={messagesWithDates}
                 loading={loading}
                 groupLanguage={groupLanguage} // Pass language for Voice Feedback (Fixes "American Accent" bug)
+                currentChallenge={currentChallenge} // Pass full challenge for AI Context
                 onSendText={sendMessage}
                 onSendVoice={handleSendVoice}
                 onPickImage={sendImageMessage}

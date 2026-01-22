@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, Alert, ActivityIndicator, Platform, KeyboardAvoidingView, Image, ScrollView } from 'react-native';
+import { FunnyLoader } from '../components/FunnyLoader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
@@ -128,7 +129,7 @@ export default function LoginScreen() {
                         onPress={handleNameSubmit}
                         disabled={!name.trim() || loading}
                     >
-                        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>continue</Text>}
+                        {loading ? <FunnyLoader type="login" color="#fff" /> : <Text style={styles.buttonText}>continue</Text>}
                     </Pressable>
 
                     <Text style={styles.disclaimer}>
@@ -189,7 +190,7 @@ export default function LoginScreen() {
                     onPress={handlePasswordSubmit}
                     disabled={password.length !== 3 || loading}
                 >
-                    {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>continue</Text>}
+                    {loading ? <FunnyLoader type="login" color="#fff" /> : <Text style={styles.buttonText}>continue</Text>}
                 </Pressable>
             </ScrollView>
         </SafeAreaView>

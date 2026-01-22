@@ -30,7 +30,7 @@ const WAVEFORM_BARS = 30;
 // Cache for voice feedback results
 const feedbackCache = {};
 
-export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage }) {
+export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage, challengeContext }) {
     const [showModal, setShowModal] = useState(false);
     const [loading, setLoading] = useState(false);
     const [transcription, setTranscription] = useState('');
@@ -142,13 +142,17 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage 
 
         try {
             // STEP 1: ANALYZE (Transcription + Correction)
+            // Pass the Challenge Context to the backend so it knows what to expect!
+            const bodyPayload = {
+                audioUrl,
+                language: groupLanguage || language,
+                userId,
+                task: 'analyze',
+                context: challengeContext // { prompt, starter_phrase }
+            };
+
             const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke('voice-feedback', {
-                body: {
-                    audioUrl,
-                    language: groupLanguage || language,
-                    userId,
-                    task: 'analyze'
-                },
+                body: bodyPayload,
             });
 
             if (analyzeError) throw analyzeError;

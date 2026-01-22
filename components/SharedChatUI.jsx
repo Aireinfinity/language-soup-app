@@ -84,6 +84,7 @@ export function SharedChatUI({
     onReact,
     groupName = null,
     groupLanguage = null,
+    currentChallenge = null, // New Prop: Full challenge object for context
     onAvatarPress,
     onShowInspiration, // New Prop
 }) {
@@ -331,6 +332,7 @@ export function SharedChatUI({
                 groupLanguage={groupLanguage}
                 onAvatarPress={onAvatarPress}
                 onShowInspiration={onShowInspiration}
+                currentChallenge={currentChallenge} // Propagate Context
             />
         );
     };

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Text, TextInput, KeyboardAvoidingView, Platform, StatusBar, Image, Alert } from 'react-native';
+import { FunnyLoader } from '../components/FunnyLoader';
 import { useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { ArrowLeft, Send, Mic, X, Trash2, ChevronLeft, Users, Megaphone } from 'lucide-react-native';
@@ -507,7 +508,9 @@ export default function CommunityChatScreen() {
     if (loading) {
         return (
             <View style={styles.center}>
-                <ActivityIndicator size="large" color={Colors.primary} />
+                <View style={styles.center}>
+                    <FunnyLoader type="chat" color={Colors.primary} size="large" />
+                </View>
             </View>
         );
     }
