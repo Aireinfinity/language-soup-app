@@ -155,7 +155,32 @@
 
 ---
 
-## 📋 How to Update This File
+## �️ How We Build (AI Workflow)
+
+**BEFORE building anything, always follow this process:**
+
+1. **Align** - Discuss what we're building and why
+2. **Simplest approach** - AI proposes the simplest possible solution
+3. **Questions** - AI asks Noah any clarifying questions BEFORE coding
+4. **Approve** - Noah approves the approach
+5. **Build** - Only then do we write code
+
+**Why this matters:**
+- Saves model tokens (we have limited usage)
+- Prevents scope creep
+- Faster than "okay okay okay" back-and-forth
+- No surprises
+
+**Rules:**
+- Don't over-engineer. Simple > clever.
+- One bug/feature per day is the pace.
+- Ask questions first, code second.
+- If unsure, ask Noah.
+- No unnecessary rebuilds or deployments.
+
+---
+
+## �📋 How to Update This File
 
 1. Edit this file locally or on GitHub
 2. Update the "Last updated" date at the top
