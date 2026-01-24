@@ -155,7 +155,11 @@ export function MessageBubble({
 
     const avatarElement = sender && !isMe && avatarUrl ? (
         <Pressable onPress={() => onAvatarPress && onAvatarPress(sender)}>
-            <Image source={getAvatarSource(avatarUrl)} style={ChatStyles.avatar} />
+            <Image
+                source={getAvatarSource(avatarUrl)}
+                style={ChatStyles.avatar}
+                cache="force-cache"
+            />
         </Pressable>
     ) : null;
 

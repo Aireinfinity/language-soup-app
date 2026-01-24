@@ -175,6 +175,10 @@ export default function ChatScreen() {
         }
     };
 
+    const handleAvatarPress = (sender) => {
+        setSelectedUser(sender);
+    };
+
     // Subscribe to realtime events
     useEffect(() => {
         if (!user) return;
@@ -756,6 +760,7 @@ export default function ChatScreen() {
                 loading={loading}
                 groupLanguage={groupLanguage} // Pass language for Voice Feedback (Fixes "American Accent" bug)
                 currentChallenge={currentChallenge} // Pass full challenge for AI Context
+                onAvatarPress={handleAvatarPress}
                 onSendText={sendMessage}
                 onSendVoice={handleSendVoice}
                 onPickImage={sendImageMessage}
@@ -832,7 +837,15 @@ export default function ChatScreen() {
                             Platform.OS === 'ios' ? (
                                 <BlurView intensity={95} tint="light" style={[styles.challengeBanner, { top: insets.top + 65, marginBottom: 12 }]}>
                                     <View style={styles.challengeContent}>
-                                        <Text style={styles.challengeHashtag}>#challenge</Text>
+                                        <View style={styles.challengeHeader}>
+                                            <Text style={styles.challengeHashtag}>#challenge</Text>
+                                            {visibleChallenge.created_at && (() => {
+                                                const hoursSince = (Date.now() - new Date(visibleChallenge.created_at)) / (1000 * 60 * 60);
+                                                if (hoursSince < 1) return <Text style={styles.earlyBadge}>⚡ Early Bird</Text>;
+                                                if (hoursSince < 5) return <Text style={styles.earlyBadge}>🌅 Morning Person</Text>;
+                                                return null;
+                                            })()}
+                                        </View>
                                         {visibleChallenge.prompt_text.split('\n').map((line, index) => (
                                             <Text key={index} style={styles.challengeText}>{line}</Text>
                                         ))}
@@ -841,7 +854,15 @@ export default function ChatScreen() {
                             ) : (
                                 <View style={[styles.challengeBanner, { top: insets.top + 65, marginBottom: 12, backgroundColor: '#fff' }]}>
                                     <View style={styles.challengeContent}>
-                                        <Text style={styles.challengeHashtag}>#challenge</Text>
+                                        <View style={styles.challengeHeader}>
+                                            <Text style={styles.challengeHashtag}>#challenge</Text>
+                                            {visibleChallenge.created_at && (() => {
+                                                const hoursSince = (Date.now() - new Date(visibleChallenge.created_at)) / (1000 * 60 * 60);
+                                                if (hoursSince < 1) return <Text style={styles.earlyBadge}>⚡ Early Bird</Text>;
+                                                if (hoursSince < 5) return <Text style={styles.earlyBadge}>🌅 Morning Person</Text>;
+                                                return null;
+                                            })()}
+                                        </View>
                                         {visibleChallenge.prompt_text.split('\n').map((line, index) => (
                                             <Text key={index} style={styles.challengeText}>{line}</Text>
                                         ))}
@@ -875,7 +896,13 @@ export default function ChatScreen() {
                 metadata={inspirationMetadata || visibleChallenge?.metadata}
                 language={groupLanguage}
             />
-        </View >
+
+            <UserPreviewModal
+                visible={!!selectedUser}
+                user={selectedUser}
+                onClose={() => setSelectedUser(null)}
+            />
+        </View>
     );
 }
 
@@ -984,6 +1011,16 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
         marginBottom: 4,
         letterSpacing: 0.5,
+    },
+    challengeHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    earlyBadge: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: SOUP_COLORS.blue,
     },
     challengeText: {
         fontSize: 15,

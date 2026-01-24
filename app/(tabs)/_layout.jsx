@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Globe, User } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/Colors';
 import { View, Image, Text } from 'react-native';
 import { useState, useEffect } from 'react';
@@ -9,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export default function TabLayout() {
     const [unreadCommunity, setUnreadCommunity] = useState(0);
     const [unreadSupport, setUnreadSupport] = useState(0);
+    const insets = useSafeAreaInsets();
 
     useEffect(() => {
         loadUnreadCounts();
@@ -118,7 +120,7 @@ export default function TabLayout() {
                         backgroundColor: '#19b091',
                         borderTopWidth: 0,
                         height: 80,
-                        paddingBottom: 20,
+                        paddingBottom: insets.bottom + 10,
                         paddingTop: 10,
                         borderTopLeftRadius: 24,
                         borderTopRightRadius: 24,

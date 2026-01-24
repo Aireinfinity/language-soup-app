@@ -8,7 +8,7 @@ import { Colors } from '../../constants/Colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useQuests } from '../../contexts/QuestContext';
-import { MessageCircle, Users, Sparkles, Plus, Globe, ChevronRight } from 'lucide-react-native';
+import { MessageCircle, Users, Sparkles, Plus, Globe, ChevronRight, Megaphone } from 'lucide-react-native';
 import LanguageRequestModal from '../../components/LanguageRequestModal';
 import { FloatingSupportButton } from '../../components/FloatingSupportButton';
 import { haptics } from '../../utils/haptics';
@@ -40,6 +40,8 @@ export default function HomeScreen() {
     const [showAdminModal, setShowAdminModal] = useState(false);
     const [adminModeEnabled, setAdminModeEnabled] = useState(false);
     const [showFounderWelcome, setShowFounderWelcome] = useState(false);
+    const [announcements, setAnnouncements] = useState([]);
+    const [unreadAnnouncementsCount, setUnreadAnnouncementsCount] = useState(0);
 
     useFocusEffect(
         useCallback(() => {
@@ -195,12 +197,13 @@ export default function HomeScreen() {
                         .limit(1)
                         .single();
 
-                    // Get unread count (messages after last_read_at)
+                    // Get unread count (messages after last_read_at, excluding own messages)
                     const { count: unreadCount } = await supabase
                         .from('app_messages')
                         .select('*', { count: 'exact', head: true })
                         .eq('group_id', group.id)
-                        .gt('created_at', membership.last_read_at || '1970-01-01');
+                        .gt('created_at', membership.last_read_at || '1970-01-01')
+                        .neq('sender_id', user.id);
 
                     return {
                         id: group.id,
@@ -238,8 +241,32 @@ export default function HomeScreen() {
 
     const onRefresh = async () => {
         setRefreshing(true);
-        await loadGroups();
+        await Promise.all([loadGroups(), loadAnnouncements()]);
         setRefreshing(false);
+    };
+
+    const loadAnnouncements = async () => {
+        try {
+            // Load announcements
+            const { data } = await supabase
+                .from('app_community_announcements')
+                .select('*')
+                .eq('active', true)
+                .order('created_at', { ascending: false })
+                .limit(1);
+            setAnnouncements(data || []);
+
+            // Load unread count
+            const lastReadStr = await AsyncStorage.getItem('community_last_read');
+            const lastRead = lastReadStr || '1970-01-01';
+            const { count } = await supabase
+                .from('app_community_messages')
+                .select('*', { count: 'exact', head: true })
+                .gt('created_at', lastRead);
+            setUnreadAnnouncementsCount(count || 0);
+        } catch (error) {
+            console.error('Error loading announcements:', error);
+        }
     };
 
     const handleLanguageRequest = async (requestText, unused) => {
@@ -415,11 +442,39 @@ export default function HomeScreen() {
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
                 }
                 ListHeaderComponent={
-                    (isAdmin || isCommunityManager) ? (
-                        <View style={styles.adminSection}>
-
-                        </View>
-                    ) : null
+                    <View style={styles.headerSpacer}>
+                        {announcements.length > 0 && (
+                            <Pressable
+                                style={styles.announcementCard}
+                                onPress={() => {
+                                    setUnreadAnnouncementsCount(0);
+                                    router.push('/community-chat');
+                                }}
+                            >
+                                <View style={styles.announcementIcon}>
+                                    <Megaphone size={24} color="#fff" />
+                                    {unreadAnnouncementsCount > 0 && (
+                                        <View style={styles.unreadBadge}>
+                                            <Text style={styles.unreadText}>{unreadAnnouncementsCount}</Text>
+                                        </View>
+                                    )}
+                                </View>
+                                <View style={styles.announcementInfo}>
+                                    <View style={styles.announcementHeader}>
+                                        <Text style={styles.announcementTitle}>Latest Announcement 📣</Text>
+                                    </View>
+                                    <Text style={styles.announcementText} numberOfLines={2}>
+                                        {announcements[0].content}
+                                    </Text>
+                                </View>
+                                <ChevronRight size={20} color={SOUP_COLORS.subtext || '#636e72'} />
+                            </Pressable>
+                        )}
+                        {(isAdmin || isCommunityManager) && (
+                            <View style={styles.adminSection}>
+                            </View>
+                        )}
+                    </View>
                 }
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
@@ -838,6 +893,73 @@ const styles = StyleSheet.create({
         zIndex: 1000,
         alignItems: 'center',
     },
+    listHeader: {
+        paddingTop: 10,
+    },
+    headerSpacer: {
+        marginBottom: 8,
+    },
+    announcementCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        marginHorizontal: 16,
+        marginBottom: 20,
+        padding: 16,
+        borderRadius: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    announcementIcon: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: SOUP_COLORS.pink,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 14,
+    },
+    announcementInfo: {
+        flex: 1,
+    },
+    announcementHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 4,
+    },
+    announcementTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#2d3436',
+    },
+    announcementText: {
+        fontSize: 13,
+        color: '#636e72',
+        lineHeight: 18,
+    },
+    unreadBadge: {
+        position: 'absolute',
+        top: -4,
+        right: -4,
+        backgroundColor: '#FF3B30',
+        borderRadius: 10,
+        minWidth: 20,
+        height: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 6,
+        borderWidth: 2,
+        borderColor: '#fff',
+    },
+    unreadText: {
+        color: '#fff',
+        fontSize: 10,
+        fontWeight: 'bold',
+    },
+
     floatingRequestCircle: {
         width: 56,
         height: 56,

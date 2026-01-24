@@ -129,9 +129,9 @@
 
 | Week | Focus |
 |------|-------|
-| Jan 24-29 | **Skiing in Austrian Alps** - no building |
-| Jan 30 - Feb 5 | **Budapest coffee chats** - user interviews |
-| Feb 6-16 | **Travel home** - light support only |
+| Jan 25-30 | **Skiing in Austrian Alps** - no building |
+| Jan 31 - Feb 7 | **Budapest coffee chats** - user interviews |
+| Feb 7-16 | **Travel home** - light support only |
 | Feb 17+ | **Ship:** Voice feedback, sample phrases, DMs |
 
 ---

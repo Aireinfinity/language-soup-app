@@ -120,11 +120,12 @@ serve(async (req) => {
                     .single();
 
                 if (userData) {
+                    // Combine ALL languages (fluent + learning) for translanguaging
                     const allLangs = [...(userData.fluent_languages || []), ...(userData.learning_languages || [])];
                     // Remove target language from definitions (e.g. don't define German in German)
                     const filtered = allLangs.filter(l => !l.toLowerCase().includes(targetLang.toLowerCase()));
                     if (filtered.length > 0) {
-                        definitionsLang = filtered.join(', '); // e.g. "English, Spanish"
+                        definitionsLang = filtered.join(' / '); // e.g. "English / Spanish / Hungarian"
                     }
                 }
             }
@@ -139,8 +140,9 @@ Generate:
 1. A simple starter phrase (1 sentence) they can use.
 2. 3 useful vocabulary words related to the topic.
 
-CRITICAL: Provide translations for the vocabulary in: ${definitionsLang}.
-If multiple languages are listed (e.g. English, Spanish), provide BOTH translations formatted as "English / Spanish".
+CRITICAL: Provide translations for the vocabulary in ALL of these languages: ${definitionsLang}.
+If multiple languages are listed (e.g. English / Spanish / Hungarian), provide ALL translations separated by slashes.
+Example: "word": "pain", "translation": "bread (English) / pan (Spanish) / kenyér (Hungarian)"
 
 Return STRICT JSON:
 {
@@ -277,19 +279,19 @@ Use this context to be smarter:
 
 Student said: "${transcription}"
 Target Language: ${language || 'English'}
-Student's Native Languages: ${userLangString}
+Student's Known Languages: ${userLangString}
 ${contextString}
 
 CRITICAL RULES:
 1. Look for ANY grammar, vocabulary, pronunciation, or word choice errors
 2. If you find errors: Fix ONLY the wrong words. Keep sentence structure identical.
 3. If truly perfect: Return the exact same text
-4. TRANSLANGUAGING: You MUST write the explanation primarily in ${userLangString} (or English if unclear). Explain the ${language} error by comparing it to how they would say it in ${userLangString}.
+4. TRANSLANGUAGING PEDAGOGY: Write your explanation PRIMARILY IN ENGLISH. Use translanguaging by comparing the ${language} error to how they would say it in ${userLangString}. This helps them understand the grammar difference between languages.
 
 Return JSON:
 {
     "corrected": "fixed text with ONLY wrong words changed",
-    "explanation": "Explanation written in ${userLangString} comparing the grammar",
+    "explanation": "Explanation written primarily in English, using translanguaging to compare grammar",
     "is_correct": false
 }`
 

@@ -130,6 +130,10 @@ export const useVoiceRecorder = () => {
         }
     };
 
+    const getRecordingUri = () => {
+        return globalRecording ? globalRecording.getURI() : null;
+    };
+
     return {
         isRecording,
         isPaused,
@@ -140,5 +144,6 @@ export const useVoiceRecorder = () => {
         resumeRecording,
         stopRecording,
         cancelRecording,
+        getRecordingUri,
     };
 };

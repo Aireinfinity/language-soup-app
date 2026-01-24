@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, Image, Pressable, ActivityIndicator, Platform, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Megaphone, MessageCircle, Users, ChevronRight } from 'lucide-react-native';
+import { MessageCircle, Users, ChevronRight } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { FloatingAvatars } from '../../components/FloatingAvatars';
+
 import { UserPreviewModal } from '../../components/UserPreviewModal';
 import { useQuests } from '../../contexts/QuestContext';
 import ContextualTooltip from '../../components/ContextualTooltip';
+import { getLanguageFlag } from '../../utils/languageFlags';
 
 // Brand Colors
 const SOUP_COLORS = {
@@ -36,12 +37,13 @@ export default function CommunityScreen() {
     const [unreadCount, setUnreadCount] = useState(0);
     const [activeUsers, setActiveUsers] = useState([]);
     const [selectedUser, setSelectedUser] = useState(null);
+    const [selectedLanguage, setSelectedLanguage] = useState(null);
+    const [availableLanguages, setAvailableLanguages] = useState([]);
     const { completeQuest } = useQuests();
 
     useFocusEffect(
         React.useCallback(() => {
             loadData();
-            loadUnreadCount();
             loadActiveUsers();
         }, [])
     );
@@ -108,43 +110,47 @@ export default function CommunityScreen() {
 
     const loadActiveUsers = async () => {
         try {
-            // Fetch a larger pool for the dynamic "hub" feel
+            // Fetch a much larger pool to show "everybody"
             const { data: usersData } = await supabase
                 .from('app_users')
                 .select('id, display_name, avatar_url, status_text, fluent_languages, learning_languages')
                 .not('display_name', 'is', null)
-                .limit(300);
+                .order('created_at', { ascending: false })
+                .limit(500);
 
             if (!usersData) return;
 
-            // 1. Split into tiers based on file extension (APP LOGIC: Photos=.jpg, Soup=.png)
+            // Extract available languages dynamically
+            const allLangs = new Set();
+            usersData.forEach(u => {
+                if (u.learning_languages) {
+                    u.learning_languages.forEach(lang => allLangs.add(lang));
+                }
+            });
+            setAvailableLanguages(Array.from(allLangs).sort());
+
+            // 1. Split into tiers
+            // Photos Tier: Google, Facebook, or .jpg/jpeg
             const photos = usersData.filter(u => {
                 if (!u.avatar_url) return false;
                 const url = u.avatar_url.toLowerCase();
-                return url.includes('.jpg') || url.includes('.jpeg') || url.includes('googleusercontent');
+                return url.includes('.jpg') || url.includes('.jpeg') || url.includes('googleusercontent') || url.includes('fbsbx.com');
             });
 
+            // Soup/Avatar Tier: .png or DiceBear or others with URLs
             const soupAndAvatars = usersData.filter(u => {
                 if (!u.avatar_url) return false;
                 const url = u.avatar_url.toLowerCase();
-                // Everything else with a URL is likely a Soup Avatar (.png) or DiceBear
-                return !url.includes('.jpg') && !url.includes('.jpeg') && !url.includes('googleusercontent');
+                return !url.includes('.jpg') && !url.includes('.jpeg') && !url.includes('googleusercontent') && !url.includes('fbsbx.com');
             });
 
             const rest = usersData.filter(u => !u.avatar_url);
 
-            // 2. Shuffle each tier individually
+            // 2. Shuffle each tier individually for constant randomization
             const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
 
-            const randomizedPhotos = shuffle(photos);
-            const randomizedSoup = shuffle(soupAndAvatars);
-            const randomizedRest = shuffle(rest);
-
-            // 3. Combine in order: Photos -> Soup/Avatars -> Rest
-            // User request: "show all the users with photos" and make it a "party"
-            // We show everyone we fetched (up to 300) sorted by priority
-            // LIMIT to 50 for performance to prevent lag
-            const finalSelection = [...randomizedPhotos, ...randomizedSoup, ...randomizedRest].slice(0, 50);
+            // 3. Combine in priority order: Photos -> Soup/Avatars -> Rest
+            const finalSelection = [...shuffle(photos), ...shuffle(soupAndAvatars), ...shuffle(rest)];
 
             setActiveUsers(finalSelection);
         } catch (error) {
@@ -152,32 +158,7 @@ export default function CommunityScreen() {
         }
     };
 
-    const loadUnreadCount = async () => {
-        try {
-            // Get last read timestamp from AsyncStorage
-            const lastReadStr = await AsyncStorage.getItem('community_last_read');
-            const lastRead = lastReadStr || '1970-01-01';
 
-            // Count messages after last_read
-            const { count } = await supabase
-                .from('app_community_messages')
-                .select('*', { count: 'exact', head: true })
-                .gt('created_at', lastRead);
-
-            setUnreadCount(count || 0);
-        } catch (error) {
-            console.error('Error loading unread count:', error);
-        }
-    };
-
-    const renderAnnouncement = ({ item }) => (
-        <View style={styles.announcementCard}>
-            <View style={styles.announcementIcon}>
-                <Megaphone size={14} color="#fff" />
-            </View>
-            <Text style={styles.announcementText} numberOfLines={2}>{item.content}</Text>
-        </View>
-    );
 
     const renderIssue = ({ item }) => (
         <View style={styles.issueCard}>
@@ -222,79 +203,69 @@ export default function CommunityScreen() {
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                {/* Community Chat Card */}
-                <Pressable
-                    style={styles.chatCard}
-                    onPress={() => {
-                        // Optimistically clear the badge immediately
-                        setUnreadCount(0);
-                        router.push('/community-chat');
-                    }}
-                >
-                    <View style={styles.chatCardLeft}>
-                        <View style={styles.chatIcon}>
-                            <MessageCircle size={24} color="#fff" />
-                            {unreadCount > 0 && (
-                                <View style={styles.unreadBadge}>
-                                    <Text style={styles.unreadText}>{unreadCount}</Text>
-                                </View>
-                            )}
-                        </View>
-                        <View style={styles.chatInfo}>
-                            <Text style={styles.chatTitle}>Community Chat</Text>
-                            <View style={styles.chatMeta}>
-                                <Users size={14} color={SOUP_COLORS.subtext} />
-                                <Text style={styles.chatMetaText}>{memberCount} members • Tap to join</Text>
-                            </View>
-                        </View>
-                    </View>
-                    <ChevronRight size={24} color={SOUP_COLORS.subtext} />
-                </Pressable>
-
-                {/* Known Issues / Roadmap */}
-                {knownIssues.length > 0 && (
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>🛠️ Bugs we're working on</Text>
-                        <FlatList
-                            data={knownIssues}
-                            renderItem={renderIssue}
-                            keyExtractor={item => item.id}
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.groupsList}
-                        />
-                    </View>
-                )}
-
-                {/* Active Groups */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>🔥 Most Active Groups</Text>
-                    <FlatList
-                        data={activeGroups}
-                        renderItem={renderGroup}
-                        keyExtractor={(item) => item.id}
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.groupsList}
-                    />
-
-                    {/* Tooltip for browsing groups */}
-                    <ContextualTooltip
-                        message="Tap any group to peek at their chat! 👀"
-                        targetPosition={{ top: 380, left: 20 }}
-                        arrowDirection="up"
-                        tooltipId="browse_active_groups_hint"
-                    />
-                </View>
-
-                {/* The Community - Floating Avatars */}
+                {/* The Soup Pot - Iconic Design */}
                 {activeUsers.length > 0 && (
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>🍜 The Community</Text>
-                        <FloatingAvatars
-                            users={activeUsers}
-                            onUserPress={(user) => setSelectedUser(user)}
-                        />
+                        <Text style={styles.sectionTitle}>🍜 The Soup</Text>
+
+                        {/* Language Filters */}
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.filterContainer}
+                        >
+                            <Pressable
+                                style={[styles.filterChip, !selectedLanguage && styles.filterChipActive]}
+                                onPress={() => setSelectedLanguage(null)}
+                            >
+                                <Text style={[styles.filterText, !selectedLanguage && styles.filterTextActive]}>All</Text>
+                            </Pressable>
+                            {availableLanguages.map(lang => (
+                                <Pressable
+                                    key={lang}
+                                    style={[styles.filterChip, selectedLanguage === lang && styles.filterChipActive]}
+                                    onPress={() => setSelectedLanguage(lang)}
+                                >
+                                    <Text style={styles.filterEmoji}>{getLanguageFlag(lang)}</Text>
+                                    <Text style={[styles.filterText, selectedLanguage === lang && styles.filterTextActive]}>{lang}</Text>
+                                </Pressable>
+                            ))}
+                        </ScrollView>
+
+                        {/* People Cards - Asymmetrical Grid */}
+                        <View style={styles.pinterestGrid}>
+                            {(selectedLanguage
+                                ? activeUsers.filter(u => u.learning_languages?.includes(selectedLanguage))
+                                : activeUsers
+                            ).map((person, index) => (
+                                <Pressable
+                                    key={person.id}
+                                    style={styles.pinterestCard}
+                                    onPress={() => setSelectedUser(person)}
+                                >
+                                    {person.avatar_url && (
+                                        <Image
+                                            source={{ uri: person.avatar_url }}
+                                            style={[
+                                                styles.cardImage,
+                                                { height: index % 3 === 0 ? 180 : index % 3 === 1 ? 220 : 150 }
+                                            ]}
+                                        />
+                                    )}
+                                    <View style={styles.cardContent}>
+                                        <Text style={styles.cardName}>{person.display_name}</Text>
+                                        {person.status_text && (
+                                            <Text style={styles.cardTagline} numberOfLines={3}>"{person.status_text}"</Text>
+                                        )}
+                                        <View style={styles.cardFlags}>
+                                            {person.learning_languages?.slice(0, 5).map((lang, i) => (
+                                                <Text key={i} style={styles.cardFlag}>{getLanguageFlag(lang)}</Text>
+                                            ))}
+                                        </View>
+                                    </View>
+                                </Pressable>
+                            ))}
+                        </View>
                     </View>
                 )}
 
@@ -626,6 +597,146 @@ const styles = StyleSheet.create({
         color: SOUP_COLORS.subtext,
         marginTop: 6,
         textTransform: 'capitalize',
+    },
+
+    // People Cards
+    peopleList: {
+        paddingHorizontal: 16,
+    },
+    personCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        marginHorizontal: 16,
+        marginBottom: 12,
+        padding: 16,
+        borderRadius: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    personAvatar: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        marginRight: 14,
+    },
+    personInfo: {
+        flex: 1,
+    },
+    personName: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: SOUP_COLORS.text,
+        marginBottom: 4,
+    },
+    personTagline: {
+        fontSize: 14,
+        fontStyle: 'italic',
+        color: SOUP_COLORS.subtext,
+        marginBottom: 6,
+    },
+    languageFlags: {
+        flexDirection: 'row',
+        gap: 4,
+    },
+    flagEmoji: {
+        fontSize: 16,
+    },
+    dmButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: SOUP_COLORS.blue + '15',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    dmEmoji: {
+        fontSize: 20,
+    },
+
+    // Language Filters
+    filterContainer: {
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        gap: 8,
+    },
+    filterChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 14,
+        paddingVertical: 8,
+        borderRadius: 20,
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.1)',
+        gap: 6,
+    },
+    filterChipActive: {
+        backgroundColor: SOUP_COLORS.blue,
+        borderColor: SOUP_COLORS.blue,
+    },
+    filterEmoji: {
+        fontSize: 16,
+    },
+    filterText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: SOUP_COLORS.text,
+    },
+    filterTextActive: {
+        color: '#fff',
+    },
+
+    // Pinterest Grid
+    pinterestGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        paddingHorizontal: 12,
+        gap: 12,
+    },
+    pinterestCard: {
+        width: '47%',
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        overflow: 'hidden',
+        marginBottom: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 3,
+    },
+    cardImage: {
+        width: '100%',
+        height: 160,
+        backgroundColor: '#f0f0f0',
+    },
+    cardContent: {
+        padding: 12,
+    },
+    cardName: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: SOUP_COLORS.text,
+        marginBottom: 6,
+    },
+    cardTagline: {
+        fontSize: 13,
+        fontStyle: 'italic',
+        color: SOUP_COLORS.subtext,
+        lineHeight: 18,
+        marginBottom: 8,
+    },
+    cardFlags: {
+        flexDirection: 'row',
+        gap: 4,
+        flexWrap: 'wrap',
+    },
+    cardFlag: {
+        fontSize: 18,
     },
 });
 

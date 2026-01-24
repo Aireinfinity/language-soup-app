@@ -30,6 +30,19 @@ const WAVEFORM_BARS = 30;
 // Cache for voice feedback results
 const feedbackCache = {};
 
+const LOADING_MESSAGES = [
+    "Tasting your pronunciation...",
+    "Checking the recipe...",
+    "Consulting the chef...",
+    "Simmering your words...",
+    "Adding a pinch of grammar...",
+    "Stirring the correction pot...",
+    "Seasoning with feedback...",
+    "Letting it marinate...",
+    "Plating your sentence...",
+    "Garnishing with tips..."
+];
+
 export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage, challengeContext }) {
     const [showModal, setShowModal] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -39,6 +52,7 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage,
     const [showCorrections, setShowCorrections] = useState(false);
     const [confidence, setConfidence] = useState(1.0);
     const [feedbackStatus, setFeedbackStatus] = useState(null); // 'positive', 'negative', 'submitted'
+    const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
 
     // Reset feedback when modal opens/closes
     useEffect(() => {
@@ -135,6 +149,7 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage,
         }
 
         setLoading(true);
+        setLoadingMessage(LOADING_MESSAGES[Math.floor(Math.random() * LOADING_MESSAGES.length)]);
         setTranscription('');
         setCorrection(null);
         setPronunciationUrl(null);
@@ -237,7 +252,7 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage,
                             {loading && !transcription ? (
                                 <View style={styles.loadingContainer}>
                                     <ActivityIndicator size="large" color={SOUP_COLORS.blue} />
-                                    <Text style={styles.loadingText}>Analyzing your voice...</Text>
+                                    <Text style={styles.loadingText}>{loadingMessage}</Text>
                                 </View>
                             ) : (
                                 <>
