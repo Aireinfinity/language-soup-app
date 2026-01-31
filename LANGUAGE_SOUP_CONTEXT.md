@@ -1,6 +1,6 @@
 # Language Soup - Founder Context
 
-> Last updated: 2026-01-24 (before ski trip)
+> Last updated: 2026-01-31 (notification fix applied)
 
 ## 🍲 What is Language Soup?
 
@@ -92,7 +92,7 @@
 ## ❌ What's Not Working / Pain Points
 
 - Android crashes (ongoing)
-- Notifications were painful to set up (but working now)
+- Notifications: Fixed Jan 31 (batching for >100 users) - see Notification System section
 - Scope creep when building
 - Too many SQL audit files in repo (cleanup needed)
 - No premium features yet (need one before App Store launch)
@@ -125,7 +125,33 @@
 
 ---
 
-## 🗓️ Current Focus (Next 3 Weeks)
+## � Notification System (Critical)
+
+**Architecture:**
+- Cron job runs every minute → calls `process_scheduled_challenges_PROD()` SQL function
+- Function inserts challenges into groups, then sends push notifications via `net.http_post` to Expo
+
+**Key Limits:**
+- ⚠️ **Expo limit: 100 notifications per request** - Function MUST batch in groups of 100
+- Current users with notifications: ~107 (and growing)
+
+**Debugging Checklist:**
+1. Check cron is active: `SELECT * FROM cron.job WHERE command LIKE '%process_scheduled%';`
+2. Check HTTP responses: `SELECT status_code, content FROM net._http_response ORDER BY created DESC LIMIT 5;`
+3. Check if batching is active: `SELECT CASE WHEN routine_definition LIKE '%batch_count%' THEN '✅ BATCHED' ELSE '❌ NOT BATCHED' END FROM information_schema.routines WHERE routine_name = 'process_scheduled_challenges_prod';`
+
+**If notifications break:**
+- 400 error with "100 character(s)" = Expo limit hit, need batching
+- Check `net._http_response` for actual error messages
+- Test pg_net manually: `SELECT net.http_post(...)`
+
+**Files:**
+- `migrations/FIX_PROD_BATCHING.sql` - The batched version (use this one!)
+- `migrations/CREATE_PROD_FUNCTION.sql` - Original (breaks at >100 users)
+
+---
+
+## �🗓️ Current Focus (Next 3 Weeks)
 
 | Week | Focus |
 |------|-------|
