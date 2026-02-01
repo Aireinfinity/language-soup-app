@@ -125,7 +125,7 @@
 
 ---
 
-## � Notification System (Critical)
+## 🔔 Notification System (Critical)
 
 **Architecture:**
 - Cron job runs every minute → calls `process_scheduled_challenges_PROD()` SQL function
@@ -133,17 +133,23 @@
 
 **Key Limits:**
 - ⚠️ **Expo limit: 100 notifications per request** - Function MUST batch in groups of 100
-- Current users with notifications: ~107 (and growing)
+- Current users with notifications: ~109 (and growing)
+
+**Key Insight (Feb 1, 2026):**
+- ⚠️ **Expo "ok" ≠ User saw it** - iOS Notification Summary, Focus Mode, or disabled notifications can block delivery even when Expo+Apple say "delivered"
+- If a user reports not getting notifications, check their DEVICE SETTINGS first
+- We cannot detect device-level blocking from the server side
 
 **Debugging Checklist:**
 1. Check cron is active: `SELECT * FROM cron.job WHERE command LIKE '%process_scheduled%';`
 2. Check HTTP responses: `SELECT status_code, content FROM net._http_response ORDER BY created DESC LIMIT 5;`
 3. Check if batching is active: `SELECT CASE WHEN routine_definition LIKE '%batch_count%' THEN '✅ BATCHED' ELSE '❌ NOT BATCHED' END FROM information_schema.routines WHERE routine_name = 'process_scheduled_challenges_prod';`
+4. Verify delivery with receipts: `SELECT net.http_post(url := 'https://exp.host/--/api/v2/push/getReceipts', headers := '{"Content-Type": "application/json"}'::jsonb, body := '{"ids": ["TICKET_ID_HERE"]}'::jsonb);`
 
 **If notifications break:**
 - 400 error with "100 character(s)" = Expo limit hit, need batching
-- Check `net._http_response` for actual error messages
-- Test pg_net manually: `SELECT net.http_post(...)`
+- Expo says "ok" but user didn't get it = Check device settings (Notification Summary, Focus Mode)
+- Test direct send: `SELECT net.http_post(url := 'https://exp.host/--/api/v2/push/send', headers := '{"Content-Type": "application/json"}'::jsonb, body := '[{"to": "TOKEN", "title": "Test", "body": "Test", "sound": "default"}]'::jsonb);`
 
 **Files:**
 - `migrations/FIX_PROD_BATCHING.sql` - The batched version (use this one!)
