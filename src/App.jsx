@@ -9,6 +9,8 @@ import GoalsTab from './GoalsTab';
 import FinancesTab from './FinancesTab';
 import GrowthCharts from './GrowthCharts';
 import MarketingTab from './MarketingTab';
+import LiveFeedTab from './LiveFeedTab';
+import QueueTab from './QueueTab';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -321,7 +323,7 @@ export default function App() {
         <nav className="flex-1 px-4 space-y-1 mt-2">
           {[
             { id: 'castle', label: 'the castle', icon: Target },
-            { id: 'kitchen', label: 'the kitchen', icon: Share2, badge: pendingRequestsCount },
+            { id: 'kitchen', label: 'daily challenges', icon: Share2, badge: pendingRequestsCount },
             { id: 'fire_station', label: 'fire station', icon: LifeBuoy, badge: unreadSupportCount },
             { id: 'garden', label: 'the garden', icon: TrendingUp },
           ].map((item) => (
@@ -428,45 +430,26 @@ export default function App() {
             </div>
           )}
 
-          {/* 🍳 The Kitchen: Engagement & Content */}
-          {/* 🍳 The Kitchen: Engagement & Content */}
+          {/* 🍳 Daily Challenges - Simple 2-card layout */}
           {activeTab === 'kitchen' && (
-            <div className="space-y-16 animate-in fade-in duration-500">
+            <div className="space-y-8 animate-in fade-in duration-500">
               <div className="mb-6">
-                <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">the kitchen 🍳💓</h1>
-                <p className="text-gray-500 font-bold mt-1">cook up some community vibe.</p>
+                <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">daily challenges 📅</h1>
+                <p className="text-gray-500 font-bold mt-1">queue up and see what's cooking.</p>
               </div>
 
-              {/* 1. Top Hub: Broadcasts */}
-              <div className="space-y-6">
-                <h3 className="text-2xl font-black text-[var(--soup-dark)] flex items-center gap-2">
-                  <Megaphone className="text-[var(--soup-pink)]" size={24} />
-                  broadcasts
-                </h3>
-                <div className="bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm">
-                  <PillarSubNav
-                    options={[
-                      { id: 'challenges', label: 'challenges' }
-                    ]}
-                    activeId={kitchenSubTab || 'challenges'}
-                    onChange={(id) => setKitchenSubTab(id)}
-                  />
-                  <div className="p-8">
-                    {(kitchenSubTab === 'challenges' || !kitchenSubTab) && <ChallengesTab user={user} />}
-                  </div>
-                </div>
+              {/* Card 1: Challenge Queue */}
+              <div className="bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm p-8">
+                <QueueTab user={user} />
               </div>
 
-              {/* 2. Middle: Weekly Update Tool */}
-
-
-              {/* 3. Bottom: Groups Hub */}
-              <div className="pt-8 border-t border-black/5">
+              {/* Card 2: Live Feed */}
+              <div className="bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm p-8">
                 <h3 className="text-2xl font-black text-[var(--soup-dark)] mb-6 flex items-center gap-2">
-                  <Users className="text-[var(--soup-turquoise)]" size={24} />
-                  groups management
+                  <Activity className="text-[var(--soup-pink)]" size={24} />
+                  live feed
                 </h3>
-                <GroupsTab />
+                <LiveFeedTab />
               </div>
             </div>
           )}

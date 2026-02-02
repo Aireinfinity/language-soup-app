@@ -157,7 +157,48 @@
 
 ---
 
-## �🗓️ Current Focus (Next 3 Weeks)
+## 🖥️ Admin Dashboard (Critical)
+
+**Location:** `/code/dashboard/` → Deploys to Vercel
+
+**How it works:**
+- Dashboard is the **brain** (Noah edits/schedules challenges here)
+- Database is the **muscle** (cron job auto-sends at scheduled times)
+- Dashboard writes to `app_scheduled_challenges` → Cron reads it and broadcasts
+
+**Main Sections:**
+
+| Tab | What it does | Files |
+|-----|--------------|-------|
+| **The Castle** | Overview stats, 2026 goals | `App.jsx` (OverviewTab, GoalsTab) |
+| **The Kitchen** | Daily challenges, live feed | `ChallengesTab.jsx`, `QueueTab.jsx`, `LiveFeedTab.jsx` |
+| **Fire Station** | Support tickets, user directory | `SupportTabSimplified.jsx`, UsersTab in `App.jsx` |
+| **The Garden** | Marketing, growth charts | `MarketingTab.jsx`, `GrowthCharts.jsx` |
+| **Finances** | Hidden admin finances | `FinancesTab.jsx` |
+
+**Challenge Flow (The Kitchen):**
+
+1. **Create challenge** in QueueTab → saved to `app_scheduled_challenges` with status `pending`
+2. **Preview translations** → DeepL/Google Translate auto-translates to all group languages
+3. **Approve challenge** → status changes to `approved`
+4. **Cron job sends** at scheduled time → status changes to `sent`, messages inserted into all groups
+
+**Key Tables:**
+- `app_scheduled_challenges` - Queue of challenges (pending/approved/sent)
+- `app_challenges` - Actual sent challenges in groups
+- `app_messages` - All messages (including challenge responses)
+- `app_groups` - Language groups
+- `challenge_performance_log` - AI learning data for response prediction
+
+**Files:**
+- `QueueTab.jsx` - Main challenge creation/editing UI
+- `LiveFeedTab.jsx` - Real-time message feed across all groups
+- `soupPredictor.js` - AI that predicts response rates based on past challenges
+- `translationHelper.js` - DeepL + Google Translate fallback logic
+
+---
+
+## 🗓️ Current Focus (Next 3 Weeks)
 
 | Week | Focus |
 |------|-------|

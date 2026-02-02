@@ -4,12 +4,10 @@ import { Calendar, Trash2, Send, Clock, CheckCircle, Edit2, X, Check } from 'luc
 import { predictResponseRate, logChallengeSent } from './soupPredictor';
 import { translateText } from './translationHelper';
 
-export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLangCode, handleSendToGroups }) {
+export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogleLangCode, handleSendToGroups }) {
     const [queuedChallenges, setQueuedChallenges] = useState([]);
     const [loading, setLoading] = useState(true);
     const [draftText, setDraftText] = useState('');
-    const [scheduledDay, setScheduledDay] = useState('');
-    const [scheduledTime, setScheduledTime] = useState('');
     const [saving, setSaving] = useState(false);
     const [showPreview, setShowPreview] = useState(false);
     const [selectedChallenge, setSelectedChallenge] = useState(null);
@@ -23,6 +21,9 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
     const [translationCache, setTranslationCache] = useState({});
     const [showSoupInfo, setShowSoupInfo] = useState(false);
     const [prediction, setPrediction] = useState(null);
+
+    // Past challenges for inspiration
+    const [pastChallenges, setPastChallenges] = useState({ top: [], recent: [] });
 
     // Generate dynamic date options for the next 7 days
     const dateOptions = Array.from({ length: 7 }, (_, i) => {
@@ -74,10 +75,55 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
 
             if (error) throw error;
             setQueuedChallenges(data || []);
+
+            // Load past challenges for inspiration
+            loadPastChallenges();
         } catch (err) {
             console.error('Error loading queue:', err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadPastChallenges = async () => {
+        try {
+            // Get recent sent challenges
+            const { data: recent } = await supabase
+                .from('app_scheduled_challenges')
+                .select('challenge_text')
+                .eq('status', 'sent')
+                .order('scheduled_time', { ascending: false })
+                .limit(5);
+
+            // Get top performers from challenge_performance_log
+            // Filter by date >= 2026-01-01 to only get app challenges (not WhatsApp)
+            const { data: top } = await supabase
+                .from('challenge_performance_log')
+                .select('challenge_text, response_rate, sent_at')
+                .gte('sent_at', '2026-01-01')
+                .not('response_rate', 'is', null)
+                .order('response_rate', { ascending: false })
+                .limit(5);
+
+            // Format: remove #challenge prefix and get first sentence only
+            const formatChallenge = (text) => {
+                if (!text) return '';
+                return text
+                    .replace(/^#challenge\s*/i, '')
+                    .split('\n')[0]
+                    .trim();
+            };
+
+            setPastChallenges({
+                recent: (recent || []).map(c => formatChallenge(c.challenge_text)),
+                top: (top || []).slice(0, 3).map(c => ({
+                    text: formatChallenge(c.challenge_text),
+                    rate: c.response_rate ? Math.round(c.response_rate) : null
+                }))
+            });
+            console.log('📊 Loaded past challenges:', { recent: recent?.length, top: top?.length });
+        } catch (err) {
+            console.log('Could not load past challenges:', err.message);
         }
     };
 
@@ -103,15 +149,41 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
         return targetDate;
     };
 
+    // Auto-schedule: find next available day and random time
+    const getNextAvailableSlot = () => {
+        const scheduledDates = new Set(
+            queuedChallenges
+                .filter(c => c.status !== 'sent')
+                .map(c => new Date(c.scheduled_time).toDateString())
+        );
+
+        let targetDate = new Date();
+        targetDate.setDate(targetDate.getDate() + 1); // Start from tomorrow
+
+        // Find next day without a challenge (up to 60 days out)
+        for (let i = 0; i < 60; i++) {
+            if (!scheduledDates.has(targetDate.toDateString())) {
+                break;
+            }
+            targetDate.setDate(targetDate.getDate() + 1);
+        }
+
+        // Random time (0-23 hours, 0-59 minutes)
+        const randomHour = Math.floor(Math.random() * 24);
+        const randomMinute = Math.floor(Math.random() * 60);
+        targetDate.setHours(randomHour, randomMinute, 0, 0);
+
+        console.log('🗓️ Auto-scheduled for:', targetDate.toISOString());
+        return targetDate;
+    };
+
     const saveDraft = async () => {
-        if (!draftText.trim() || !scheduledDay || !scheduledTime) {
-            alert('Please enter challenge text and choose day + time');
+        if (!draftText.trim()) {
+            alert('Please enter challenge text');
             return;
         }
 
-        const scheduleDate = parseScheduledDateTime(scheduledDay, scheduledTime);
-        // VALIDATION REMOVED: To allow scheduling 'in the past' locally to match Server UTC time.
-        // if (scheduleDate < new Date()) { ... }
+        const scheduleDate = getNextAvailableSlot();
 
         setSaving(true);
         try {
@@ -126,10 +198,9 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
 
             if (error) throw error;
 
-            alert('Challenge saved to queue! 🎉');
+            console.log('✅ Challenge queued:', draftText.trim().substring(0, 50));
+            alert(`Challenge queued for ${scheduleDate.toLocaleDateString()}! 🎉`);
             setDraftText('');
-            setScheduledDay('');
-            setScheduledTime('');
             loadQueue();
         } catch (err) {
             console.error('Error saving draft:', err);
@@ -160,27 +231,14 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
         setEditingId(challenge.id);
         setEditText(challenge.challenge_text);
 
-        // Parse the scheduled time back to day/time
+        // Parse the scheduled time to date and time strings
         const scheduledDate = new Date(challenge.scheduled_time);
-        const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const dayAfter = new Date(today);
-        dayAfter.setDate(dayAfter.getDate() + 2);
 
-        const schedDate = new Date(scheduledDate.getFullYear(), scheduledDate.getMonth(), scheduledDate.getDate());
+        // Format as YYYY-MM-DD for date input
+        const dateStr = scheduledDate.toISOString().split('T')[0];
+        setEditDay(dateStr);
 
-        const daysDiff = Math.round((schedDate - today) / (1000 * 60 * 60 * 24));
-
-        if (daysDiff === 0) {
-            setEditDay('today');
-        } else if (daysDiff === 1) {
-            setEditDay('tomorrow');
-        } else if (daysDiff >= 2 && daysDiff <= 6) {
-            setEditDay(`day${daysDiff}`);
-        }
-
+        // Format as HH:MM for time input
         const hour = scheduledDate.getHours();
         const minute = scheduledDate.getMinutes();
         const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
@@ -201,18 +259,22 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
         }
 
         try {
-            const newScheduledTime = parseScheduledDateTime(editDay, editTime);
+            // Combine date and time directly
+            const [hours, minutes] = editTime.split(':').map(Number);
+            const newDate = new Date(editDay);
+            newDate.setHours(hours, minutes, 0, 0);
 
             const { error } = await supabase
                 .from('app_scheduled_challenges')
                 .update({
                     challenge_text: editText.trim(),
-                    scheduled_time: newScheduledTime.toISOString()
+                    scheduled_time: newDate.toISOString()
                 })
                 .eq('id', editingId);
 
             if (error) throw error;
 
+            console.log('✅ Challenge updated, new time:', newDate.toISOString());
             cancelEditing();
             loadQueue();
         } catch (err) {
@@ -497,19 +559,128 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
 
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Header */}
-            <div className="mb-8 bg-white p-8 rounded-3xl border border-black/5 shadow-sm">
-                <h2 className="text-3xl font-black text-[var(--soup-dark)] tracking-tight mb-2">
-                    Challenge Queue 📅
-                </h2>
-                <p className="text-gray-500 font-bold">
-                    {pendingChallenges.length} pending review • {approvedChallenges.length} approved • {sentChallenges.length} sent
-                </p>
+            {/* Daily Pulse - Quick Health Check */}
+            <div className="mb-8 bg-white p-6 rounded-3xl border border-black/5 shadow-sm">
+                <h2 className="text-2xl font-black text-[var(--soup-dark)] tracking-tight mb-4">Daily Pulse 🩺</h2>
+
+                <div className="grid grid-cols-3 gap-4">
+                    {/* Today's Challenge */}
+                    {(() => {
+                        const today = new Date().toDateString();
+                        const todayChallenge = [...queuedChallenges].find(c =>
+                            new Date(c.scheduled_time).toDateString() === today
+                        );
+                        const wasSent = todayChallenge?.status === 'sent';
+                        const isApproved = todayChallenge?.status === 'approved';
+
+                        return (
+                            <div className={`p-4 rounded-2xl ${wasSent ? 'bg-green-50 border-2 border-green-200' : isApproved ? 'bg-yellow-50 border-2 border-yellow-200' : 'bg-red-50 border-2 border-red-200'}`}>
+                                <div className="text-2xl mb-1">{wasSent ? '✅' : isApproved ? '⏳' : '❌'}</div>
+                                <div className="text-xs font-black text-gray-500 uppercase">Today</div>
+                                <div className="text-sm font-bold text-[var(--soup-dark)]">
+                                    {wasSent ? 'Sent!' : isApproved ? 'Scheduled' : 'No challenge'}
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* Queue Coverage */}
+                    {(() => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const futureChallenges = [...pendingChallenges, ...approvedChallenges].filter(c =>
+                            new Date(c.scheduled_time) >= today
+                        );
+                        const daysWithChallenges = new Set(
+                            futureChallenges.map(c => new Date(c.scheduled_time).toDateString())
+                        ).size;
+
+                        const isGood = daysWithChallenges >= 7;
+                        const isOkay = daysWithChallenges >= 3;
+
+                        return (
+                            <div className={`p-4 rounded-2xl ${isGood ? 'bg-green-50 border-2 border-green-200' : isOkay ? 'bg-yellow-50 border-2 border-yellow-200' : 'bg-red-50 border-2 border-red-200'}`}>
+                                <div className="text-2xl mb-1">{isGood ? '🟢' : isOkay ? '🟡' : '🔴'}</div>
+                                <div className="text-xs font-black text-gray-500 uppercase">Queue</div>
+                                <div className="text-sm font-bold text-[var(--soup-dark)]">
+                                    {daysWithChallenges} days covered
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* Pending Review */}
+                    <div className={`p-4 rounded-2xl ${pendingChallenges.length === 0 ? 'bg-green-50 border-2 border-green-200' : 'bg-yellow-50 border-2 border-yellow-200'}`}>
+                        <div className="text-2xl mb-1">{pendingChallenges.length === 0 ? '✅' : '📝'}</div>
+                        <div className="text-xs font-black text-gray-500 uppercase">Pending</div>
+                        <div className="text-sm font-bold text-[var(--soup-dark)]">
+                            {pendingChallenges.length === 0 ? 'All approved' : `${pendingChallenges.length} to review`}
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {/* Draft Form */}
             <div className="mb-8 bg-white p-8 rounded-3xl border border-black/5 shadow-sm">
                 <h3 className="text-xl font-black text-[var(--soup-dark)] mb-4">Create New Challenge</h3>
+
+                {/* Prompt Ideas - always visible for inspiration */}
+                <div className="mb-4 p-4 bg-[var(--soup-beige)]/50 rounded-xl border border-[var(--soup-turquoise)]/20">
+                    <span className="text-xs font-black text-[var(--soup-turquoise)] uppercase tracking-wider">💡 Need ideas? Click one:</span>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        {[
+                            "what song are you listening to right now? 🎧",
+                            "share a photo of something that made you smile today 📸",
+                            "what's a word in your language that doesn't translate? 🤔",
+                            "what did you eat for breakfast? 🍳",
+                            "describe your mood using only emojis 😎",
+                            "what's your favorite thing about where you live? 🏡",
+                            "share a memory from your childhood 🧒",
+                            "what's something you learned recently? 🧠"
+                        ].map((idea, i) => (
+                            <button
+                                key={i}
+                                onClick={() => setDraftText(idea)}
+                                className="px-3 py-2 bg-white hover:bg-[var(--soup-turquoise)]/10 rounded-lg border border-[var(--soup-turquoise)]/20 text-sm font-medium text-[var(--soup-dark)] transition-all hover:scale-105"
+                            >
+                                {idea}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Top Performers - if we have data */}
+                {pastChallenges.top.length > 0 && (
+                    <div className="mb-4 p-4 bg-green-50 rounded-xl border border-green-100">
+                        <span className="text-xs font-black text-green-600 uppercase tracking-wider">🔥 Top performers (click to reuse):</span>
+                        <div className="mt-3 space-y-2">
+                            {pastChallenges.top.slice(0, 3).map((c, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => setDraftText(c.text)}
+                                    className="block w-full text-left p-3 bg-white hover:bg-green-100 rounded-lg border border-green-200 transition-all"
+                                >
+                                    {c.rate && <span className="text-xs font-black text-green-500">{c.rate}% response rate</span>}
+                                    <p className={`text-sm text-[var(--soup-dark)] font-medium ${c.rate ? 'mt-1' : ''}`}>{c.text}</p>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Recent Challenges - don't repeat */}
+                {pastChallenges.recent.length > 0 && (
+                    <div className="mb-4 p-4 bg-orange-50 rounded-xl border border-orange-100">
+                        <span className="text-xs font-black text-orange-500 uppercase tracking-wider">⚠️ Recently sent (don't repeat):</span>
+                        <div className="mt-3 space-y-2">
+                            {pastChallenges.recent.slice(0, 3).map((c, i) => (
+                                <div key={i} className="p-2 bg-white rounded-lg border border-orange-200">
+                                    <p className="text-sm text-gray-600">{c}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 <textarea
                     value={draftText}
@@ -630,254 +801,127 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
                     );
                 })()}
 
-                <div className="flex gap-4 items-end">
-                    <div className="flex-1">
-                        <label className="block text-sm font-black text-gray-400 uppercase tracking-wider mb-2">
-                            Day
-                        </label>
-                        <select
-                            value={scheduledDay}
-                            onChange={(e) => setScheduledDay(e.target.value)}
-                            className="w-full px-6 py-3 bg-[var(--soup-beige)]/30 border-2 border-transparent focus:border-[var(--soup-turquoise)]/30 focus:bg-white rounded-2xl focus:ring-0 font-bold text-base appearance-none cursor-pointer"
-                        >
-                            <option value="">Choose day...</option>
-                            {dateOptions.map(opt => (
-                                <option key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div className="flex-1">
-                        <label className="block text-sm font-black text-gray-400 uppercase tracking-wider mb-2">
-                            Time
-                        </label>
-                        <input
-                            type="time"
-                            value={scheduledTime}
-                            onChange={(e) => setScheduledTime(e.target.value)}
-                            className="w-full px-6 py-3 bg-[var(--soup-beige)]/30 border-2 border-transparent focus:border-[var(--soup-turquoise)]/30 focus:bg-white rounded-2xl focus:ring-0 font-bold text-base cursor-pointer"
-                        />
-                    </div>
-
-                    <button
-                        onClick={saveDraft}
-                        disabled={saving || !draftText.trim() || !scheduledDay || !scheduledTime}
-                        className="px-8 py-3 bg-[var(--soup-turquoise)] text-white rounded-2xl font-black hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[var(--soup-turquoise)]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                    >
-                        <Calendar size={20} />
-                        {saving ? 'Saving...' : 'Save to Queue'}
-                    </button>
-                </div>
+                {/* Simplified: Just one button, auto-schedules */}
+                <button
+                    onClick={saveDraft}
+                    disabled={saving || !draftText.trim()}
+                    className="w-full px-8 py-4 bg-[var(--soup-turquoise)] text-white rounded-2xl font-black hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-[var(--soup-turquoise)]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg"
+                >
+                    <Calendar size={24} />
+                    {saving ? 'Adding...' : 'Add to Queue'}
+                </button>
+                <p className="text-center text-xs text-gray-400 mt-2 font-bold">
+                    Auto-schedules for the next available day at a random time
+                </p>
             </div>
 
-            {/* Queue List */}
+            {/* Calendar View */}
             <div className="bg-white rounded-3xl border border-black/5 shadow-sm overflow-hidden">
                 <div className="px-8 py-4 bg-[var(--soup-beige)]/30 border-b border-black/5">
-                    <h3 className="text-lg font-black text-[var(--soup-dark)]">Pending Challenges</h3>
+                    <h3 className="text-lg font-black text-[var(--soup-dark)]">Challenge Calendar 📅</h3>
+                    <p className="text-xs text-gray-500 font-bold mt-1">{pendingChallenges.length} pending • {approvedChallenges.length} approved</p>
                 </div>
 
-                {pendingChallenges.length === 0 ? (
-                    <div className="p-12 text-center text-gray-400 font-bold italic">
-                        No pending challenges. Create one above! 📝
-                    </div>
-                ) : (
-                    <div className="divide-y divide-gray-50">
-                        {pendingChallenges.map((challenge) => (
-                            <div key={challenge.id} className="p-6 hover:bg-gray-50/50 transition-colors">
-                                {editingId === challenge.id ? (
-                                    // Edit mode
-                                    <div className="space-y-4">
-                                        <textarea
-                                            value={editText}
-                                            onChange={(e) => setEditText(e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border-2 border-[var(--soup-turquoise)]/30 rounded-xl focus:ring-0 font-bold text-base"
-                                            rows={3}
-                                        />
-                                        <div className="flex gap-3">
-                                            <select
-                                                value={editDay}
-                                                onChange={(e) => setEditDay(e.target.value)}
-                                                className="flex-1 px-4 py-2 bg-white border-2 border-[var(--soup-turquoise)]/30 rounded-xl focus:ring-0 font-bold text-sm"
-                                            >
-                                                {dateOptions.map(opt => (
-                                                    <option key={opt.value} value={opt.value}>
-                                                        {opt.label}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            <input
-                                                type="time"
-                                                value={editTime}
-                                                onChange={(e) => setEditTime(e.target.value)}
-                                                className="flex-1 px-4 py-2 bg-white border-2 border-[var(--soup-turquoise)]/30 rounded-xl focus:ring-0 font-bold text-sm"
-                                            />
-                                            <button
-                                                onClick={saveEdit}
-                                                className="px-4 py-2 bg-green-500 text-white rounded-xl font-black hover:scale-105 transition-all"
-                                            >
-                                                <Check size={16} />
-                                            </button>
-                                            <button
-                                                onClick={cancelEditing}
-                                                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-xl font-black hover:scale-105 transition-all"
-                                            >
-                                                <X size={16} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    // View mode
-                                    <div className="flex items-start justify-between gap-4">
-                                        <div className="flex-1">
-                                            <p className="text-lg font-bold text-[var(--soup-dark)] mb-2">
-                                                {challenge.challenge_text}
-                                            </p>
-                                            <div className="flex items-center gap-3 text-sm">
-                                                <span className="flex items-center gap-1 text-[var(--soup-turquoise)] font-black">
-                                                    <Clock size={14} />
-                                                    {formatDate(challenge.scheduled_time)}
-                                                </span>
-                                                <span className="text-gray-400 font-bold">
-                                                    → {groups.length} groups
-                                                </span>
-                                            </div>
-                                        </div>
+                {/* Calendar Grid */}
+                <div className="p-6">
+                    {(() => {
+                        const days = [];
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
 
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => startEditing(challenge)}
-                                                className="px-4 py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl font-black transition-all flex items-center gap-1"
-                                            >
-                                                <Edit2 size={14} />
-                                                Edit
-                                            </button>
-                                            <button
-                                                onClick={() => openPreview(challenge)}
-                                                className="px-6 py-2.5 bg-blue-500 text-white rounded-xl font-black hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
-                                            >
-                                                👁️ Preview Translations
-                                            </button>
-                                            <button
-                                                onClick={() => deleteChallenge(challenge.id)}
-                                                className="px-4 py-2.5 text-red-500 hover:bg-red-50 rounded-xl font-black transition-all"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
+                        for (let i = 0; i < 60; i++) {
+                            const day = new Date(today);
+                            day.setDate(day.getDate() + i);
+                            days.push(day);
+                        }
+
+                        const challengesByDate = {};
+                        [...pendingChallenges, ...approvedChallenges].forEach(c => {
+                            const dateKey = new Date(c.scheduled_time).toDateString();
+                            challengesByDate[dateKey] = c;
+                        });
+
+                        const months = {};
+                        days.forEach(day => {
+                            const monthKey = day.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                            if (!months[monthKey]) months[monthKey] = [];
+                            months[monthKey].push(day);
+                        });
+
+                        return (
+                            <div className="space-y-6">
+                                {Object.entries(months).map(([monthName, monthDays]) => (
+                                    <div key={monthName}>
+                                        <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider mb-2">{monthName}</h4>
+                                        <div className="grid grid-cols-7 gap-1">
+                                            {monthDays.map((day, i) => {
+                                                const dateKey = day.toDateString();
+                                                const challenge = challengesByDate[dateKey];
+                                                const isToday = day.toDateString() === today.toDateString();
+
+                                                return (
+                                                    <div
+                                                        key={i}
+                                                        onClick={() => challenge && startEditing(challenge)}
+                                                        className={`p-1.5 rounded-lg text-center transition-all min-h-[60px] ${challenge ? 'cursor-pointer' : ''} ${isToday ? 'ring-2 ring-[var(--soup-turquoise)]' : ''} ${challenge?.status === 'approved' ? 'bg-green-100 hover:bg-green-200' : ''} ${challenge?.status === 'pending' ? 'bg-yellow-100 hover:bg-yellow-200' : ''} ${!challenge ? 'bg-gray-50' : ''}`}
+                                                    >
+                                                        <div className="text-[9px] font-bold text-gray-400">{day.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+                                                        <div className="text-sm font-black text-[var(--soup-dark)]">{day.getDate()}</div>
+                                                        {challenge && (
+                                                            <div className={`text-[8px] font-bold leading-tight ${challenge.status === 'approved' ? 'text-green-600' : 'text-yellow-600'}`}>
+                                                                {challenge.status === 'approved' ? '✓' : '⏳'}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
-                                )}
+                                ))}
                             </div>
-                        ))}
-                    </div>
-                )}
+                        );
+                    })()}
+                </div>
             </div>
 
-            {/* Approved Queue - Ready to Send */}
-            {approvedChallenges.length > 0 && (
-                <div className="mb-8 bg-white rounded-3xl border border-black/5 shadow-sm overflow-hidden">
-                    <div className="px-8 py-4 bg-[var(--soup-turquoise)]/10 border-b border-black/5">
-                        <h3 className="text-lg font-black text-[var(--soup-dark)]">✅ Approved & Scheduled ({approvedChallenges.length})</h3>
-                        <p className="text-xs text-gray-500 font-bold mt-1">These will auto-send at their scheduled time</p>
-                    </div>
-                    <div className="divide-y divide-gray-50">
-                        {approvedChallenges.map((challenge) => (
-                            <div key={challenge.id} className="p-6 hover:bg-gray-50/50 transition-colors">
-                                {editingId === challenge.id ? (
-                                    // Edit mode
-                                    <div className="space-y-4">
-                                        <textarea
-                                            value={editText}
-                                            onChange={(e) => setEditText(e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border-2 border-[var(--soup-turquoise)]/30 rounded-xl focus:ring-0 font-bold text-base"
-                                            rows={3}
-                                        />
-                                        <div className="flex gap-3">
-                                            <select
-                                                value={editDay}
-                                                onChange={(e) => setEditDay(e.target.value)}
-                                                className="flex-1 px-4 py-2 bg-white border-2 border-[var(--soup-turquoise)]/30 rounded-xl focus:ring-0 font-bold text-sm"
-                                            >
-                                                {dateOptions.map(opt => (
-                                                    <option key={opt.value} value={opt.value}>
-                                                        {opt.label}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                            <input
-                                                type="time"
-                                                value={editTime}
-                                                onChange={(e) => setEditTime(e.target.value)}
-                                                className="flex-1 px-4 py-2 bg-white border-2 border-[var(--soup-turquoise)]/30 rounded-xl focus:ring-0 font-bold text-sm"
-                                            />
-                                            <button
-                                                onClick={saveEdit}
-                                                className="px-4 py-2 bg-green-500 text-white rounded-xl font-black hover:scale-105 transition-all"
-                                            >
-                                                <Check size={16} />
-                                            </button>
-                                            <button
-                                                onClick={cancelEditing}
-                                                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-xl font-black hover:scale-105 transition-all"
-                                            >
-                                                <X size={16} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    // View mode
-                                    <div className="flex items-start justify-between gap-4">
-                                        <div className="flex-1">
-                                            <p className="text-lg font-bold text-[var(--soup-dark)] mb-2">
-                                                {challenge.challenge_text}
-                                            </p>
-                                            <div className="flex items-center gap-3 text-sm">
-                                                <span className="flex items-center gap-1 text-[var(--soup-turquoise)] font-black">
-                                                    <Clock size={14} />
-                                                    {formatDate(challenge.scheduled_time)}
-                                                </span>
-                                                <span className="px-2 py-1 bg-green-100 text-green-700 rounded-lg text-xs font-black">
-                                                    APPROVED ✓
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => startEditing(challenge)}
-                                                className="px-4 py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl font-black transition-all flex items-center gap-1"
-                                            >
-                                                <Edit2 size={14} />
-                                                Edit Time
-                                            </button>
-                                            <button
-                                                onClick={() => openPreview(challenge)}
-                                                className="px-6 py-2.5 bg-blue-500 text-white rounded-xl font-black hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
-                                            >
-                                                👁️ Preview Format
-                                            </button>
-                                            <button
-                                                onClick={() => sendNow(challenge)}
-                                                disabled={sending}
-                                                className="px-6 py-2.5 bg-[var(--soup-turquoise)] text-white rounded-xl font-black hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[var(--soup-turquoise)]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                                            >
-                                                <Send size={16} />
-                                                Send Now 🚀
-                                            </button>
-                                            <button
-                                                onClick={() => deleteChallenge(challenge.id)}
-                                                className="px-4 py-2.5 text-red-500 hover:bg-red-50 rounded-xl font-black transition-all"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
+            {/* Edit Modal */}
+            {editingId && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={cancelEditing}>
+                    <div className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <h3 className="text-xl font-black text-[var(--soup-dark)] mb-4">Edit Challenge</h3>
+                        <textarea
+                            value={editText}
+                            onChange={(e) => setEditText(e.target.value)}
+                            className="w-full px-4 py-3 bg-gray-50 border-2 border-[var(--soup-turquoise)]/30 rounded-xl focus:ring-0 font-bold text-base mb-4"
+                            rows={4}
+                        />
+                        <div className="flex gap-3 mb-4">
+                            <input
+                                type="date"
+                                value={editDay}
+                                onChange={(e) => setEditDay(e.target.value)}
+                                className="flex-1 px-4 py-3 bg-gray-50 border-2 border-[var(--soup-turquoise)]/30 rounded-xl focus:ring-0 font-bold cursor-pointer"
+                            />
+                            <input
+                                type="time"
+                                value={editTime}
+                                onChange={(e) => setEditTime(e.target.value)}
+                                className="flex-1 px-4 py-3 bg-gray-50 border-2 border-[var(--soup-turquoise)]/30 rounded-xl focus:ring-0 font-bold"
+                            />
+                        </div>
+                        <div className="flex gap-3">
+                            <button onClick={cancelEditing} className="flex-1 px-6 py-3 bg-gray-100 text-gray-600 rounded-xl font-black hover:bg-gray-200 transition-all">Cancel</button>
+                            <button onClick={() => { if (confirm('Delete?')) { deleteChallenge(editingId); cancelEditing(); } }} className="px-6 py-3 bg-red-100 text-red-600 rounded-xl font-black hover:bg-red-200 transition-all"><Trash2 size={16} /></button>
+                            <button onClick={saveEdit} className="flex-1 px-6 py-3 bg-[var(--soup-turquoise)] text-white rounded-xl font-black hover:scale-105 transition-all">Save</button>
+                        </div>
+                        {queuedChallenges.find(c => c.id === editingId)?.status === 'pending' && (
+                            <button onClick={() => { approveChallenge(editingId); cancelEditing(); }} className="w-full mt-4 px-6 py-3 bg-green-500 text-white rounded-xl font-black hover:scale-105 transition-all flex items-center justify-center gap-2"><Check size={16} /> Approve</button>
+                        )}
                     </div>
                 </div>
             )}
+
+
 
             {/* Preview Modal */}
             {showPreview && selectedChallenge && (
@@ -890,7 +934,7 @@ export default function QueueTab({ user, groups, getDeepLLangCode, getGoogleLang
                             This is EXACTLY what will be sent to each group
                         </p>
                         <p className="text-sm text-gray-400 font-bold mb-8">
-                            {groups.length} groups • {Object.keys(translations).length} languages
+                            all groups • {Object.keys(translations).length} languages
                         </p>
 
                         {translating ? (
