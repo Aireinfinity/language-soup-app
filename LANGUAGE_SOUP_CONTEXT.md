@@ -1,6 +1,6 @@
 # Language Soup - Founder Context
 
-> Last updated: 2026-01-31 (notification fix applied)
+> Last updated: 2026-02-02 (Daily Challenges tab overhaul)
 
 ## 🍲 What is Language Soup?
 
@@ -176,6 +176,14 @@
 | **The Garden** | Marketing, growth charts | `MarketingTab.jsx`, `GrowthCharts.jsx` |
 | **Finances** | Hidden admin finances | `FinancesTab.jsx` |
 
+**Daily Challenges Tab (Feb 2026 Update):**
+
+- **Daily Pulse** 🩺 - Quick health check at top: Today's status, Queue coverage, Pending count
+- **Calendar View** 📅 - 60-day visual grid (yellow=pending, green=approved, click to edit)
+- **Prompt Ideas** 💡 - 25+ ideas in pool, 6 random shown, click one → replaces with fresh idea
+- **Recently Sent** ⚠️ - Shows last 3 challenges to avoid repetition
+- **Edit Modal** - Click any calendar day → edit time/text, approve, delete
+
 **Challenge Flow (The Kitchen):**
 
 1. **Create challenge** in QueueTab → saved to `app_scheduled_challenges` with status `pending`
@@ -191,7 +199,7 @@
 - `challenge_performance_log` - AI learning data for response prediction
 
 **Files:**
-- `QueueTab.jsx` - Main challenge creation/editing UI
+- `QueueTab.jsx` - Main challenge creation/editing UI (Daily Pulse, Calendar, Prompt Ideas)
 - `LiveFeedTab.jsx` - Real-time message feed across all groups
 - `soupPredictor.js` - AI that predicts response rates based on past challenges
 - `translationHelper.js` - DeepL + Google Translate fallback logic
