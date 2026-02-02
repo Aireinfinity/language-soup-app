@@ -373,8 +373,18 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
             setTranslating(false);
         }
     };
-    const approveChallenge = async () => {
+    const approveChallenge = async (challengeId = null) => {
         try {
+            // Find the challenge - either from ID or selectedChallenge
+            const challenge = challengeId
+                ? queuedChallenges.find(c => c.id === challengeId)
+                : selectedChallenge;
+
+            if (!challenge) {
+                alert('No challenge selected');
+                return;
+            }
+
             // SAFEGUARD: Ensure translations exist before saving
             let finalTranslations = { ...translations };
 
@@ -389,7 +399,7 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                 // 2. Translate in parallel
                 const translationPromises = uniqueLanguages.map(async (language) => {
                     const translated = await translateText(
-                        selectedChallenge.challenge_text,
+                        challenge.challenge_text,
                         language,
                         getDeepLLangCode,
                         getGoogleLangCode,
@@ -402,7 +412,7 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                 const rawResults = Object.fromEntries(translationPairs);
 
                 // 3. CONSTRUCT FORMATTED MESSAGES (Same logic as Preview)
-                const cleanEnglish = selectedChallenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
+                const cleanEnglish = challenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
                 uniqueLanguages.forEach(lang => {
                     const isEnglish = lang.toLowerCase() === 'english';
                     const trans = rawResults[lang];
@@ -424,7 +434,7 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                     status: 'approved',
                     translations: finalTranslations // Saves full message structure
                 })
-                .eq('id', selectedChallenge.id);
+                .eq('id', challenge.id);
 
             alert('Challenge approved! It will auto-send at the scheduled time. ✅');
             setShowPreview(false);
