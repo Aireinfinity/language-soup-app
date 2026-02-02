@@ -4,6 +4,41 @@ import { Calendar, Trash2, Send, Clock, CheckCircle, Edit2, X, Check } from 'luc
 import { predictResponseRate, logChallengeSent } from './soupPredictor';
 import { translateText } from './translationHelper';
 
+// Big pool of prompt ideas - random ones shown each time
+const ALL_PROMPT_IDEAS = [
+    "what song are you listening to right now? 🎧",
+    "share a photo of something that made you smile today 📸",
+    "what's a word in your language that doesn't translate? 🤔",
+    "what did you eat for breakfast? 🍳",
+    "describe your mood using only emojis 😎",
+    "what's your favorite thing about where you live? 🏡",
+    "share a memory from your childhood 🧒",
+    "what's something you learned recently? 🧠",
+    "what's your comfort food? 🍜",
+    "show us your view right now 🌅",
+    "what language are you learning and why? 🌍",
+    "what's making you happy today? ✨",
+    "share a song that reminds you of home 🎵",
+    "what's a tradition in your culture? 🎊",
+    "describe your perfect weekend 🛋️",
+    "what's your morning routine? ☀️",
+    "show us something on your desk right now 🖥️",
+    "what movie could you watch 100 times? 🎬",
+    "what's your go-to snack? 🍿",
+    "share a photo of your pet (or dream pet) 🐾",
+    "what's a skill you want to learn? 🎯",
+    "what did you dream about last night? 💭",
+    "what's playing on your spotify wrapped? 🎶",
+    "show us your coffee or tea setup ☕",
+    "what's your favorite season and why? 🍂"
+];
+
+const getRandomIdeas = (count = 6, exclude = []) => {
+    const available = ALL_PROMPT_IDEAS.filter(i => !exclude.includes(i));
+    const shuffled = [...available].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, count);
+};
+
 export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogleLangCode, handleSendToGroups }) {
     const [queuedChallenges, setQueuedChallenges] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -21,6 +56,10 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
     const [translationCache, setTranslationCache] = useState({});
     const [showSoupInfo, setShowSoupInfo] = useState(false);
     const [prediction, setPrediction] = useState(null);
+
+    // Random prompt ideas - refresh when one is used
+    const [promptIdeas, setPromptIdeas] = useState(() => getRandomIdeas(6));
+    const [usedIdeas, setUsedIdeas] = useState([]);
 
     // Past challenges for inspiration
     const [pastChallenges, setPastChallenges] = useState({ top: [], recent: [] });
@@ -636,21 +675,22 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
 
                 {/* Prompt Ideas - always visible for inspiration */}
                 <div className="mb-4 p-4 bg-[var(--soup-beige)]/50 rounded-xl border border-[var(--soup-turquoise)]/20">
-                    <span className="text-xs font-black text-[var(--soup-turquoise)] uppercase tracking-wider">💡 Need ideas? Click one:</span>
+                    <span className="text-xs font-black text-[var(--soup-turquoise)] uppercase tracking-wider">💡 need ideas? click one:</span>
                     <div className="mt-3 flex flex-wrap gap-2">
-                        {[
-                            "what song are you listening to right now? 🎧",
-                            "share a photo of something that made you smile today 📸",
-                            "what's a word in your language that doesn't translate? 🤔",
-                            "what did you eat for breakfast? 🍳",
-                            "describe your mood using only emojis 😎",
-                            "what's your favorite thing about where you live? 🏡",
-                            "share a memory from your childhood 🧒",
-                            "what's something you learned recently? 🧠"
-                        ].map((idea, i) => (
+                        {promptIdeas.map((idea, i) => (
                             <button
-                                key={i}
-                                onClick={() => setDraftText(idea)}
+                                key={idea}
+                                onClick={() => {
+                                    setDraftText(idea);
+                                    // Replace this idea with a new random one
+                                    const newUsed = [...usedIdeas, idea];
+                                    setUsedIdeas(newUsed);
+                                    const remaining = promptIdeas.filter(p => p !== idea);
+                                    const newIdea = getRandomIdeas(1, [...remaining, ...newUsed])[0];
+                                    if (newIdea) {
+                                        setPromptIdeas([...remaining, newIdea]);
+                                    }
+                                }}
                                 className="px-3 py-2 bg-white hover:bg-[var(--soup-turquoise)]/10 rounded-lg border border-[var(--soup-turquoise)]/20 text-sm font-medium text-[var(--soup-dark)] transition-all hover:scale-105"
                             >
                                 {idea}
