@@ -1,6 +1,6 @@
 # Language Soup - Founder Context
 
-> Last updated: 2026-02-02 (Daily Challenges tab overhaul)
+> Last updated: 2026-02-03 (Viral share deep link for user reactivation)
 
 ## 🍲 What is Language Soup?
 
@@ -28,12 +28,12 @@
 
 ---
 
-## 📊 Current Metrics (Jan 2026)
+## 📊 Current Metrics (Feb 2026)
 
 | Metric | Value |
 |--------|-------|
-| Total users | 132 |
-| WAU | ~30 |
+| Total users | ~150 |
+| Active users | ~20 (need reactivation!) |
 | Retention | 17.2% (goal: 40-50%) |
 | Revenue | $0 (by design) |
 | Languages supported | 13 |
@@ -86,6 +86,7 @@
 - TikTok content (growing views daily)
 - Support via text (personal touch)
 - The Artist's Way principles (rest = productive)
+- **Viral Share page** (challenge links with "Already have the app?" deep link for reactivation)
 
 ---
 
