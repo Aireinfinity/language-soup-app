@@ -1,12 +1,12 @@
 // Test the voice-feedback function directly
 const SUPABASE_URL = 'https://uspegyneclgkscxwmomn.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzcGVneW5lY2xna3NjeHdtb21uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzM3NzE0NzEsImV4cCI6MjA0OTM0NzQ3MX0.Qs7VYqPJxqYMHqGqKqYqKqYqKqYqKqYqKqYqKqYqKqY';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzcGVneW5lY2xna3NjeHdtb21uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM3ODgwNzQsImV4cCI6MjA3OTM2NDA3NH0.FcJ_eSzkWCX-2b5kGHv8AcBvhcZe6aAAP6vG9vubiew';
 
 async function testVoiceFeedback() {
     console.log('Testing voice feedback with intentional errors...');
 
-    // Test with a French sentence that has errors
-    const testAudioUrl = 'https://uspegyneclgkscxwmomn.supabase.co/storage/v1/object/public/voice-memos/test.mp3';
+    // Test with a reliable public audio file
+    const testAudioUrl = 'https://github.com/rafaelreis-hotmart/Audio-Sample-files/raw/master/sample.mp3';
 
     const response = await fetch(`${SUPABASE_URL}/functions/v1/voice-feedback`, {
         method: 'POST',
@@ -15,21 +15,24 @@ async function testVoiceFeedback() {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-            audioUrl: testAudioUrl,
+            text: 'Bonjour, comment ça va?',
             language: 'French',
             userId: '29864936-719c-483b-ac6a-4d06084a48fe',
-            task: 'analyze'
+            task: 'pronunciation'
         })
     });
+
+    if (!response.ok) {
+        const text = await response.text();
+        console.error('❌ Error Status:', response.status);
+        console.error('❌ Error Body:', text);
+        return;
+    }
 
     const data = await response.json();
 
     console.log('\n=== BACKEND RESPONSE ===');
-    console.log('Transcription:', data.transcription);
-    console.log('Correction Object:', JSON.stringify(data.correction, null, 2));
-    console.log('Is Correct?:', data.correction?.is_correct);
-    console.log('Corrected Text:', data.correction?.corrected);
-    console.log('Explanation:', data.correction?.explanation);
+    console.log(JSON.stringify(data, null, 2));
 }
 
 testVoiceFeedback().catch(console.error);

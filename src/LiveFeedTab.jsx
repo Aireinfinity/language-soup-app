@@ -6,6 +6,7 @@ export default function LiveFeedTab() {
     const [responses, setResponses] = useState([]);
     const [loading, setLoading] = useState(true);
     const [currentlyPlaying, setCurrentlyPlaying] = useState(null);
+    const [feedbackStats, setFeedbackStats] = useState({ positive: 0, negative: 0, total: 0 });
     const audioRef = useRef(new Audio());
 
     useEffect(() => {
@@ -64,10 +65,62 @@ export default function LiveFeedTab() {
         }
     };
 
+    const loadFeedbackStats = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('app_feature_feedback')
+                .select('rating')
+                .eq('feature_name', 'voice_correct_me');
+
+            if (data) {
+                const positive = data.filter(r => r.rating === 5).length;
+                const negative = data.filter(r => r.rating === 1).length;
+                setFeedbackStats({
+                    positive,
+                    negative,
+                    total: data.length
+                });
+            }
+        } catch (err) {
+            console.error('Error loading feedback stats:', err);
+        }
+    };
+
+    useEffect(() => {
+        loadFeedbackStats();
+        const interval = setInterval(loadFeedbackStats, 30000); // Check stats every 30s
+        return () => clearInterval(interval);
+    }, []);
+
     if (loading) return <div className="p-8 text-center text-gray-400">Loading feed...</div>;
 
     return (
         <div className="space-y-4">
+            {/* Voice Feedback Pulse Card */}
+            <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-8 -mt-8 blur-xl"></div>
+                    <div className="relative z-10">
+                        <div className="flex items-center gap-2 mb-2 opacity-90">
+                            <span className="text-xl">✨</span>
+                            <span className="font-bold text-sm tracking-widest uppercase">Voice Feedback Pulse</span>
+                        </div>
+                        <div className="flex items-end gap-1 mb-2">
+                            <span className="text-4xl font-black">{feedbackStats.total}</span>
+                            <span className="text-sm font-medium opacity-80 mb-1">ratings</span>
+                        </div>
+                        <div className="flex gap-2 text-xs font-bold">
+                            <div className="bg-white/20 px-2 py-1 rounded-lg flex items-center gap-1">
+                                <span>👍</span> {feedbackStats.positive}
+                            </div>
+                            <div className="bg-white/20 px-2 py-1 rounded-lg flex items-center gap-1">
+                                <span>👎</span> {feedbackStats.negative}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div className="text-sm font-bold text-gray-400 mb-4">Latest responses across all groups</div>
             {responses.map((response) => (
                 <div key={response.id} className="bg-white p-4 rounded-xl border border-black/5 hover:shadow-sm transition-all">
@@ -91,8 +144,8 @@ export default function LiveFeedTab() {
                                 <button
                                     onClick={() => handlePlayAudio(response.media_url, response.id)}
                                     className={`flex items-center gap-3 px-4 py-3 rounded-2xl transition-all border ${currentlyPlaying === response.id
-                                            ? 'bg-[var(--soup-turquoise)] border-[var(--soup-turquoise)] text-white shadow-md'
-                                            : 'bg-white border-gray-100 text-gray-500 hover:border-[var(--soup-turquoise)] hover:text-[var(--soup-turquoise)]'
+                                        ? 'bg-[var(--soup-turquoise)] border-[var(--soup-turquoise)] text-white shadow-md'
+                                        : 'bg-white border-gray-100 text-gray-500 hover:border-[var(--soup-turquoise)] hover:text-[var(--soup-turquoise)]'
                                         }`}
                                 >
                                     <div className="flex items-center justify-center w-8 h-8 bg-black/10 rounded-full">

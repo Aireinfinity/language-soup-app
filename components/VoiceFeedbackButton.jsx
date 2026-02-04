@@ -61,6 +61,21 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage,
         }
     }, [showModal]);
 
+    // Cycle loading messages every 3 seconds while loading
+    useEffect(() => {
+        let interval;
+        if (loading && !transcription) {
+            interval = setInterval(() => {
+                setLoadingMessage(prev => {
+                    const currentIndex = LOADING_MESSAGES.indexOf(prev);
+                    const nextIndex = (currentIndex + 1) % LOADING_MESSAGES.length;
+                    return LOADING_MESSAGES[nextIndex];
+                });
+            }, 3000);
+        }
+        return () => clearInterval(interval);
+    }, [loading, transcription]);
+
     const submitFeedback = async (isPositive) => {
         setFeedbackStatus(isPositive ? 'positive' : 'negative');
 
@@ -166,17 +181,15 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage,
                 context: challengeContext // { prompt, starter_phrase }
             };
 
+            // console.log('🥣 [VoiceButton] Requesting Analysis:', JSON.stringify(bodyPayload, null, 2));
+
             const { data: analyzeData, error: analyzeError } = await supabase.functions.invoke('voice-feedback', {
                 body: bodyPayload,
             });
 
             if (analyzeError) throw analyzeError;
 
-            console.log('=== FRONTEND RECEIVED ===');
-            console.log('Transcription:', analyzeData.transcription);
-            console.log('Correction:', analyzeData.correction);
-            console.log('is_correct:', analyzeData.correction?.is_correct);
-
+            // console.log('=== FRONTEND RECEIVED ===');
             setTranscription(analyzeData.transcription);
             setCorrection(analyzeData.correction);
             setConfidence(analyzeData.confidence || 0.95);
@@ -210,6 +223,8 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage,
 
         } catch (error) {
             console.error('Voice feedback error:', error);
+            // Alert the user if it's a real failure
+            // Alert.alert("Error", "Could not analyze voice. Please try again.");
             setLoading(false);
         }
     };
@@ -256,6 +271,12 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage,
                                 </View>
                             ) : (
                                 <>
+                                    {/* Original Audio Playback */}
+                                    <View style={styles.originalAudioBox}>
+                                        <Text style={styles.label}>🎤 YOUR VOICE MEMO:</Text>
+                                        <CorrectionAudioPlayer url={audioUrl} duration={10} isOriginal={true} />
+                                    </View>
+
                                     {/* Low Confidence Warning */}
                                     {confidence < 0.8 && (
                                         <View style={styles.confidenceWarning}>
@@ -466,15 +487,16 @@ const AnimatedWord = ({ part, index }) => {
 };
 
 // Reusable audio player with waveform
-const CorrectionAudioPlayer = ({ url, duration }) => {
+const CorrectionAudioPlayer = ({ url, duration, isOriginal = false }) => {
     const [loading, setLoading] = useState(false);
     const [sound, setSound] = useState(null);
+    const soundRef = useRef(null); // Ref to hold sound object to avoid stale closures
     const [isPlaying, setIsPlaying] = useState(false);
     const [position, setPosition] = useState(0);
     const [durationMillis, setDurationMillis] = useState(0);
 
     useEffect(() => {
-        // Enable playback in silent mode
+        // ... (existing audio setup)
         Audio.setAudioModeAsync({
             playsInSilentModeIOS: true,
             staysActiveInBackground: false,
@@ -492,12 +514,12 @@ const CorrectionAudioPlayer = ({ url, duration }) => {
 
     const playAudio = async () => {
         try {
-            if (sound) {
+            if (soundRef.current) {
                 if (isPlaying) {
-                    await sound.pauseAsync();
+                    await soundRef.current.pauseAsync();
                     setIsPlaying(false);
                 } else {
-                    await sound.playAsync();
+                    await soundRef.current.playAsync();
                     setIsPlaying(true);
                 }
                 return;
@@ -509,6 +531,7 @@ const CorrectionAudioPlayer = ({ url, duration }) => {
                 { shouldPlay: true },
                 onPlaybackStatusUpdate
             );
+            soundRef.current = newSound;
             setSound(newSound);
             setIsPlaying(true);
             setLoading(false);
@@ -526,12 +549,14 @@ const CorrectionAudioPlayer = ({ url, duration }) => {
             if (status.didJustFinish) {
                 setIsPlaying(false);
                 setPosition(0);
+                // Reset the sound object's position so it's ready to play again immediately
+                soundRef.current?.setPositionAsync(0);
             }
         }
     };
 
     const handleWaveformPress = async (event) => {
-        if (!sound || !durationMillis) return;
+        if (!soundRef.current || !durationMillis) return;
 
         const { locationX } = event.nativeEvent;
         const containerWidth = 300; // Simplified placeholder
@@ -548,8 +573,8 @@ const CorrectionAudioPlayer = ({ url, duration }) => {
     }, []);
 
     return (
-        <View style={styles.audioPlayer}>
-            <Text style={styles.label}>CORRECT PRONUNCIATION:</Text>
+        <View style={[styles.audioPlayer, isOriginal && { backgroundColor: 'transparent', padding: 0 }]}>
+            {!isOriginal && <Text style={styles.label}>CORRECT PRONUNCIATION:</Text>}
             <View style={styles.playerControls}>
                 <Pressable onPress={playAudio} style={styles.playButton} disabled={loading}>
                     {loading ? (
@@ -580,6 +605,7 @@ const CorrectionAudioPlayer = ({ url, duration }) => {
         </View>
     );
 };
+
 
 const WaveformBar = ({ index, totalBars, height, progress }) => {
     const animatedStyle = useAnimatedStyle(() => {
@@ -700,6 +726,14 @@ const styles = StyleSheet.create({
         marginTop: 12,
         color: '#666',
         fontSize: 16,
+    },
+    originalAudioBox: {
+        backgroundColor: '#FFF0F7',
+        padding: 16,
+        borderRadius: 12,
+        borderLeftWidth: 4,
+        borderLeftColor: SOUP_COLORS.pink,
+        marginBottom: 12,
     },
     transcriptionBox: {
         backgroundColor: '#f9f9f9',

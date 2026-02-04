@@ -271,6 +271,35 @@
 
 ---
 
+## 📱 Dev Build Testing (Critical)
+
+**Why Expo Go doesn't work:**
+- Push notifications not available (SDK 53+)
+- Native audio modules require dev build
+- expo-secure-store requires dev build
+
+**Dev builds expire after 7 days!** Rebuild when needed:
+```bash
+cd /Users/Aireinfinity/Desktop/language-soup/code/dashboard
+eas build --platform ios --profile development
+eas build --platform android --profile development
+```
+
+**⚠️ IMPORTANT: The correct dev server command (fixes "No development server found"):**
+```bash
+npx expo start --dev-client --tunnel --scheme languagesoup
+```
+
+- `--tunnel` bypasses WiFi/firewall issues
+- `--scheme languagesoup` makes QR codes work with the dev build
+
+**If phone still can't connect:**
+1. Make sure phone & Mac are on same WiFi
+2. Turn off VPN on both devices
+3. Scan QR with phone's Camera app (not a scanner inside the dev build)
+
+---
+
 ## 📎 Links
 
 - Website: [language-soup.com](https://language-soup.com)
