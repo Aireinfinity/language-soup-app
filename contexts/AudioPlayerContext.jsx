@@ -71,7 +71,7 @@ export function AudioPlayerProvider({ children }) {
 
             // Set up audio mode
             await Audio.setAudioModeAsync({
-                allowsRecordingIOS: false,
+                allowsRecordingIOS: true, // Allow recording so we don't break the mic
                 playsInSilentModeIOS: true,
                 staysActiveInBackground: true, // Keep playing in background
                 shouldDuckAndroid: true,
