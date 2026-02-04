@@ -501,6 +501,7 @@ const CorrectionAudioPlayer = ({ url, duration, isOriginal = false }) => {
             playsInSilentModeIOS: true,
             staysActiveInBackground: false,
             shouldDuckAndroid: true,
+            allowsRecordingIOS: true, // Ensure we don't disable recording globally
         }).catch(err => console.log('Audio setup error:', err));
     }, []);
 
