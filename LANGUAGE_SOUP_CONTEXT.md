@@ -1,6 +1,6 @@
 # Language Soup - Founder Context
 
-> Last updated: 2026-02-03 (Viral share deep link for user reactivation)
+> Last updated: 2026-02-05 (Voice Feedback "Correct Me" feature shipped, audio fixes)
 
 ## 🍲 What is Language Soup?
 
@@ -87,6 +87,7 @@
 - Support via text (personal touch)
 - The Artist's Way principles (rest = productive)
 - **Viral Share page** (challenge links with "Already have the app?" deep link for reactivation)
+- **Voice Feedback "Correct Me"** (AI transcription + grammar correction + pronunciation audio)
 
 ---
 
@@ -122,7 +123,7 @@
 - **Dashboard:** Vercel (free plan)
 - **Notifications:** FCM v1 (iOS + Android)
 - **AI:** HuggingFace, Llama 3, DeepL for translations
-- **Voice:** ElevenLabs (testing)
+- **Voice:** OpenAI TTS (switched from ElevenLabs Feb 2026)
 
 ---
 
