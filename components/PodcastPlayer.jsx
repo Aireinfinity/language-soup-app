@@ -106,6 +106,7 @@ export function PodcastPlayer({
             if (!track || !track.media_url) return;
 
             await Audio.setAudioModeAsync({
+                allowsRecordingIOS: true, // Allow recording
                 playsInSilentModeIOS: true,
                 staysActiveInBackground: true,
                 shouldDuckAndroid: true,

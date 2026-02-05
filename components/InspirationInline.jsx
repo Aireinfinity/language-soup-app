@@ -230,6 +230,7 @@ export function InspirationInline({ metadata: initialMetadata, language, prompt,
     const playSound = async (uri) => {
         try {
             await Audio.setAudioModeAsync({
+                allowsRecordingIOS: true, // Allow recording
                 playsInSilentModeIOS: true,
             });
 
