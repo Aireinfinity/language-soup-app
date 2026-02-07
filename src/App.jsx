@@ -438,10 +438,23 @@ export default function App() {
                 <p className="text-gray-500 font-bold mt-1">queue up and see what's cooking.</p>
               </div>
 
-              {/* Card 1: Challenge Queue */}
-              <div className="bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm p-8">
-                <QueueTab user={user} />
-              </div>
+              <PillarSubNav
+                options={[
+                  { id: 'challenges', label: 'Challenges' },
+                  { id: 'groups', label: 'Groups & Requests' }
+                ]}
+                activeId={kitchenSubTab}
+                onChange={setKitchenSubTab}
+              />
+
+              {kitchenSubTab === 'challenges' ? (
+                /* Card 1: Challenge Queue */
+                <div className="bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm p-8">
+                  <QueueTab user={user} />
+                </div>
+              ) : (
+                <GroupsTab />
+              )}
 
               {/* Card 2: Live Feed */}
               <div className="bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm p-8">
@@ -1138,16 +1151,16 @@ function GroupsTab() {
                     </div>
                     <div className="flex items-center gap-2 mb-3">
                       <span className="text-xs font-black text-gray-400 uppercase tracking-widest">wants</span>
-                      <h3 className="text-xl font-black text-[var(--soup-turquoise)] uppercase tracking-tight">{req.language}</h3>
+                      <h3 className="text-xl font-black text-[var(--soup-turquoise)] uppercase tracking-tight">{req.language_name || req.language}</h3>
                     </div>
-                    {req.message && (
+                    {(req.message || req.notes) && (
                       <p className="text-sm text-gray-600 bg-gray-50 p-4 rounded-2xl italic font-medium leading-relaxed mb-4">
-                        "{req.message}"
+                        "{req.message || req.notes}"
                       </p>
                     )}
                     <div className="flex gap-3">
                       <button
-                        onClick={() => openCreateModal({ language: req.language, requests: [req] })}
+                        onClick={() => openCreateModal({ language: req.language_name || req.language, requests: [req] })}
                         className="px-4 py-2 bg-[var(--soup-turquoise)] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-sm"
                       >
                         Approve
