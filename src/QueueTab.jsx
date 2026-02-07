@@ -240,19 +240,10 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
 
             if (error) throw error;
 
-            console.log('✅ Challenge queued:', draftText.trim().substring(0, 50));
-            // alert(`Challenge queued for ${scheduleDate.toLocaleDateString()}! 🎉`); // Silent is better
-            setDraftText('');
-            loadQueue(); // Refresh UI immediately
-
-            // 2. SILENTLY Generate Translations in Background
-            // We don't await this blocking the UI, but we do want to ensure it happens.
-            // Actually, let's await it so we don't have race conditions, but tell the user "Queued!" first?
-            // Nah, let's just do it fast.
-
+            // 2. Generate Translations (Synchronously now, to ensure they aren't "missing")
             try {
                 const uniqueLanguages = [...new Set(groups.map(g => g.language))];
-                console.log(`🌍 Silently translating for ${uniqueLanguages.length} languages...`);
+                // console.log(`🌍 Translating for ${uniqueLanguages.length} languages...`);
 
                 const translationPromises = uniqueLanguages.map(async (language) => {
                     const translated = await translateText(
@@ -288,12 +279,16 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                     .update({ translations: finalTranslations })
                     .eq('id', newChallenge.id);
 
-                console.log('✅ Translations saved silently!');
+                console.log('✅ Translations generated and saved!');
 
             } catch (transErr) {
-                console.error('Silent translation failed:', transErr);
-                // Don't bug the user, they can just click "Regenerate" later if needed
+                console.error('Translation failed:', transErr);
+                alert('Warning: Translations failed. You may need to regenerate them manually.');
             }
+
+            console.log('✅ Challenge queued:', draftText.trim().substring(0, 50));
+            setDraftText('');
+            loadQueue(); // Refresh UI only AFTER translations are done
 
         } catch (err) {
             console.error('Error saving draft:', err);

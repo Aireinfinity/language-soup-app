@@ -1012,8 +1012,19 @@ function GroupsTab() {
   };
 
   const openCreateModal = (requestGroup) => {
+    const rawName = requestGroup.language || '';
+    let formattedName = rawName.toLowerCase();
+
+    // Add hashtags to common levels if present
+    const levels = ['beginner', 'intermediate', 'advanced', 'fluent'];
+    levels.forEach(level => {
+      if (formattedName.includes(level) && !formattedName.includes('#' + level)) {
+        formattedName = formattedName.replace(level, '#' + level);
+      }
+    });
+
     setNewGroupLanguage(requestGroup.language);
-    setNewGroupName(`${requestGroup.language} (Soup)`);
+    setNewGroupName(formattedName);
     setNewGroupRequests(requestGroup.requests);
     setShowCreateModal(true);
   };
