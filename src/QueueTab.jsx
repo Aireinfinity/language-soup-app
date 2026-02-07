@@ -541,6 +541,76 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
     };
 
 
+    const backfillTranslations = async () => {
+        if (!confirm('This will find ALL pending/approved challenges with missing translations and generate them. Continue?')) return;
+
+        setTranslating(true);
+        try {
+            // 1. Get all challenges that might need translation
+            const { data: challenges, error } = await supabase
+                .from('app_scheduled_challenges')
+                .select('*')
+                .or('status.eq.approved,status.eq.pending')
+                .order('scheduled_time', { ascending: true });
+
+            if (error) throw error;
+
+            console.log(`Checking ${challenges.length} challenges for missing translations...`);
+            let updatedCount = 0;
+
+            const uniqueLanguages = [...new Set(groups.map(g => g.language))];
+
+            for (const challenge of challenges) {
+                // Check if translations are missing or incomplete
+                const currentTrans = challenge.translations || {};
+                const missingLangs = uniqueLanguages.filter(lang => !currentTrans[lang]);
+
+                if (missingLangs.length > 0) {
+                    console.log(`Challenge ${challenge.id.substring(0, 4)} missing: ${missingLangs.join(', ')}`);
+
+                    // Generate missing translations
+                    const cleanEnglish = challenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
+                    const newTrans = { ...currentTrans };
+
+                    for (const lang of missingLangs) {
+                        const translation = await translateText(
+                            cleanEnglish,
+                            lang,
+                            getDeepLLangCode,
+                            getGoogleLangCode,
+                            supabase
+                        );
+
+                        // Construct format
+                        const isEnglish = lang.toLowerCase() === 'english';
+                        if (isEnglish) {
+                            newTrans[lang] = `#challenge\n${cleanEnglish}`;
+                        } else {
+                            newTrans[lang] = `#challenge\n${cleanEnglish}\n${translation || cleanEnglish}`;
+                        }
+                    }
+
+                    // Update challenge
+                    await supabase
+                        .from('app_scheduled_challenges')
+                        .update({ translations: newTrans })
+                        .eq('id', challenge.id);
+
+                    updatedCount++;
+                }
+            }
+
+            alert(`Backfill complete! Updated ${updatedCount} challenges.`);
+            loadQueue();
+
+        } catch (err) {
+            console.error('Backfill failed:', err);
+            alert('Backfill failed: ' + err.message);
+        } finally {
+            setTranslating(false);
+        }
+    };
+
     const sendNow = async (challenge) => {
         if (!confirm(`Send "${challenge.challenge_text}" to all ${groups.length} groups NOW?`)) return;
 
