@@ -226,21 +226,75 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
 
         setSaving(true);
         try {
-            const { error } = await supabase
+            // 1. Insert the challenge
+            const { data: newChallenge, error } = await supabase
                 .from('app_scheduled_challenges')
                 .insert({
                     created_by: user.id,
                     challenge_text: draftText.trim(),
                     scheduled_time: scheduleDate.toISOString(),
                     status: 'pending'
-                });
+                })
+                .select()
+                .single();
 
             if (error) throw error;
 
             console.log('✅ Challenge queued:', draftText.trim().substring(0, 50));
-            alert(`Challenge queued for ${scheduleDate.toLocaleDateString()}! 🎉`);
+            // alert(`Challenge queued for ${scheduleDate.toLocaleDateString()}! 🎉`); // Silent is better
             setDraftText('');
-            loadQueue();
+            loadQueue(); // Refresh UI immediately
+
+            // 2. SILENTLY Generate Translations in Background
+            // We don't await this blocking the UI, but we do want to ensure it happens.
+            // Actually, let's await it so we don't have race conditions, but tell the user "Queued!" first?
+            // Nah, let's just do it fast.
+
+            try {
+                const uniqueLanguages = [...new Set(groups.map(g => g.language))];
+                console.log(`🌍 Silently translating for ${uniqueLanguages.length} languages...`);
+
+                const translationPromises = uniqueLanguages.map(async (language) => {
+                    const translated = await translateText(
+                        newChallenge.challenge_text,
+                        language,
+                        getDeepLLangCode,
+                        getGoogleLangCode,
+                        supabase
+                    );
+                    return [language, translated];
+                });
+
+                const translationPairs = await Promise.all(translationPromises);
+                const rawResults = Object.fromEntries(translationPairs);
+
+                // Construct full messages
+                const cleanEnglish = newChallenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
+                const finalTranslations = {};
+
+                uniqueLanguages.forEach(lang => {
+                    const isEnglish = lang.toLowerCase() === 'english';
+                    const trans = rawResults[lang];
+                    if (isEnglish) {
+                        finalTranslations[lang] = `#challenge\n${cleanEnglish}`;
+                    } else {
+                        finalTranslations[lang] = `#challenge\n${cleanEnglish}\n${trans || cleanEnglish}`;
+                    }
+                });
+
+                // Update the record with translations
+                await supabase
+                    .from('app_scheduled_challenges')
+                    .update({ translations: finalTranslations })
+                    .eq('id', newChallenge.id);
+
+                console.log('✅ Translations saved silently!');
+
+            } catch (transErr) {
+                console.error('Silent translation failed:', transErr);
+                // Don't bug the user, they can just click "Regenerate" later if needed
+            }
+
         } catch (err) {
             console.error('Error saving draft:', err);
             alert('Failed to save: ' + err.message);
@@ -959,8 +1013,27 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                                 className="flex-1 px-4 py-3 bg-gray-50 border-2 border-[var(--soup-turquoise)]/30 rounded-xl focus:ring-0 font-bold"
                             />
                         </div>
-                        <div className="flex gap-3">
+                        <div className="flex gap-3 flex-wrap">
                             <button onClick={cancelEditing} className="flex-1 px-6 py-3 bg-gray-100 text-gray-600 rounded-xl font-black hover:bg-gray-200 transition-all">Cancel</button>
+
+                            {/* View Translations Button */}
+                            <button
+                                onClick={() => {
+                                    // Close edit modal, open preview modal
+                                    const challenge = queuedChallenges.find(c => c.id === editingId);
+                                    if (challenge) {
+                                        // We need to set state as if we opened it
+                                        setEditText(''); // clear edit state
+                                        setEditingId(null); // close edit modal
+                                        openPreview(challenge); // open preview
+                                    }
+                                }}
+                                className="px-4 py-3 bg-blue-50 text-blue-600 rounded-xl font-black hover:bg-blue-100 transition-all flex items-center justify-center gap-2"
+                                title="View/Edit Translations"
+                            >
+                                🌍
+                            </button>
+
                             <button onClick={() => { if (confirm('Delete?')) { deleteChallenge(editingId); cancelEditing(); } }} className="px-6 py-3 bg-red-100 text-red-600 rounded-xl font-black hover:bg-red-200 transition-all"><Trash2 size={16} /></button>
                             <button onClick={saveEdit} className="flex-1 px-6 py-3 bg-[var(--soup-turquoise)] text-white rounded-xl font-black hover:scale-105 transition-all">Save</button>
                         </div>

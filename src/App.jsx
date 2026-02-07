@@ -1136,12 +1136,13 @@ function GroupsTab() {
                       <h4 className="font-bold text-gray-900 truncate">@{req.user?.display_name || 'anonymous'}</h4>
                       <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{new Date(req.created_at).toLocaleDateString()}</span>
                     </div>
-                    <div className="inline-flex items-center px-3 py-1 bg-[var(--soup-turquoise)]/10 text-[var(--soup-turquoise)] rounded-lg text-xs font-black uppercase tracking-wider mb-3">
-                      wants {req.language}
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-xs font-black text-gray-400 uppercase tracking-widest">wants</span>
+                      <h3 className="text-xl font-black text-[var(--soup-turquoise)] uppercase tracking-tight">{req.language}</h3>
                     </div>
-                    {req.notes && (
+                    {req.message && (
                       <p className="text-sm text-gray-600 bg-gray-50 p-4 rounded-2xl italic font-medium leading-relaxed mb-4">
-                        "{req.notes}"
+                        "{req.message}"
                       </p>
                     )}
                     <div className="flex gap-3">
