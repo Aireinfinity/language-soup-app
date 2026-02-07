@@ -11,6 +11,7 @@ import GrowthCharts from './GrowthCharts';
 import MarketingTab from './MarketingTab';
 import LiveFeedTab from './LiveFeedTab';
 import QueueTab from './QueueTab';
+import { getDeepLLangCode, getGoogleLangCode } from './languageUtils';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -27,8 +28,12 @@ export default function App() {
   const [fireSubTab, setFireSubTab] = useState('support');
   const [unreadSupportCount, setUnreadSupportCount] = useState(0);
 
+  // Groups State (Lifted to App so QueueTab can access languages)
+  const [groups, setGroups] = useState([]);
+
   useEffect(() => {
     loadUnreadSupportCount();
+    loadGroups();
 
     // Subscribe to new support messages for notification badge
     const channel = supabase
@@ -74,6 +79,19 @@ export default function App() {
       setUnreadSupportCount(count);
     } catch (err) {
       console.error('Error counting unread support:', err);
+    }
+  };
+
+  const loadGroups = async () => {
+    try {
+      const { data } = await supabase
+        .from('app_groups')
+        .select('id, name, language, member_count, created_at')
+        .order('member_count', { ascending: false });
+
+      setGroups(data || []);
+    } catch (err) {
+      console.error('Error loading groups:', err);
     }
   };
 
@@ -450,10 +468,18 @@ export default function App() {
               {kitchenSubTab === 'challenges' ? (
                 /* Card 1: Challenge Queue */
                 <div className="bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm p-8">
-                  <QueueTab user={user} />
+                  <QueueTab
+                    user={user}
+                    groups={groups}
+                    getDeepLLangCode={getDeepLLangCode}
+                    getGoogleLangCode={getGoogleLangCode}
+                  />
                 </div>
               ) : (
-                <GroupsTab />
+                <GroupsTab
+                  groups={groups}
+                  loadGroups={loadGroups}
+                />
               )}
 
               {/* Card 2: Live Feed */}
@@ -937,8 +963,8 @@ function StatCard({ label, value, color, icon: Icon }) {
 
 
 // Groups Tab
-function GroupsTab() {
-  const [groups, setGroups] = useState([]);
+function GroupsTab({ groups, loadGroups }) {
+  // const [groups, setGroups] = useState([]); // Prop now
   const [requests, setRequests] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [members, setMembers] = useState([]);
@@ -953,10 +979,17 @@ function GroupsTab() {
   const [newGroupRequests, setNewGroupRequests] = useState([]);
 
   useEffect(() => {
-    loadGroups();
+    // loadGroups(); // Handled by parent
     loadRequests();
+    // But we might want to refresh on mount just in case
+    if (loadGroups) loadGroups();
   }, []);
 
+  /*
+  const loadGroups = async () => { ... } // Moved to App
+  */
+
+  /*
   const loadGroups = async () => {
     try {
       const { data } = await supabase
@@ -971,6 +1004,7 @@ function GroupsTab() {
       setLoading(false);
     }
   };
+  */
 
   const [expandedRequest, setExpandedRequest] = useState(null);
 

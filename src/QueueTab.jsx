@@ -30,7 +30,36 @@ const ALL_PROMPT_IDEAS = [
     "what did you dream about last night? 💭",
     "what's playing on your spotify wrapped? 🎶",
     "show us your coffee or tea setup ☕",
-    "what's your favorite season and why? 🍂"
+    "what's your favorite season and why? 🍂",
+    "what's the last photo you took? 📸",
+    "describe your dream vacation ✈️",
+    "what's a book that changed your life? 📚",
+    "what are you grateful for today? 🙏",
+    "show us your favorite mug ☕",
+    "what's your hidden talent? 🌟",
+    "what's the best advice you've ever received? 💡",
+    "what's a scent that brings back memories? 👃",
+    "who is your role model? 🦸",
+    "what's your favorite board game? 🎲",
+    "what's the most beautiful place you've visited? 🏞️",
+    "what's a goal you're working towards? 🚀",
+    "what makes you laugh uncontrollably? 😂",
+    "what's your favorite way to relax? 🧘",
+    "show us your pets (or plants!) 🌿",
+    "what's a movie you can quote by heart? 🎬",
+    "what's your favorite childhood snack? 🍪",
+    "what's a hobby you'd love to pick up? 🎨",
+    "what's your favorite local slang word? 🗣️",
+    "what's the best meal you've ever had? 🍽️",
+    "what's a song that always gets you dancing? 💃",
+    "what's your favorite holiday tradition? 🎄",
+    "what's something you collect? 🧸",
+    "what's your favorite weather? ☔",
+    "what's a quote that inspires you? 💬",
+    "show us your workspace setup 💻",
+    "what's your favorite animal? 🦁",
+    "what's a skill you're proud of? 🏆",
+    "what's your favorite ice cream flavor? 🍦"
 ];
 
 const getRandomIdeas = (count = 6, exclude = []) => {
@@ -729,7 +758,17 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Daily Pulse - Quick Health Check */}
             <div className="mb-8 bg-white p-6 rounded-3xl border border-black/5 shadow-sm">
-                <h2 className="text-2xl font-black text-[var(--soup-dark)] tracking-tight mb-4">Daily Pulse 🩺</h2>
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-2xl font-black text-[var(--soup-dark)] tracking-tight">Daily Pulse 🩺</h2>
+                    <button
+                        onClick={backfillTranslations}
+                        disabled={translating}
+                        className="px-4 py-2 bg-yellow-100 text-yellow-700 rounded-xl font-bold text-xs hover:bg-yellow-200 transition-all flex items-center gap-2"
+                    >
+                        {translating ? <Clock size={14} className="animate-spin" /> : '⚡'}
+                        Backfill Translations
+                    </button>
+                </div>
 
                 <div className="grid grid-cols-3 gap-4">
                     {/* Today's Challenge */}
@@ -1175,7 +1214,7 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                                 Cancel
                             </button>
                             <button
-                                onClick={approveChallenge}
+                                onClick={() => approveChallenge()}
                                 disabled={translating}
                                 className="px-10 py-4 bg-[var(--soup-turquoise)] text-white rounded-[20px] font-black hover:scale-105 active:scale-95 transition-all shadow-lg shadow-[var(--soup-turquoise)]/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-3"
                             >
