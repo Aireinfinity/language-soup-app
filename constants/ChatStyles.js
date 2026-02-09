@@ -234,6 +234,22 @@ export const ChatStyles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center'
     },
+    // Voice Preview Mode Styles
+    playButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: SOUP_COLORS.blue,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12
+    },
+    previewLabel: {
+        fontSize: 14,
+        color: Colors.textLight,
+        fontWeight: '500',
+        flex: 1
+    },
 
     // Reply/Edit Preview Styles (WhatsApp Parity)
     previewContainerMerged: {

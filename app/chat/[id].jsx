@@ -5,13 +5,14 @@ import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Text, TextInp
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { BlurView } from 'expo-blur';
-import { ArrowLeft, Send, Mic, X, Trash2, Square, ChevronLeft, MoreVertical, Check, Clock, Globe, Lightbulb } from 'lucide-react-native';
+import { ArrowLeft, Send, Mic, X, Trash2, Square, ChevronLeft, ChevronRight, MoreVertical, Check, Clock, Globe, Lightbulb, Play, Pause } from 'lucide-react-native';
 import { InspirationModal } from '../../components/InspirationModal';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AudioMessage } from '../../components/AudioMessage';
 import { LiveAudioWaveform } from '../../components/LiveAudioWaveform';
 import { Colors } from '../../constants/Colors';
 import { supabase } from '../../lib/supabase';
+import { Audio } from 'expo-av';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
@@ -87,6 +88,11 @@ export default function ChatScreen() {
     const [userProfile, setUserProfile] = useState(null);
     const [reactions, setReactions] = useState({}); // { messageId: [{ user_id, reaction, created_at }] }
     const [showNotificationCTA, setShowNotificationCTA] = useState(false);
+    // Voice Preview State (listen before sending)
+    const [previewAudio, setPreviewAudio] = useState(null); // { uri, duration }
+    const [isPlayingPreview, setIsPlayingPreview] = useState(false);
+    const [playbackPosition, setPlaybackPosition] = useState(0); // 0-1 progress
+    const previewSoundRef = useRef(null);
     // Note: reply, edit, delete, reaction viewer are now handled internally by SharedChatUI
 
     // Clear notifications and mark as read when chat opens
@@ -136,6 +142,14 @@ export default function ChatScreen() {
     } = useVoiceRecorder();
 
     const startRecording = async () => {
+        // Clear any existing preview first
+        if (previewSoundRef.current) {
+            await previewSoundRef.current.unloadAsync();
+            previewSoundRef.current = null;
+        }
+        setPreviewAudio(null);
+        setIsPlayingPreview(false);
+
         await startRecordingOriginal();
         if (channelRef.current && userProfile) {
             channelRef.current.send({
@@ -162,6 +176,101 @@ export default function ChatScreen() {
             });
         }
         return result;
+    };
+
+    // Pause recording (freezes timer, can resume later)
+    const handlePauseRecording = async () => {
+        await pauseRecording();
+    };
+
+    // Resume recording from where we left off
+    const handleResumeRecording = async () => {
+        await resumeRecording();
+    };
+
+    // Stop recording and enter preview mode
+    const handleStopAndPreview = async () => {
+        // Capture duration before stop resets it
+        const capturedDuration = Math.floor(recordingDuration);
+        const result = await handleStopRecording();
+        if (result?.uri) {
+            // Use captured duration, fallback to result.duration
+            const duration = capturedDuration > 0 ? capturedDuration : Math.floor((result.duration || 0) / 1000);
+            setPreviewAudio({ uri: result.uri, duration });
+        }
+    };
+
+    // Play/Pause preview audio
+    const handleTogglePreview = async () => {
+        if (!previewAudio?.uri) return;
+
+        if (isPlayingPreview && previewSoundRef.current) {
+            await previewSoundRef.current.pauseAsync();
+            setIsPlayingPreview(false);
+            return;
+        }
+
+        try {
+            // Set audio mode for playback (loud speaker)
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: false,
+                playsInSilentModeIOS: true,
+                staysActiveInBackground: false,
+                shouldDuckAndroid: false,
+            });
+
+            // Unload previous sound if exists
+            if (previewSoundRef.current) {
+                await previewSoundRef.current.unloadAsync();
+            }
+
+            const { sound } = await Audio.Sound.createAsync(
+                { uri: previewAudio.uri },
+                { shouldPlay: true, volume: 1.0 },
+                (status) => {
+                    if (status.isLoaded) {
+                        // Update playback position (0-1)
+                        if (status.durationMillis > 0) {
+                            setPlaybackPosition(status.positionMillis / status.durationMillis);
+                        }
+                        if (status.didJustFinish) {
+                            setIsPlayingPreview(false);
+                            setPlaybackPosition(0);
+                        }
+                    }
+                }
+            );
+            previewSoundRef.current = sound;
+            setIsPlayingPreview(true);
+        } catch (error) {
+            console.error('Error playing preview:', error);
+        }
+    };
+
+    // Discard preview and return to normal input
+    const handleDiscardPreview = async () => {
+        if (previewSoundRef.current) {
+            await previewSoundRef.current.unloadAsync();
+            previewSoundRef.current = null;
+        }
+        setPreviewAudio(null);
+        setIsPlayingPreview(false);
+    };
+
+    // Confirm send from preview
+    const handleConfirmSend = async () => {
+        if (!previewAudio?.uri) return;
+        const uri = previewAudio.uri;
+        const duration = previewAudio.duration; // Capture duration before cleanup
+        // Clean up preview state
+        if (previewSoundRef.current) {
+            await previewSoundRef.current.unloadAsync();
+            previewSoundRef.current = null;
+        }
+        setPreviewAudio(null);
+        setIsPlayingPreview(false);
+        // Send the voice memo with duration
+        await sendVoiceMemo(uri, duration);
     };
 
     const handleCancelRecording = async () => {
@@ -517,15 +626,16 @@ export default function ChatScreen() {
         if (result?.uri) await sendVoiceMemo(result.uri);
     };
 
-    const sendVoiceMemo = async (audioUri) => {
+    const sendVoiceMemo = async (audioUri, explicitDuration) => {
         console.log('🎤 [VOICE] Starting sendVoiceMemo with URI:', audioUri);
         if (!audioUri || !user) {
             console.log('❌ [VOICE] Missing audioUri or user:', { audioUri, userId: user?.id });
             return;
         }
         const tempId = `temp-voice-${Date.now()}`;
-        const duration = Math.floor(recordingDuration);
-        console.log('⏱️ [VOICE] Recording duration:', duration, 'seconds');
+        // Use explicit duration if provided, otherwise fallback to recordingDuration or 0
+        const duration = explicitDuration !== undefined ? explicitDuration : Math.floor(recordingDuration);
+        console.log('⏱️ [VOICE] Final duration to save:', duration, 'seconds');
 
         const optimisticMessage = {
             id: tempId,
@@ -760,6 +870,8 @@ export default function ChatScreen() {
                 loading={loading}
                 groupLanguage={groupLanguage} // Pass language for Voice Feedback (Fixes "American Accent" bug)
                 currentChallenge={currentChallenge} // Pass full challenge for AI Context
+                reactions={reactions}
+                onReact={handleReact}
                 onAvatarPress={handleAvatarPress}
                 onSendText={sendMessage}
                 onSendVoice={handleSendVoice}
@@ -767,6 +879,24 @@ export default function ChatScreen() {
                 textInput={textInput}
                 onTextChange={handleTextChange}
                 sending={sending}
+                // Recording props
+                isRecording={isRecording}
+                recordingDuration={recordingDuration}
+                metering={metering}
+                onStartRecording={startRecording}
+                onCancelRecording={handleCancelRecording}
+                onSendRecording={handleStopAndPreview}
+                // Voice Preview props (listen before send)
+                previewAudio={previewAudio}
+                isPlayingPreview={isPlayingPreview}
+                previewPosition={playbackPosition}
+                onTogglePreview={handleTogglePreview}
+                onDiscardPreview={handleDiscardPreview}
+                onConfirmSend={handleConfirmSend}
+                // Pause/Resume Recording
+                isPaused={isPaused}
+                onPauseRecording={pauseRecording}
+                onResumeRecording={resumeRecording}
                 onShowInspiration={(metadata) => {
                     // TEST MODE: Inject dummy data ONLY for specific group
                     let dataToUse = metadata;

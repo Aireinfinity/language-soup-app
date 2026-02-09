@@ -2,8 +2,10 @@
 import { View, Text } from 'react-native';
 */
 import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import * as NavigationBar from 'expo-navigation-bar';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { AudioPlayerProvider } from '../contexts/AudioPlayerContext';
@@ -26,6 +28,13 @@ function RootLayoutNav() {
     const [showWhatsNew, setShowWhatsNew] = useState(false);
 
     useEffect(() => {
+        // Android Navigation Bar Fix: Make it transparent
+        if (Platform.OS === 'android') {
+            NavigationBar.setPositionAsync('absolute');
+            NavigationBar.setBackgroundColorAsync('#ffffff01'); // Transparent
+            NavigationBar.setButtonStyleAsync('dark'); // Dark icons
+        }
+
         if (!loading) {
             SplashScreen.hideAsync();
 

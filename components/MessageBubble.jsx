@@ -34,6 +34,7 @@ export function MessageBubble({
     onReply,
     onEdit,
     onDelete,
+    onAvatarPress,
     groupName = null,
     groupLanguage = null,
     isSpotlight = false,

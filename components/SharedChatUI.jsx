@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { View, Text, FlatList, TextInput, Pressable, KeyboardAvoidingView, Platform, ActivityIndicator, StyleSheet, Keyboard, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Send, Mic, Trash2, Image as ImageIcon, X } from 'lucide-react-native';
+import { Send, Mic, Trash2, Image as ImageIcon, X, Play, Pause, Square } from 'lucide-react-native';
 import { MessageBubble } from './MessageBubble';
 import { LiveAudioWaveform } from './LiveAudioWaveform';
 import { ImagePreview } from './ImagePreview';
@@ -87,6 +87,17 @@ export function SharedChatUI({
     currentChallenge = null, // New Prop: Full challenge object for context
     onAvatarPress,
     onShowInspiration, // New Prop
+    // Voice Preview Props (listen before send)
+    previewAudio = null,
+    isPlayingPreview = false,
+    previewPosition = 0, // 0-1 progress for scrubbing
+    onTogglePreview,
+    onDiscardPreview,
+    onConfirmSend,
+    // Pause/Resume Recording
+    isPaused = false,
+    onPauseRecording,
+    onResumeRecording,
 }) {
     // ========== INTERNAL STATE (Self-Contained) ==========
     const [replyTo, setReplyTo] = useState(null); // { messageId, content, senderName }
@@ -339,9 +350,9 @@ export function SharedChatUI({
 
     return (
         <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={{ flex: 1 }}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 80} // Adjusted for both platforms
         >
             {/* Custom Header */}
             {headerComponent}
@@ -396,26 +407,67 @@ export function SharedChatUI({
                 (replyTo || editingMessage) && ChatStyles.inputContainerWithPreview,
                 { paddingBottom: Math.max(insets.bottom, 10) }
             ]}>
-                {isRecording ? (
-                    <View style={ChatStyles.recordingBar}>
-                        <Pressable onPress={onCancelRecording} style={ChatStyles.cancelButton}>
-                            <Trash2 size={22} color="#FF3B30" />
-                        </Pressable>
-                        <View style={ChatStyles.recordingMain}>
-                            <View style={ChatStyles.waveformWrapper}>
-                                <LiveAudioWaveform
-                                    metering={metering}
-                                    recordingDuration={recordingDuration}
-                                    isRecording={isRecording}
-                                />
-                            </View>
-                            <Text style={ChatStyles.recordingTimer}>
-                                {Math.floor(recordingDuration / 60)}:{String(Math.floor(recordingDuration % 60)).padStart(2, '0')}
-                            </Text>
+                {isRecording || previewAudio ? (
+                    // Voice Recording/Preview UI
+                    <View style={styles.voiceRecordingContainer}>
+                        {/* Top Row: Timer + Waveform OR Playback */}
+                        <View style={styles.waveformRow}>
+                            {previewAudio ? (
+                                // Preview mode: Show playback controls
+                                <View style={styles.liveWaveformBar}>
+                                    <Pressable onPress={onTogglePreview} style={styles.playPauseButton}>
+                                        {isPlayingPreview ? (
+                                            <Pause size={20} color="#00adef" />
+                                        ) : (
+                                            <Play size={20} color="#00adef" />
+                                        )}
+                                    </Pressable>
+                                    <View style={styles.waveformProgress}>
+                                        <View style={[styles.progressFill, { width: `${(previewPosition || 0) * 100}%` }]} />
+                                    </View>
+                                    <Text style={styles.timerText}>
+                                        {Math.floor(previewAudio.duration / 60)}:{String(previewAudio.duration % 60).padStart(2, '0')}
+                                    </Text>
+                                </View>
+                            ) : (
+                                // Recording mode: Show live waveform
+                                <View style={styles.liveWaveformBar}>
+                                    <Text style={styles.timerText}>
+                                        {Math.floor(recordingDuration / 60)}:{String(Math.floor(recordingDuration % 60)).padStart(2, '0')}
+                                    </Text>
+                                    <View style={styles.waveformWrapper}>
+                                        <LiveAudioWaveform
+                                            metering={metering}
+                                            recordingDuration={recordingDuration}
+                                            isRecording={isRecording}
+                                        />
+                                    </View>
+                                </View>
+                            )}
                         </View>
-                        <Pressable onPress={onSendRecording} style={ChatStyles.sendVoiceButton}>
-                            <Send size={22} color="#fff" />
-                        </Pressable>
+
+                        {/* Bottom Row: Action Buttons */}
+                        <View style={styles.actionButtonRow}>
+                            {/* Trash - Left */}
+                            <Pressable
+                                onPress={previewAudio ? onDiscardPreview : onCancelRecording}
+                                style={styles.trashButton}
+                            >
+                                <Trash2 size={24} color="#8E8E93" />
+                            </Pressable>
+
+                            {/* Stop/Send Button - Right */}
+                            <Pressable
+                                onPress={previewAudio ? onConfirmSend : onSendRecording}
+                                style={styles.sendButton}
+                            >
+                                {previewAudio ? (
+                                    <Send size={22} color="#fff" />
+                                ) : (
+                                    <Square size={20} color="#fff" fill="#fff" />
+                                )}
+                            </Pressable>
+                        </View>
                     </View>
                 ) : (
                     <View style={ChatStyles.standardInputBar}>
@@ -470,3 +522,119 @@ export function SharedChatUI({
         </KeyboardAvoidingView>
     );
 }
+
+const styles = StyleSheet.create({
+    voiceRecordingContainer: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        marginHorizontal: 8,
+        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: '#E5E5E5',
+    },
+    waveformRow: {
+        marginBottom: 12,
+    },
+    liveWaveformBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    playPauseButton: {
+        padding: 4,
+    },
+    playbackBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F5F5F5',
+        borderRadius: 20,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        gap: 8,
+    },
+    waveformProgress: {
+        flex: 1,
+        height: 4,
+        backgroundColor: '#E0E0E0',
+        borderRadius: 2,
+        position: 'relative',
+    },
+    progressFill: {
+        height: '100%',
+        backgroundColor: '#00adef',
+        borderRadius: 2,
+        position: 'absolute',
+        left: 0,
+        top: 0,
+    },
+    progressDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#00adef',
+    },
+    waveformBars: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 2,
+    },
+    waveformBar: {
+        width: 3,
+        backgroundColor: '#CCC',
+        borderRadius: 1.5,
+    },
+    waveformWrapper: {
+        flex: 1,
+        height: 32,
+        maxWidth: 200,
+        overflow: 'hidden',
+    },
+    timerText: {
+        color: '#333',
+        fontSize: 16,
+        fontWeight: '600',
+        fontVariant: ['tabular-nums'],
+    },
+    actionButtonRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    trashButton: {
+        padding: 12,
+    },
+    centerButton: {
+        padding: 12,
+    },
+    pauseButton: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        borderWidth: 2,
+        borderColor: '#ec008b',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    pauseIcon: {
+        flexDirection: 'row',
+        gap: 4,
+    },
+    pauseBar: {
+        width: 4,
+        height: 16,
+        backgroundColor: '#ec008b',
+        borderRadius: 2,
+    },
+    sendButton: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: '#00adef',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+});
+
