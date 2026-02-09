@@ -47,7 +47,7 @@
 | Retention | 17.2% (goal: 40-50%) |
 | Revenue | $0 (by design) |
 | Languages supported | 13 |
-| Platforms | iOS (TestFlight), Android (Play Store internal) |
+| Platforms | iOS (TestFlight), Android (Play Store Closed Testing) |
 
 ---
 
@@ -296,6 +296,12 @@ eas build --platform ios --profile development
 eas build --platform android --profile development
 ```
 
+**How to Start the Dev Server (The ONLY Command That Works):**
+```bash
+# Must use custom scheme + dev client + tunnel
+npx expo start --dev-client --tunnel --scheme languagesoup
+```
+
 **⚠️ IMPORTANT: The correct dev server command (fixes "No development server found"):**
 ```bash
 npx expo start --dev-client --tunnel --scheme languagesoup
@@ -321,3 +327,18 @@ npx expo start --dev-client --tunnel --scheme languagesoup
 ---
 
 *This file exists so Noah doesn't have to re-explain the pivots, monetization timeline, or context every time. Just read this and we're good.*
+
+## 📜 History / Changelog
+
+### Feb 9, 2026 - The "Apology Build" (Ticket Blitz) 🍜
+- **Objective:** Fix 8 critical bugs/UX issues reported by users in < 24h to restore trust.
+- **Shipped:**
+  1. ✅ **Listen Before Send** (Voice Memos)
+  2. ✅ **Voice Memo Duration Fix**
+  3. ✅ **Profile Photo Crash Fix**
+  4. ✅ **Android White Bar Fix** (Transparent Nav)
+  5. ✅ **Android Keyboard Input Fix**
+  6. ✅ **Photo Upload Fix**
+  7. ✅ **iOS Keyboard Layout Fix**
+  8. ✅ **Emoji Reactions** (Fixed + Simplified UX)
+- **Status:** Deployed via EAS to TestFlight (iOS) and Internal Track (Android).
