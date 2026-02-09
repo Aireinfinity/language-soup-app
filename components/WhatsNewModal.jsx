@@ -15,48 +15,18 @@ const { width, height } = Dimensions.get('window');
 const FEATURES = [
     {
         image: require('../assets/whats-new/challenge-share.png'),
-        title: 'Challenge a Friend',
-        description: 'Share daily challenges and invite friends to Language Soup',
+        title: 'Daily Soup Challenge 🥣',
+        description: 'A fresh, immersive way to share your daily soup. No backlog, just vibes.',
     },
     {
-        image: require('../assets/whats-new/reactions.png'),
-        title: 'Message Reactions',
-        description: 'React to messages and see who else reacted',
+        image: require('../assets/whats-new/voice-feedback.png'),
+        title: 'Get AI Corrections',
+        description: 'Tap "Correct Me!" to get instant AI feedback on your pronunciation.',
     },
     {
-        image: require('../assets/whats-new/quests.png'),
-        title: 'Quest System',
-        description: 'Complete quests to explore the app and earn rewards',
-    },
-    {
-        image: require('../assets/whats-new/native-chat.png'),
-        title: 'Chat with Natives',
-        description: 'Connect with native speakers in your groups',
-    },
-    {
-        image: require('../assets/whats-new/native-chat-2.png'),
-        title: 'Language Exchange',
-        description: 'Practice with real people through language exchange',
-    },
-    {
-        image: require('../assets/whats-new/playlists.png'),
-        title: 'Group Playlists',
-        description: 'Create shared Spotify playlists with your French group',
-    },
-    {
-        image: require('../assets/whats-new/group-avatars.png'),
-        title: 'Flag-Based Avatars',
-        description: 'Groups now show beautiful flag-based avatars',
-    },
-    {
-        image: require('../assets/whats-new/emoji-password.png'),
-        title: 'Emoji Passwords',
-        description: 'Secure your account with a fun emoji password (screenshot it!)',
-    },
-    {
-        image: require('../assets/whats-new/features-notifications.png'),
-        title: 'Smart Notifications',
-        description: 'Get notified when your friends complete a challenge!',
+        image: require('../assets/whats-new/ingredients.png'),
+        title: 'Need More Ingredients?',
+        description: 'Stuck? Look for instant inspiration and sample phrases.',
     },
 ];
 

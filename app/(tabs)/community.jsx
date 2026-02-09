@@ -11,6 +11,7 @@ import { UserPreviewModal } from '../../components/UserPreviewModal';
 import { useQuests } from '../../contexts/QuestContext';
 import ContextualTooltip from '../../components/ContextualTooltip';
 import { getLanguageFlag } from '../../utils/languageFlags';
+import { getAvatarSource } from '../../utils/soupUtils';
 
 // Brand Colors
 const SOUP_COLORS = {
@@ -245,7 +246,7 @@ export default function CommunityScreen() {
                                 >
                                     {person.avatar_url && (
                                         <Image
-                                            source={{ uri: person.avatar_url }}
+                                            source={getAvatarSource(person.avatar_url)}
                                             style={[
                                                 styles.cardImage,
                                                 { height: index % 3 === 0 ? 180 : index % 3 === 1 ? 220 : 150 }

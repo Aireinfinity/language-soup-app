@@ -10,7 +10,7 @@ import Animated, {
 const BAR_COUNT = 300; // Lots of bars for smooth continuous scroll
 const BAR_INTERVAL = 17; // 300 bars * 17ms = 5100ms ≈ 5 seconds
 
-export function LiveAudioWaveform({ metering, recordingDuration, isRecording }) {
+export function LiveAudioWaveform({ metering, recordingDuration, isRecording, color = Colors.primary }) {
     const [barHeights, setBarHeights] = useState([]);
     const lastBarTime = useRef(0);
     const animationFrame = useRef(null);
@@ -67,13 +67,14 @@ export function LiveAudioWaveform({ metering, recordingDuration, isRecording }) 
                 <SilkyBar
                     key={index}
                     height={height}
+                    color={color}
                 />
             ))}
         </View>
     );
 }
 
-const SilkyBar = ({ height }) => {
+const SilkyBar = ({ height, color }) => {
     const animatedHeight = useSharedValue(3);
 
     const barPersonality = useRef({
@@ -96,7 +97,7 @@ const SilkyBar = ({ height }) => {
         height: animatedHeight.value,
     }));
 
-    return <Animated.View style={[styles.bar, animatedStyle]} />;
+    return <Animated.View style={[styles.bar, animatedStyle, { backgroundColor: color }]} />;
 };
 
 const styles = StyleSheet.create({
@@ -111,7 +112,7 @@ const styles = StyleSheet.create({
     },
     bar: {
         width: 2,
-        backgroundColor: Colors.primary,
+        width: 2,
         borderRadius: 1,
     },
 });

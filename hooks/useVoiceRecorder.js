@@ -11,6 +11,21 @@ export const useVoiceRecorder = () => {
     const [recordingDuration, setRecordingDuration] = useState(0);
     const [metering, setMetering] = useState(-160); // Decibels, -160 is silence
 
+    // Cleanup on unmount to prevent zombie recordings
+    useEffect(() => {
+        return () => {
+            if (globalRecording) {
+                try {
+                    console.log('[useVoiceRecorder] Unmounting, cleaning up active recording');
+                    globalRecording.stopAndUnloadAsync();
+                    globalRecording = null;
+                } catch (e) {
+                    console.warn('[useVoiceRecorder] Cleanup error:', e);
+                }
+            }
+        };
+    }, []);
+
     const startRecording = async () => {
         try {
             // Clean up any existing recording first

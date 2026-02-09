@@ -226,17 +226,19 @@ Return strictly valid JSON: { "starter_phrase": "...", "vocab_bank": [{"word": "
 
         // 3. Correct (Groq/Llama)
         const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY')
-        const systemPrompt = `You are a helpful language tutor. Analyze and provide feedback.
+        const systemPrompt = `You are a Translanguaging Expert and an expert in ${language || 'English'}. Correct this CASUAL voice message.
 Student said: "${transcription}"
+Context (Question they are answering): "${context?.prompt || 'Unknown'}"
 Target Language: ${language || 'English'}
 Student's Known Languages: ${userLangString}
 
 RULES:
-1. Fix ONLY wrong words.
-2. Even if perfect, provide tips/alternatives.
-3. Use translanguaging (explain in English, compare to ${userLangString}).
+1. Fix ONLY wrong words or unnatural phrasing.
+2. Keep it CASUAL (not classroom style).
+3. Explanation must be SHORT (max 1-2 sentences).
+4. Use translanguaging (explain in English, compare to ${userLangString}).
 
-Return JSON: { "corrected": "...", "explanation": "...", "is_correct": boolean }`
+Return strictly valid JSON: { "corrected": "...", "explanation": "...", "is_correct": boolean }`
 
         const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',

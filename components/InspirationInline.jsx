@@ -12,7 +12,7 @@ const SOUP_COLORS = {
 };
 
 export function InspirationInline({ metadata: initialMetadata, language, prompt, challengeId }) {
-    console.log('🥣 [InspirationInline] Mounting. Meta:', !!initialMetadata, 'Prompt:', !!prompt);
+
 
     // Use initial metadata OR localized generated metadata
     const [metadata, setMetadata] = useState(initialMetadata);
@@ -135,7 +135,7 @@ export function InspirationInline({ metadata: initialMetadata, language, prompt,
                 challengeId: challengeId,
                 userId: userId // Pass confirmed User ID
             };
-            console.log('🥣 [InspirationInline] Requesting Generation:', JSON.stringify(payload, null, 2));
+
 
             const { data, error } = await supabase.functions.invoke('voice-feedback', {
                 body: payload
@@ -146,7 +146,7 @@ export function InspirationInline({ metadata: initialMetadata, language, prompt,
                 throw error;
             }
 
-            console.log('🥣 [InspirationInline] Received Data:', JSON.stringify(data, null, 2));
+
 
             if (data && data.starter_phrase) {
                 setMetadata(data);
@@ -200,7 +200,7 @@ export function InspirationInline({ metadata: initialMetadata, language, prompt,
             // This rescues Farsi, Thai, etc. 
             try {
                 // If ElevenLabs fails, we don't want to alert "Error", we want to just play SOMETHING.
-                console.log('🥣 [InspirationInline] Falling back to Expo Speech');
+
 
                 // SAFE IMPORT: Only load if module exists (prevents crash on old dev clients)
                 let Speech;
@@ -230,7 +230,7 @@ export function InspirationInline({ metadata: initialMetadata, language, prompt,
     const playSound = async (uri) => {
         try {
             await Audio.setAudioModeAsync({
-                allowsRecordingIOS: true, // Allow recording
+                allowsRecordingIOS: false, // Force speaker output
                 playsInSilentModeIOS: true,
             });
 

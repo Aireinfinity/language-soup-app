@@ -1,6 +1,6 @@
 # Language Soup - Founder Context
 
-> Last updated: 2026-02-05 (Voice Feedback "Correct Me" feature shipped, audio fixes)
+> Last updated: 2026-02-09 (Big Data Audit + 3-Pillar Social Rotation SHIPPED)
 
 ## 🍲 What is Language Soup?
 
@@ -28,6 +28,16 @@
 
 ---
 
+## 🚀 Current Focus & Wins (Feb 2026)
+
+**SHIPPED:** "Immersive Daily Challenge" Flow (Feb 5)
+- **Problem:** "Backlog Anxiety" & "Friction to Record".
+- **Solution:** Zero-friction Pop-up Queue. Always fresh (0 backlog).
+- **Vibe:** Digital Pop Realism (White UI, Solid Colors).
+- **Goal:** Solve Retention by making the daily habit unmissable and low-stress.
+
+---
+
 ## 📊 Current Metrics (Feb 2026)
 
 | Metric | Value |
@@ -47,8 +57,8 @@
 |---------|------|
 | Q1 | 40-50% retention |
 | Q2 | 1,000 users |
-| Q3 | First dollar (premium feature) |
-| Q4 | Reevaluate |
+| Q3 | First dollar (Stripe pipe) |
+| Q4 | $10k MRR Scale |
 
 ---
 
@@ -60,9 +70,12 @@
 4. **Native app (Language Soup)** - Current, launched Jan 2026
 
 ---
-
-## 💡 Top User Insights (from 47+ interviews)
-
+ 
+## 💡 Top User Insights (from 48+ interviews)
+ 
+> [!NOTE]
+> Detailed user interview log available at: [user_interviews.md](file:///Users/Aireinfinity/.gemini/antigravity/brain/7b1248bb-fb5c-4da2-a466-86a1e3c11976/user_interviews.md)
+ 
 | Theme | What Users Say |
 |-------|----------------|
 | **Speaking anxiety** | "I'm scared to speak because I'll be judged" |
@@ -76,77 +89,19 @@
 > "A low-pressure community where I can practice speaking without feeling judged"
 
 ---
-
-## ✅ What's Working
-
-- Daily challenges (automated, batched weekly)
-- Voice memo format (async, low pressure)
-- Community vibes (people making friends)
-- App design (everyone compliments it)
-- TikTok content (growing views daily)
-- Support via text (personal touch)
-- The Artist's Way principles (rest = productive)
-- **Viral Share page** (challenge links with "Already have the app?" deep link for reactivation)
-- **Voice Feedback "Correct Me"** (AI transcription + grammar correction + pronunciation audio)
-
+ 
+## 📊 Data Audit Insights (Feb 2026)
+ 
+| Metric | Discovery | Strategic Result |
+|---|---|---|
+| **Silent Signup** | 62.5% of users never message | Design **"Record Your First Word"** onboarding mission |
+| **Messaging Type**| **Voice is 4x more popular** than text | Double down on voice features; skip text-heavy ones |
+| **Habit Loop** | 0% hit 4-day streak, but 11% hit 2-day streak | Shift "Aha! Moment" target to **2 consecutive days** |
+| **Engagement** | 76% of users have active push tokens | High potential for reactivation via "Fix-to-Feedback" |
+| **Visibility** | 0% data on notification clicks | **Priority 1**: Instrument click tracking (PostHog) |
+ 
 ---
 
-## ❌ What's Not Working / Pain Points
-
-- Android crashes (ongoing)
-- Notifications: Fixed Jan 31 (batching for >100 users) - see Notification System section
-- Scope creep when building
-- Too many SQL audit files in repo (cleanup needed)
-- No premium features yet (need one before App Store launch)
-
----
-
-## 🎨 Brand
-
-**Colors:**
-- Sky blue: #00adef
-- Magenta: #ec008b
-- Teal: #19b091
-- Cream: #FDF5E6
-
-**Terminology:**
-- Users = "Soupers"
-- Goodbye = "Happy Souping!"
-- Avatars = "Soup Avatars" or "Human Soups"
-
----
-
-## 📱 Tech Stack
-
-- **Mobile:** React Native (Expo)
-- **Backend:** Supabase (Pro plan)
-- **Dashboard:** Vercel (free plan)
-- **Notifications:** FCM v1 (iOS + Android)
-- **AI:** HuggingFace, Llama 3, DeepL for translations
-- **Voice:** OpenAI TTS (switched from ElevenLabs Feb 2026)
-
----
-
-## 🔔 Notification System (Critical)
-
-**Architecture:**
-- Cron job runs every minute → calls `process_scheduled_challenges_PROD()` SQL function
-- Function inserts challenges into groups, then sends push notifications via `net.http_post` to Expo
-
-**Key Limits:**
-- ⚠️ **Expo limit: 100 notifications per request** - Function MUST batch in groups of 100
-- Current users with notifications: ~109 (and growing)
-
-**Key Insight (Feb 1, 2026):**
-- ⚠️ **Expo "ok" ≠ User saw it** - iOS Notification Summary, Focus Mode, or disabled notifications can block delivery even when Expo+Apple say "delivered"
-- If a user reports not getting notifications, check their DEVICE SETTINGS first
-- We cannot detect device-level blocking from the server side
-
-**Debugging Checklist:**
-1. Check cron is active: `SELECT * FROM cron.job WHERE command LIKE '%process_scheduled%';`
-2. Check HTTP responses: `SELECT status_code, content FROM net._http_response ORDER BY created DESC LIMIT 5;`
-3. Check if batching is active: `SELECT CASE WHEN routine_definition LIKE '%batch_count%' THEN '✅ BATCHED' ELSE '❌ NOT BATCHED' END FROM information_schema.routines WHERE routine_name = 'process_scheduled_challenges_prod';`
-4. Verify delivery with receipts: `SELECT net.http_post(url := 'https://exp.host/--/api/v2/push/getReceipts', headers := '{"Content-Type": "application/json"}'::jsonb, body := '{"ids": ["TICKET_ID_HERE"]}'::jsonb);`
 
 **If notifications break:**
 - 400 error with "100 character(s)" = Expo limit hit, need batching
@@ -213,18 +168,50 @@
 | Week | Focus |
 |------|-------|
 | Jan 25-30 | **Skiing in Austrian Alps** - no building |
-| Jan 31 - Feb 7 | **Budapest coffee chats** - user interviews |
+| Jan 31 - Feb 7 | **Budapest coffee chats** - chill coffee chats with founders and investors, catch up on what didn't work in the alps
 | Feb 7-16 | **Travel home** - light support only |
-| Feb 17+ | **Ship:** Voice feedback, sample phrases, DMs |
+| Feb 17+ | **Hard Pivot: Retention First**. User interviews (30), **Feedback Tab**, fix recording stability, solve "Drop-off Points". Implement **"Record Your First Word"** mission & **PostHog** instrumentation. |
 
 ---
 
-## 📝 Content Strategy
+## 📝 Content Strategy: The 3-Pillar Rotation
 
-- **TikTok:** 1 video/day (testing, growing views)
-- **Instagram:** Repost from TikTok
-- **LinkedIn:** 1 post/week (build in public)
-- **Style:** Raw, authentic > polished
+> [!NOTE]
+> Detailed social strategy and idea bank available at: 
+> - [social_media_pillars.md](file:///Users/Aireinfinity/.gemini/antigravity/brain/7b1248bb-fb5c-4da2-a466-86a1e3c11976/social_media_pillars.md)
+> - [content_idea_bank.md](file:///Users/Aireinfinity/.gemini/antigravity/brain/7b1248bb-fb5c-4da2-a466-86a1e3c11976/content_idea_bank.md)
+ 
+1. **The Hook (Daily Challenges)**: Noah + App Screenshot. Builds habit/trust. (4/week)
+   - *Hook Idea:* "Everyone in the soup is failing today's challenge... can you do better?"
+2. **The Vibe (Polyglot Diary)**: Noah traveling/living in multiple languages. Builds aspiration. (2/week)
+   - *Hook Idea:* "How I use 3 languages to survive a day in Budapest without a textbook."
+3. **The Spark (Anti-School Rants)**: Calling out the failures of traditional learning. Targets "Classroom Trauma." (1/week)
+   - *Hook Idea:* "Stop trying to conjugate reflexive verbs. It's killing your progress."
+ 
+- **Style:** Raw, authentic, walking/talking > over-edited memes.
+- **Goal:** 1 video/day across TikTok/Reels/LinkedIn.
+- **Tactics:** 3-second hook rule; use "translanguaging" in captions.
+
+---
+
+## 🎨 Design Vibe (The "Language Soup Aesthetic")
+
+**Core Identity:** 2016 Pop / Disco / Pinterest / BeReal.
+- **Keywords:** Vibrant, Authentic, Glossy (Subtle), Punchy.
+- **NOT:** Corporate, Tech-Minimalist, Gradient-heavy, Abstract.
+
+**Visual Language:**
+- **Background:** Cream (`#FDF5E6`) - Warm, paper-like, not clinical white.
+- **Colors:** Bold CMYK-style Pop. Turquoise (`#00ADEF`) & Pink (`#EC008B`).
+- **Typography:** Bold, clean, accessible.
+- **Imagery:** No flags (avoid stereotypes). Use lush colors/symbols instead.
+
+**Current Direction (Feb 2026) - SHIPPED:**
+- **Immersive:** Full-screen solid colors (No gradients!).
+- **Clarity:** White text/waveforms on EVERYTHING. High contrast.
+- **Vibe Check:** "Digital Pop Realism". Feels like a music video or a fashion magazine.
+- **Copy:** Randomized & Fun ("Soupers", "Get Soupy").
+- **Constraint:** Zero "Backlog Anxiety" (Old challenges disappear).
 
 ---
 
@@ -235,6 +222,20 @@
 - Less user calls = lower morale (user calls = fuel)
 - One bug/feature per day = sustainable pace
 - 7-person founder community helps with loneliness
+
+---
+
+## 🗓️ Weekly Anchors & Daily Flow
+
+**Weekly Anchors (Non-negotiables):**
+- **Tues @ 9am:** LinkedIn "Build in Public" Post
+- **Fri @ 10am:** YC Weekly Update
+- **Daily @ 11am:** Post TikTok/IG (Batch created previously)
+
+**Daily Flow (Protecting Deep Work):**
+1. **Admin Sunrise (30m):** Emails, Support, Discord. Then CLOSE TABS.
+2. **Deep Work (4-5h):** Build ONE thing. Phone away.
+3. **Admin Sunset (30m):** Inbox zero, plan tomorrow's "One Thing".
 
 ---
 
@@ -260,6 +261,15 @@
 - Ask questions first, code second.
 - If unsure, ask Noah.
 - No unnecessary rebuilds or deployments.
+
+**Feature Development Cycle:**
+1. **Design Simply** - Start with the simplest user flow.
+2. **Build Simply** - Implement the core logic (MVP).
+3. **Test** - Avoid crashes & ensure speed:
+   - **Accuracy:** Does it work as expected?
+   - **Performance:** Does it load quickly?
+   - **Stability:** No crashes on iOS/Android.
+4. **Deploy** - Only push from Development to Production once verified.
 
 ---
 

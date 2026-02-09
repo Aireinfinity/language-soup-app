@@ -18,6 +18,7 @@ import WaveformQuestBar from '../../components/WaveformQuestBar';
 import ContextualTooltip from '../../components/ContextualTooltip';
 import { SecurityBanner } from '../../components/SecurityBanner';
 import GroupAvatar from '../../components/GroupAvatar';
+import { ChallengeQueue } from '../../components/ChallengeQueue';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -42,12 +43,15 @@ export default function HomeScreen() {
     const [showFounderWelcome, setShowFounderWelcome] = useState(false);
     const [announcements, setAnnouncements] = useState([]);
     const [unreadAnnouncementsCount, setUnreadAnnouncementsCount] = useState(0);
+    const [pendingChallenges, setPendingChallenges] = useState([]);
+    const [showChallengeQueue, setShowChallengeQueue] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
             if (user) {
                 checkAdminStatus();
                 loadGroups();
+                checkPendingChallenges();
             }
         }, [user])
     );
@@ -78,6 +82,22 @@ export default function HomeScreen() {
             supabase.removeChannel(channel);
         };
     }, [isAdmin]);
+
+    // Realtime listener for NEW Challenges (Pop up immediately)
+    useEffect(() => {
+        if (!user) return;
+        const challengeChannel = supabase
+            .channel('public:app_challenges')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'app_challenges' }, (payload) => {
+                console.log('🥣 New Challenge Dropped! Checking if relevant...');
+                checkPendingChallenges();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(challengeChannel);
+        };
+    }, [user, groups]); // Re-run if user/groups change
 
     const checkAdminStatus = async () => {
         if (!user) return;
@@ -269,6 +289,125 @@ export default function HomeScreen() {
         }
     };
 
+    const checkPendingChallenges = async () => {
+        if (!user) return;
+        try {
+            console.log('🥣 Checking pending challenges...');
+            // 1. Get user's groups
+            const { data: memberships } = await supabase
+                .from('app_group_members')
+                .select('group_id')
+                .eq('user_id', user.id);
+
+            if (!memberships?.length) return;
+            const groupIds = memberships.map(m => m.group_id);
+
+            // 2. Get active challenges (last 24h) for these groups
+            const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            const { data: challenges } = await supabase
+                .from('app_challenges')
+                .select('id, prompt_text, created_at, group_id, app_groups(name)')
+                .in('group_id', groupIds)
+                .gt('created_at', yesterday);
+
+            if (!challenges?.length) return;
+
+            // 3. Check if user already replied
+            const challengeIds = challenges.map(c => c.id);
+            const { data: replies } = await supabase
+                .from('app_messages')
+                .select('challenge_id')
+                .eq('sender_id', user.id)
+                .in('challenge_id', challengeIds);
+
+            const repliedIds = new Set(replies?.map(r => r.challenge_id));
+            const pending = challenges
+                .filter(c => !repliedIds.has(c.id))
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); // Newest first
+
+            // Group by group_id and take only the latest one per group
+            const latestPendingByGroup = new Map();
+            for (const c of pending) {
+                if (!latestPendingByGroup.has(c.group_id)) {
+                    latestPendingByGroup.set(c.group_id, {
+                        ...c,
+                        group_name: c.app_groups?.name
+                    });
+                }
+            }
+
+            const finalPending = Array.from(latestPendingByGroup.values());
+
+            console.log(`🥣 Found ${finalPending.length} pending challenges (latest only)`);
+            if (finalPending.length > 0) {
+                setPendingChallenges(finalPending);
+                setShowChallengeQueue(true);
+            }
+        } catch (error) {
+            console.error('Error checking challenges:', error);
+        }
+    };
+
+    // TEST helper (Fetches REAL challenges to allow DB inserts)
+    const forceTestSoup = async () => {
+        // 1. Close first to force re-mount/refresh (if open)
+        setShowChallengeQueue(false);
+
+        setTimeout(async () => {
+            try {
+                console.log('🥣 Fetching latest REAL challenges for test...');
+                const validGroups = groups.filter(g => !g.name.includes('App Tester'));
+
+                if (validGroups.length === 0) {
+                    Alert.alert('No Groups', 'Join a non-tester group to test challenges!');
+                    setLoading(false);
+                    return;
+                }
+
+                const groupIds = validGroups.map(g => g.id);
+
+                // Fetch latest challenge for EACH group
+                const { data: allChallenges, error } = await supabase
+                    .from('app_challenges')
+                    .select('id, prompt_text, metadata, created_at, group_id, app_groups(name)')
+                    .in('group_id', groupIds)
+                    .order('created_at', { ascending: false })
+                    .limit(20);
+
+                if (error) throw error;
+
+                // Filter: Get only the LATEST challenge per group
+                const uniqueChallenges = [];
+                const processedGroups = new Set();
+
+                for (const challenge of allChallenges) {
+                    if (!processedGroups.has(challenge.group_id)) {
+                        uniqueChallenges.push({
+                            ...challenge,
+                            group_name: challenge.app_groups?.name // Flatten name
+                        });
+                        processedGroups.add(challenge.group_id);
+                    }
+                }
+
+                if (uniqueChallenges.length === 0) {
+                    Alert.alert('No Challenges', 'None of your groups have active challenges.');
+                    setLoading(false);
+                    return;
+                }
+
+                console.log(`🥣 Test Mode: Found ${uniqueChallenges.length} real challenges via DB`);
+                setPendingChallenges(uniqueChallenges);
+                setShowChallengeQueue(true);
+            } catch (err) {
+                console.error('Test Soup Error:', err);
+                Alert.alert('Error', 'Failed to load test challenges.');
+            } finally {
+                setLoading(false);
+            }
+        }, 100);
+    };
+
     const handleLanguageRequest = async (requestText, unused) => {
         try {
             // Insert group request into database
@@ -381,6 +520,7 @@ export default function HomeScreen() {
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+            {/* Header - Layout Restored */}
             <View style={styles.header}>
                 <View style={styles.headerContent}>
                     <Image
@@ -388,13 +528,25 @@ export default function HomeScreen() {
                         style={styles.headerLogo}
                         resizeMode="contain"
                     />
-                    <View style={styles.headerTextContainer}>
-                        <ThemedText style={styles.title}>your soup</ThemedText>
+                    <View>
+                        <Text style={[styles.headerTitle, { color: SOUP_COLORS.blue, fontDesign: 'rounded' }]}>Your Soup</Text>
                     </View>
                 </View>
 
-                {/* Header Action Buttons */}
+                {/* Right Side Buttons */}
                 <View style={styles.headerButtons}>
+
+                    {/* DEBUG BUTTON */}
+                    <Pressable
+                        style={styles.headerButtonWithLabel}
+                        onPress={forceTestSoup}
+                    >
+                        <View style={[styles.headerIconCircle, { backgroundColor: '#FFE5E5' }]}>
+                            <Sparkles size={20} color={SOUP_COLORS.pink} />
+                        </View>
+                        <Text style={[styles.headerButtonLabel, { color: SOUP_COLORS.pink }]}>Test</Text>
+                    </Pressable>
+
                     <Pressable
                         style={styles.headerButtonWithLabel}
                         onPress={() => router.push('/support-chat')}
@@ -428,10 +580,10 @@ export default function HomeScreen() {
             </View>
 
             {/* Waveform Quest Progress Bar */}
-            <WaveformQuestBar />
+            < WaveformQuestBar />
 
             {/* Security Migration Banner */}
-            <SecurityBanner />
+            < SecurityBanner />
 
             <FlatList
                 data={groups.filter(g => !g.name.toLowerCase().includes('support'))}
@@ -543,7 +695,14 @@ export default function HomeScreen() {
                     router.push('/(tabs)/profile'); // Navigate to profile after enjoying the praise
                 }}
             />
-        </SafeAreaView>
+
+            <ChallengeQueue
+                visible={showChallengeQueue}
+                challenges={pendingChallenges}
+                onComplete={() => setShowChallengeQueue(false)}
+                userId={user?.id}
+            />
+        </SafeAreaView >
     );
 }
 

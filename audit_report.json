@@ -1,0 +1,107 @@
+{
+  "summary": {
+    "totalReal": 160,
+    "neverMessaged": 100,
+    "messagedOnce": 60,
+    "messagedVoice": 55,
+    "hasPushToken": 123,
+    "notifClickTracking": "Disabled (0% Read)",
+    "aha_4day": 0,
+    "aha_3day": 2,
+    "aha_2day": 18
+  },
+  "silentUsersSample": [
+    {
+      "name": "magda",
+      "joined": "2025-12-30T21:56:20.442+00:00",
+      "hasToken": true
+    },
+    {
+      "name": "danielle",
+      "joined": "2026-01-06T14:34:08.57357+00:00",
+      "hasToken": false
+    },
+    {
+      "name": "Pavel",
+      "joined": "2026-01-17T14:47:56.612788+00:00",
+      "hasToken": false
+    },
+    {
+      "name": "Steven",
+      "joined": "2025-12-18T00:28:37.007+00:00",
+      "hasToken": false
+    },
+    {
+      "name": "Boróka",
+      "joined": "2026-01-01T16:13:26.807+00:00",
+      "hasToken": true
+    },
+    {
+      "name": "Miranda 🫒",
+      "joined": "2025-12-16T19:26:27.241+00:00",
+      "hasToken": false
+    },
+    {
+      "name": "Ony",
+      "joined": "2025-12-21T01:20:50.644+00:00",
+      "hasToken": true
+    },
+    {
+      "name": "Bryan K",
+      "joined": "2025-12-16T00:08:29.924+00:00",
+      "hasToken": false
+    },
+    {
+      "name": "Helen",
+      "joined": "2025-12-24T02:06:20.66+00:00",
+      "hasToken": false
+    },
+    {
+      "name": "Sharon Saina",
+      "joined": "2026-01-13T14:13:53.071134+00:00",
+      "hasToken": true
+    }
+  ],
+  "msgTypes": {
+    "text": 65,
+    "voice": 252,
+    "system": 6,
+    "image": 1
+  },
+  "retentionCurve": {
+    "0": 34,
+    "1": 8,
+    "2": 6,
+    "3": 5,
+    "4": 6,
+    "5": 3,
+    "6": 6,
+    "7": 5,
+    "8": 4,
+    "9": 8,
+    "10": 3,
+    "11": 5,
+    "12": 3,
+    "13": 2,
+    "14": 2,
+    "15": 3,
+    "16": 3,
+    "17": 3,
+    "18": 5,
+    "19": 5,
+    "20": 1,
+    "21": 3,
+    "22": 2,
+    "23": 2,
+    "24": 3,
+    "25": 2,
+    "26": 1,
+    "27": 3,
+    "28": 2,
+    "29": 3
+  },
+  "rawStats": {
+    "realUsers": 160,
+    "realMessages": 324
+  }
+}

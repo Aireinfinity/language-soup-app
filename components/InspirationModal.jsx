@@ -26,7 +26,7 @@ export function InspirationModal({ visible, onClose, metadata, language }) {
         setLoading(true);
 
         try {
-            console.log('Generating audio for:', text);
+
 
             // 1. Get Audio URL
             const { data, error } = await supabase.functions.invoke('voice-feedback', {
@@ -40,7 +40,13 @@ export function InspirationModal({ visible, onClose, metadata, language }) {
             if (error) throw error;
             if (!data?.pronunciationUrl) throw new Error('No audio URL returned');
 
-            console.log('Audio URL:', data.pronunciationUrl);
+
+
+            // 1.5 Set Audio Mode (Force Speaker)
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: false,
+                playsInSilentModeIOS: true,
+            });
 
             // 2. Play Sound
             const { sound } = await Audio.Sound.createAsync(

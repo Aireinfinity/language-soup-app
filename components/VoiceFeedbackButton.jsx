@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, Text, Pressable, Modal, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
 import { Audio } from 'expo-av';
 import { X, Play, Pause } from 'lucide-react-native';
@@ -501,7 +501,7 @@ const CorrectionAudioPlayer = ({ url, duration, isOriginal = false }) => {
             playsInSilentModeIOS: true,
             staysActiveInBackground: false,
             shouldDuckAndroid: true,
-            allowsRecordingIOS: true, // Ensure we don't disable recording globally
+            allowsRecordingIOS: false, // Ensure speaker output during playback
         }).catch(err => console.log('Audio setup error:', err));
     }, []);
 
