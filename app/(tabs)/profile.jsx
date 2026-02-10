@@ -11,7 +11,6 @@ import { useRouter } from 'expo-router';
 import { decode } from 'base64-arraybuffer';
 import ViewShot from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
-import * as MediaLibrary from 'expo-media-library';
 import { Asset } from 'expo-asset';
 import { useQuests } from '../../contexts/QuestContext';
 import { useNotifications } from '../../contexts/NotificationContext';
@@ -761,7 +760,7 @@ export default function ProfileScreen() {
         );
     };
 
-    // Share functions
+    // Share function (replaces Save to Photos to avoid broad permissions)
     const handleShareWrapped = async () => {
         try {
             const uri = await wrappedRef.current.capture();
@@ -772,24 +771,6 @@ export default function ProfileScreen() {
         } catch (error) {
             console.error('Error sharing:', error);
             Alert.alert('Error', 'Failed to share. Please try again.');
-        }
-    };
-
-    const handleSaveToPhotos = async () => {
-        try {
-            const { status } = await MediaLibrary.requestPermissionsAsync();
-            if (status !== 'granted') {
-                Alert.alert('Permission needed', 'Please allow access to save photos.');
-                return;
-            }
-
-            const uri = await wrappedRef.current.capture();
-            await MediaLibrary.saveToLibraryAsync(uri);
-            Alert.alert('Saved!', 'Your Wrapped has been saved to your photos! 🎉');
-            setShowWrappedModal(false);
-        } catch (error) {
-            console.error('Error saving:', error);
-            Alert.alert('Error', 'Failed to save. Please try again.');
         }
     };
 
@@ -900,13 +881,9 @@ export default function ProfileScreen() {
                     </ViewShot>
 
                     <View style={styles.shareButtons}>
-                        <Pressable style={styles.shareBtn} onPress={handleSaveToPhotos}>
-                            <Download size={20} color="#fff" />
-                            <Text style={styles.shareBtnText}>Save to Photos</Text>
-                        </Pressable>
                         <Pressable style={styles.shareBtn} onPress={handleShareWrapped}>
                             <Share2 size={20} color="#fff" />
-                            <Text style={styles.shareBtnText}>Share</Text>
+                            <Text style={styles.shareBtnText}>Share / Save ✨</Text>
                         </Pressable>
                     </View>
                 </View>

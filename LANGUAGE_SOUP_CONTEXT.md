@@ -341,4 +341,4 @@ npx expo start --dev-client --tunnel --scheme languagesoup
   6. ✅ **Photo Upload Fix**
   7. ✅ **iOS Keyboard Layout Fix**
   8. ✅ **Emoji Reactions** (Fixed + Simplified UX)
-- **Status:** Deployed via EAS to TestFlight (iOS) and Internal Track (Android).
+- **Status:** Deployed via EAS to TestFlight (iOS) and Android (Promoted to Open Testing).

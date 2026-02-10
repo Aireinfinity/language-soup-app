@@ -13,6 +13,11 @@ const SOUP_COLORS = {
 export function UserPreviewModal({ visible, user, onClose }) {
     if (!user) return null;
 
+    // Defensive access to user properties to prevent crashes
+    const displayName = user?.display_name || 'Anonymous';
+    const avatarUrl = user?.avatar_url;
+    const statusText = user?.status_text;
+    const initial = displayName?.[0]?.toUpperCase() || '?';
     const handleSendMessage = () => {
         Alert.alert(
             'Coming Soon! 💬',

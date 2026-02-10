@@ -48,10 +48,17 @@ export const useVoiceRecorder = () => {
                 return;
             }
 
+            // IMPORTANT: Set audio mode BEFORE creating recording
             await Audio.setAudioModeAsync({
                 allowsRecordingIOS: true,
                 playsInSilentModeIOS: true,
+                staysActiveInBackground: false,
+                shouldDuckAndroid: true,
+                playThroughEarpieceAndroid: false,
             });
+
+            // Small delay to let audio mode settle (fixes "prepare encountered an error")
+            await new Promise(resolve => setTimeout(resolve, 100));
 
             const { recording } = await Audio.Recording.createAsync(
                 {
@@ -59,9 +66,12 @@ export const useVoiceRecorder = () => {
                     isMeteringEnabled: true,
                 },
                 (status) => {
-                    setRecordingDuration(status.durationMillis / 1000);
-                    if (status.metering !== undefined) {
-                        setMetering(status.metering);
+                    // Only update if actively recording (not paused)
+                    if (status.isRecording) {
+                        setRecordingDuration(status.durationMillis / 1000);
+                        if (status.metering !== undefined) {
+                            setMetering(status.metering);
+                        }
                     }
                 },
                 50 // Update every 50ms for smoother waveform
@@ -70,15 +80,32 @@ export const useVoiceRecorder = () => {
             globalRecording = recording;
             setIsRecording(true);
             setIsPaused(false);
+            console.log('[Recorder] Started successfully');
 
         } catch (err) {
             console.error('Failed to start recording:', err);
-            Alert.alert(
-                'Recording Error',
-                'Could not start recording. Please try again.',
-                [{ text: 'OK' }]
-            );
-            setIsRecording(false);
+            // Retry once if it fails (common on Android)
+            try {
+                if (globalRecording) {
+                    await globalRecording.stopAndUnloadAsync();
+                    globalRecording = null;
+                }
+                // Try one more time without the delay
+                const { recording } = await Audio.Recording.createAsync(
+                    Audio.RecordingOptionsPresets.HIGH_QUALITY
+                );
+                globalRecording = recording;
+                setIsRecording(true);
+                console.log('[Recorder] Started on retry');
+            } catch (retryErr) {
+                console.error('Retry failed:', retryErr);
+                Alert.alert(
+                    'Recording Error',
+                    'Could not start recording. Please try again.',
+                    [{ text: 'OK' }]
+                );
+                setIsRecording(false);
+            }
         }
     };
 

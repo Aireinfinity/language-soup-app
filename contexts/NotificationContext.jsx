@@ -166,13 +166,28 @@ export function NotificationProvider({ children }) {
         }
     };
 
-    const handleNotificationResponse = (data) => {
-        // Handle notification tap - navigate to relevant screen
+    const handleNotificationResponse = async (data) => {
+        // 1. Log the click to Supabase (Analytics)
+        try {
+            if (user) {
+                await supabase.from('app_notification_clicks').insert({
+                    user_id: user.id,
+                    notification_id: data.notificationId || null, // Capture ID if present
+                    group_id: data.groupId || null,
+                    action_type: data.type || 'unknown',
+                    metadata: data // Store full data payload specifically for debugging
+                });
+            }
+        } catch (e) {
+            console.log('Failed to log notification click:', e);
+            // Don't block navigation on analytics failure
+        }
+
+        // 2. Handle navigation
         if (data.type === 'message' && data.groupId) {
-            // Navigate to chat screen
             // router.push(`/chat/${data.groupId}`);
         } else if (data.type === 'challenge') {
-            // Navigate to challenge
+            // router.push('/challenges'); 
         }
     };
 
