@@ -80,6 +80,9 @@ export default function ChatScreen() {
     const [groupName, setGroupName] = useState('');
     const [groupLanguage, setGroupLanguage] = useState('');
     const [memberCount, setMemberCount] = useState(0);
+    const [groupAvatar, setGroupAvatar] = useState(null);
+    const [isDM, setIsDM] = useState(false);
+    const [partner, setPartner] = useState(null);
     const [currentChallenge, setCurrentChallenge] = useState(null);
     const [allChallenges, setAllChallenges] = useState([]);
     const [visibleChallenge, setVisibleChallenge] = useState(null);
@@ -431,9 +434,30 @@ export default function ChatScreen() {
 
     const loadChatData = async () => {
         try {
-            const { data: group } = await supabase.from('app_groups').select('name, member_count, language').eq('id', groupId).single();
+            const { data: group } = await supabase.from('app_groups').select('name, member_count, language, avatar_url').eq('id', groupId).single();
             if (group) {
-                setGroupName(group.name);
+                if (group.name === 'DM' && group.member_count === 2) {
+                    setIsDM(true);
+                    // Fetch partner details
+                    const { data: members } = await supabase
+                        .from('app_group_members')
+                        .select('user_id, app_users(display_name, avatar_url)')
+                        .eq('group_id', groupId)
+                        .neq('user_id', user.id)
+                        .single();
+
+                    if (members?.app_users) {
+                        setPartner(members.app_users);
+                        setGroupName(members.app_users.display_name);
+                        setGroupAvatar(members.app_users.avatar_url);
+                    } else {
+                        setGroupName('Direct Message');
+                        setGroupAvatar(null);
+                    }
+                } else {
+                    setGroupName(group.name);
+                    setGroupAvatar(group.avatar_url);
+                }
                 setMemberCount(group.member_count || 0);
                 setGroupLanguage(group.language || '');
             }
@@ -923,9 +947,14 @@ export default function ChatScreen() {
                                 <Pressable onPress={() => router.back()} style={styles.backButton}>
                                     <ChevronLeft size={30} color={Colors.primary} />
                                 </Pressable>
+                                {groupAvatar && (
+                                    <View style={styles.headerAvatarContainer}>
+                                        <Image source={getAvatarSource(groupAvatar)} style={styles.headerAvatar} />
+                                    </View>
+                                )}
                                 <View style={styles.headerInfo}>
                                     <Text style={styles.headerTitle}>{groupName}</Text>
-                                    <Text style={styles.headerSubtitle}>{memberCount} members</Text>
+                                    {!isDM && <Text style={styles.headerSubtitle}>{memberCount} members</Text>}
 
                                 </View>
                                 {groupLanguage?.toLowerCase() === 'french' && (
@@ -944,9 +973,14 @@ export default function ChatScreen() {
                                 <Pressable onPress={() => router.back()} style={styles.backButton}>
                                     <ChevronLeft size={30} color={Colors.primary} />
                                 </Pressable>
+                                {groupAvatar && (
+                                    <View style={styles.headerAvatarContainer}>
+                                        <Image source={getAvatarSource(groupAvatar)} style={styles.headerAvatar} />
+                                    </View>
+                                )}
                                 <View style={styles.headerInfo}>
                                     <Text style={styles.headerTitle}>{groupName}</Text>
-                                    <Text style={styles.headerSubtitle}>{memberCount} members</Text>
+                                    {!isDM && <Text style={styles.headerSubtitle}>{memberCount} members</Text>}
                                 </View>
                                 {groupLanguage?.toLowerCase() === 'french' && (
                                     <Pressable style={styles.nativeButton} onPress={() => router.push('/native-speakers?language=French')}>
@@ -1060,6 +1094,15 @@ const styles = StyleSheet.create({
     headerContent: {
         flexDirection: 'row',
         alignItems: 'center',
+    },
+    headerAvatarContainer: {
+        marginRight: 10,
+    },
+    headerAvatar: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#E1E1E1',
     },
     backButton: {
         padding: 8,

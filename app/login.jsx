@@ -133,7 +133,7 @@ export default function LoginScreen() {
                     </Pressable>
 
                     <Text style={styles.disclaimer}>
-                        {loading ? "searching for your soup profile..." : "choose wisely—it's case sensitive & permanent ✨"}
+                        {loading ? "searching for your soup profile..." : "choose wisely—it's case sensitive ✨"}
                     </Text>
                 </KeyboardAvoidingView>
             </SafeAreaView>
@@ -145,19 +145,8 @@ export default function LoginScreen() {
         <SafeAreaView style={styles.container}>
             <ScrollView contentContainerStyle={styles.scrollContent}>
                 <View style={styles.logoContainer}>
-                    <Text style={styles.title}>secure your soup 🍲</Text>
-                    <Text style={styles.subtitle}>pick 3 emojis to create your password</Text>
-
-                    {/* Info banner based on user type */}
-                    <View style={styles.infoBanner}>
-                        <Text style={styles.infoBannerEmoji}>🔒</Text>
-                        <View style={styles.infoBannerTextContainer}>
-                            <Text style={styles.infoBannerTitle}>Secure Your Profile</Text>
-                            <Text style={styles.infoBannerText}>
-                                Pick 3 emojis and screenshot this screen so you don't forget!
-                            </Text>
-                        </View>
-                    </View>
+                    <Text style={styles.title}>enter your emoji password 🍲</Text>
+                    <Text style={styles.subtitle}>tap 3 emojis to log in</Text>
                 </View>
 
                 <View style={styles.passwordDisplay}>

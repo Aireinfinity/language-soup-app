@@ -14,7 +14,7 @@ const { width, height } = Dimensions.get('window');
 
 const FEATURES = [
     {
-        image: require('../assets/whats-new/challenge-share.png'),
+        image: require('../assets/whats-new/quests.png'),
         title: 'Daily Soup Challenge 🥣',
         description: 'A fresh, immersive way to share your daily soup. No backlog, just vibes.',
     },

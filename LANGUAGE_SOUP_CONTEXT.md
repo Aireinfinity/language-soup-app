@@ -1,6 +1,6 @@
 # Language Soup - Founder Context
 
-> Last updated: 2026-02-09 (Big Data Audit + 3-Pillar Social Rotation SHIPPED)
+> Last updated: 2026-02-10 (AI TTS Reversion + Performance Fixes)
 
 ## 🍲 What is Language Soup?
 
@@ -170,7 +170,7 @@
 | Jan 25-30 | **Skiing in Austrian Alps** - no building |
 | Jan 31 - Feb 7 | **Budapest coffee chats** - chill coffee chats with founders and investors, catch up on what didn't work in the alps
 | Feb 7-16 | **Travel home** - light support only |
-| Feb 17+ | **Hard Pivot: Retention First**. User interviews (30), **Feedback Tab**, fix recording stability, solve "Drop-off Points". Implement **"Record Your First Word"** mission & **PostHog** instrumentation. |
+| Feb 10+ (Now) | **Retention & Onboarding**. Ship **"Record Your First Word"** mission (Task #9). Redesign Profile for DMs. **Performance** (TTS Reversion + Persistence). |
 
 ---
 
@@ -257,6 +257,7 @@
 
 **Rules:**
 - **Customer issues ALWAYS come first.** Open tickets > planned features.
+- **Test everything in the dev server before pushing.** No blind pushes. Start with: `npx expo start --dev-client --tunnel --scheme languagesoup`
 - Don't over-engineer. Simple > clever.
 - One bug/feature per day is the pace.
 - Ask questions first, code second.
@@ -297,17 +298,11 @@ eas build --platform ios --profile development
 eas build --platform android --profile development
 ```
 
-**How to Start the Dev Server (The ONLY Command That Works):**
-```bash
-# Must use custom scheme + dev client + tunnel
-npx expo start --dev-client --tunnel --scheme languagesoup
-```
-
-**⚠️ IMPORTANT: The correct dev server command (fixes "No development server found"):**
+**Dev Server (The ONLY Command That Works):**
 ```bash
 npx expo start --dev-client --tunnel --scheme languagesoup
 ```
-
+- `--dev-client` uses the custom dev build (not Expo Go)
 - `--tunnel` bypasses WiFi/firewall issues
 - `--scheme languagesoup` makes QR codes work with the dev build
 
@@ -343,3 +338,16 @@ npx expo start --dev-client --tunnel --scheme languagesoup
   7. ✅ **iOS Keyboard Layout Fix**
   8. ✅ **Emoji Reactions** (Fixed + Simplified UX)
 - **Status:** Deployed via EAS to TestFlight (iOS) and Android (Promoted to Open Testing).
+
+### Feb 10-11, 2026 - Onboarding & Community Refinement 🍲🌍
+- **Objective:** Transformation of the "New Chef" experience and stabilizing core audio features.
+- **Shipped:**
+  1. ✅ **Audio Safety Check:** Resolved "Only one Recording object" crashes by implementing global `stopAndUnloadAsync` safety hooks.
+  2. ✅ **"Favorite Word" Onboarding:** Pivoted from "Anxiety" to a humorous "Favorite Word" prompt (curse words encouraged!).
+  3. ✅ **New Chef Badges:** Redesigned prominent red **"NEW 🍲"** badges on the top-left diagonal of search cards.
+  4. ✅ **Photo Prioritization:** Sorting logic now ranks real human photos above avatars to increase community authenticity.
+  5. ✅ **Noah Clean-up:** Filtered out duplicate founder profiles; only verified identities remain.
+- **Learnings:**
+  - **Expo-AV Scoping:** Audio recording objects in SDK 53+ require absolute cleanup during every `startRecording` attempt to avoid prepare state collisions.
+  - **StyleSheet Constants:** Common theme objects (e.g., `SOUP_COLORS`) used in `StyleSheet.create` must reside in **module scope** (top-level) to be accessible during the static style evaluation phase in React Native.
+  - **Human-Centric UX:** Highlighting human faces over avatars increases "Community Embrace" vibe (Retention metric).

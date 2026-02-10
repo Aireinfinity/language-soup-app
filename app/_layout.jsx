@@ -31,7 +31,7 @@ function RootLayoutNav() {
         // Android Navigation Bar Fix: Make it transparent
         if (Platform.OS === 'android') {
             NavigationBar.setPositionAsync('absolute');
-            NavigationBar.setBackgroundColorAsync('#ffffff01'); // Transparent
+            NavigationBar.setBackgroundColorAsync('#00000000'); // Fully transparent
             NavigationBar.setButtonStyleAsync('dark'); // Dark icons
         }
 

@@ -8,7 +8,7 @@ import { Colors } from '../../constants/Colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useQuests } from '../../contexts/QuestContext';
-import { MessageCircle, Users, Sparkles, Plus, Globe, ChevronRight, Megaphone } from 'lucide-react-native';
+import { MessageCircle, Users, Plus, Globe, ChevronRight, Megaphone } from 'lucide-react-native';
 import LanguageRequestModal from '../../components/LanguageRequestModal';
 import { FloatingSupportButton } from '../../components/FloatingSupportButton';
 import { haptics } from '../../utils/haptics';
@@ -19,11 +19,15 @@ import ContextualTooltip from '../../components/ContextualTooltip';
 import { SecurityBanner } from '../../components/SecurityBanner';
 import GroupAvatar from '../../components/GroupAvatar';
 import { ChallengeQueue } from '../../components/ChallengeQueue';
+import OnboardingMissionModal from '../../components/OnboardingMissionModal';
+
 
 const SOUP_COLORS = {
     blue: '#00adef',
     pink: '#ec008b',
     green: '#19b091',
+    text: '#2d3436',
+    subtext: '#636e72',
 };
 
 export default function HomeScreen() {
@@ -45,6 +49,7 @@ export default function HomeScreen() {
     const [unreadAnnouncementsCount, setUnreadAnnouncementsCount] = useState(0);
     const [pendingChallenges, setPendingChallenges] = useState([]);
     const [showChallengeQueue, setShowChallengeQueue] = useState(false);
+    const [showOnboardingMission, setShowOnboardingMission] = useState(false);
 
     useFocusEffect(
         useCallback(() => {
@@ -52,6 +57,7 @@ export default function HomeScreen() {
                 checkAdminStatus();
                 loadGroups();
                 checkPendingChallenges();
+                checkOnboardingStatus();
             }
         }, [user])
     );
@@ -98,6 +104,76 @@ export default function HomeScreen() {
             supabase.removeChannel(challengeChannel);
         };
     }, [user, groups]); // Re-run if user/groups change
+
+    const checkPendingChallenges = async () => {
+        if (!user || user.id === undefined) return;
+        try {
+            // Get user's groups
+            const { data: myGroups } = await supabase
+                .from('app_group_members')
+                .select('group_id')
+                .eq('user_id', user.id);
+
+            if (!myGroups || myGroups.length === 0) {
+                setPendingChallenges([]);
+                return;
+            }
+
+            const groupIds = myGroups.map(g => g.group_id);
+
+            // Fetch recent challenges (last 7 days)
+            const weekAgo = new Date();
+            weekAgo.setDate(weekAgo.getDate() - 7);
+
+            const { data: challenges } = await supabase
+                .from('app_challenges')
+                .select('*')
+                .in('group_id', groupIds)
+                .gt('created_at', weekAgo.toISOString())
+                .order('created_at', { ascending: false });
+
+            if (!challenges || challenges.length === 0) {
+                setPendingChallenges([]);
+                return;
+            }
+
+            // Check which ones user has completed (sent message for)
+            const challengeIds = challenges.map(c => c.id);
+            const { data: completions } = await supabase
+                .from('app_messages')
+                .select('challenge_id')
+                .eq('sender_id', user.id)
+                .in('challenge_id', challengeIds);
+
+            const completedSet = new Set(completions?.map(c => c.challenge_id));
+            const pending = challenges.filter(c => !completedSet.has(c.id));
+
+            setPendingChallenges(pending);
+            // Optionally auto-show if high priority? No, let user open queue.
+        } catch (error) {
+            console.error('Error checking pending challenges:', error);
+        }
+    };
+
+    const checkOnboardingStatus = async () => {
+        if (!user) return;
+        try {
+            // Check if user has sent ANY messages
+            const { count, error } = await supabase
+                .from('app_messages')
+                .select('*', { count: 'exact', head: true })
+                .eq('sender_id', user.id);
+
+            if (error) throw error;
+
+            // If 0 messages, show onboarding mission
+            if (count === 0) {
+                setShowOnboardingMission(true);
+            }
+        } catch (error) {
+            console.error('Error checking onboarding status:', error);
+        }
+    };
 
     const checkAdminStatus = async () => {
         if (!user) return;
@@ -250,6 +326,41 @@ export default function HomeScreen() {
                 return timeB - timeA; // Descending order (newest first)
             });
 
+            // --- DM PROCESSING START ---
+            // Identify DMs and fetch partner details
+            const dmGroups = groupsWithDetails.filter(g => g.name === 'DM' && g.memberCount === 2);
+            const dmGroupIds = dmGroups.map(g => g.id);
+
+            if (dmGroupIds.length > 0) {
+                // Fetch the partner for each DM (the other member)
+                const { data: partners } = await supabase
+                    .from('app_group_members')
+                    .select('group_id, app_users(display_name, avatar_url)')
+                    .in('group_id', dmGroupIds)
+                    .neq('user_id', user.id);
+
+                // Map partner info to group objects
+                const partnerMap = {}; // groupId -> user object
+                partners?.forEach(p => {
+                    if (p.app_users) {
+                        partnerMap[p.group_id] = p.app_users;
+                    }
+                });
+
+                // Update groupsWithDetails with isDM and partner info
+                groupsWithDetails.forEach(g => {
+                    if (g.name === 'DM' && g.memberCount === 2) {
+                        g.isDM = true;
+                        g.partner = partnerMap[g.id];
+                        // Fallback if partner not found (shouldn't happen)
+                        if (!g.partner) {
+                            g.partner = { display_name: 'Unknown User', avatar_url: null };
+                        }
+                    }
+                });
+            }
+            // --- DM PROCESSING END ---
+
             setGroups(groupsWithDetails);
         } catch (error) {
             console.error('Error loading groups:', error);
@@ -259,255 +370,150 @@ export default function HomeScreen() {
         }
     };
 
-    const onRefresh = async () => {
+    const onRefresh = React.useCallback(async () => {
         setRefreshing(true);
-        await Promise.all([loadGroups(), loadAnnouncements()]);
+        // Refresh everything
+        checkAdminStatus();
+        await loadGroups();
+        await checkPendingChallenges();
+        await checkOnboardingStatus();
         setRefreshing(false);
-    };
+    }, [user]);
 
-    const loadAnnouncements = async () => {
-        try {
-            // Load announcements
-            const { data } = await supabase
-                .from('app_community_announcements')
-                .select('*')
-                .eq('active', true)
-                .order('created_at', { ascending: false })
-                .limit(1);
-            setAnnouncements(data || []);
-
-            // Load unread count
-            const lastReadStr = await AsyncStorage.getItem('community_last_read');
-            const lastRead = lastReadStr || '1970-01-01';
-            const { count } = await supabase
-                .from('app_community_messages')
-                .select('*', { count: 'exact', head: true })
-                .gt('created_at', lastRead);
-            setUnreadAnnouncementsCount(count || 0);
-        } catch (error) {
-            console.error('Error loading announcements:', error);
-        }
-    };
-
-    const checkPendingChallenges = async () => {
+    const handleLanguageRequest = async ({ country, language, note }) => {
         if (!user) return;
         try {
-            console.log('🥣 Checking pending challenges...');
-            // 1. Get user's groups
-            const { data: memberships } = await supabase
-                .from('app_group_members')
-                .select('group_id')
-                .eq('user_id', user.id);
-
-            if (!memberships?.length) return;
-            const groupIds = memberships.map(m => m.group_id);
-
-            // 2. Get active challenges (last 24h) for these groups
-            const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-            const { data: challenges } = await supabase
-                .from('app_challenges')
-                .select('id, prompt_text, created_at, group_id, app_groups(name)')
-                .in('group_id', groupIds)
-                .gt('created_at', yesterday);
-
-            if (!challenges?.length) return;
-
-            // 3. Check if user already replied
-            const challengeIds = challenges.map(c => c.id);
-            const { data: replies } = await supabase
-                .from('app_messages')
-                .select('challenge_id')
-                .eq('sender_id', user.id)
-                .in('challenge_id', challengeIds);
-
-            const repliedIds = new Set(replies?.map(r => r.challenge_id));
-            const pending = challenges
-                .filter(c => !repliedIds.has(c.id))
-                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)); // Newest first
-
-            // Group by group_id and take only the latest one per group
-            const latestPendingByGroup = new Map();
-            for (const c of pending) {
-                if (!latestPendingByGroup.has(c.group_id)) {
-                    latestPendingByGroup.set(c.group_id, {
-                        ...c,
-                        group_name: c.app_groups?.name
-                    });
-                }
-            }
-
-            const finalPending = Array.from(latestPendingByGroup.values());
-
-            console.log(`🥣 Found ${finalPending.length} pending challenges (latest only)`);
-            if (finalPending.length > 0) {
-                setPendingChallenges(finalPending);
-                setShowChallengeQueue(true);
-            }
-        } catch (error) {
-            console.error('Error checking challenges:', error);
-        }
-    };
-
-    // TEST helper (Fetches REAL challenges to allow DB inserts)
-    const forceTestSoup = async () => {
-        // 1. Close first to force re-mount/refresh (if open)
-        setShowChallengeQueue(false);
-
-        setTimeout(async () => {
-            try {
-                console.log('🥣 Fetching latest REAL challenges for test...');
-                const validGroups = groups.filter(g => !g.name.includes('App Tester'));
-
-                if (validGroups.length === 0) {
-                    Alert.alert('No Groups', 'Join a non-tester group to test challenges!');
-                    setLoading(false);
-                    return;
-                }
-
-                const groupIds = validGroups.map(g => g.id);
-
-                // Fetch latest challenge for EACH group
-                const { data: allChallenges, error } = await supabase
-                    .from('app_challenges')
-                    .select('id, prompt_text, metadata, created_at, group_id, app_groups(name)')
-                    .in('group_id', groupIds)
-                    .order('created_at', { ascending: false })
-                    .limit(20);
-
-                if (error) throw error;
-
-                // Filter: Get only the LATEST challenge per group
-                const uniqueChallenges = [];
-                const processedGroups = new Set();
-
-                for (const challenge of allChallenges) {
-                    if (!processedGroups.has(challenge.group_id)) {
-                        uniqueChallenges.push({
-                            ...challenge,
-                            group_name: challenge.app_groups?.name // Flatten name
-                        });
-                        processedGroups.add(challenge.group_id);
-                    }
-                }
-
-                if (uniqueChallenges.length === 0) {
-                    Alert.alert('No Challenges', 'None of your groups have active challenges.');
-                    setLoading(false);
-                    return;
-                }
-
-                console.log(`🥣 Test Mode: Found ${uniqueChallenges.length} real challenges via DB`);
-                setPendingChallenges(uniqueChallenges);
-                setShowChallengeQueue(true);
-            } catch (err) {
-                console.error('Test Soup Error:', err);
-                Alert.alert('Error', 'Failed to load test challenges.');
-            } finally {
-                setLoading(false);
-            }
-        }, 100);
-    };
-
-    const handleLanguageRequest = async (requestText, unused) => {
-        try {
-            // Insert group request into database
-            const { error: requestError } = await supabase
+            const { error } = await supabase
                 .from('app_language_requests')
                 .insert({
                     user_id: user.id,
-                    language_name: requestText,
+                    country,
+                    language,
+                    note,
                     status: 'pending'
                 });
 
-            if (requestError) throw requestError;
-
-            // Complete quest for requesting a language
-            await completeQuest('request_language');
-
-            // Close modal and show success
+            if (error) throw error;
             setShowRequestModal(false);
-            Alert.alert('Success', 'Your group request has been submitted! We\'ll review it soon.');
-
+            Alert.alert('Request Sent', 'Thank you! We will look into adding this language.');
         } catch (error) {
             console.error('Error submitting language request:', error);
-            Alert.alert('Error', 'Failed to submit request. Please try again.');
+            Alert.alert('Error', 'Could not submit request. Please try again.');
         }
     };
-    const formatTime = (dateString) => {
-        if (!dateString) return '';
-        const date = new Date(dateString);
-        const now = new Date();
-        const diffMs = now - date;
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMs / 3600000);
-        const diffDays = Math.floor(diffMs / 86400000);
 
-        if (diffMins < 1) return 'now';
-        if (diffMins < 60) return `${diffMins}m`;
-        if (diffHours < 24) return `${diffHours}h`;
-        if (diffDays < 7) return `${diffDays}d`;
-        return date.toLocaleDateString();
+    // ... (rest of functions)
+
+    const formatTime = (timeString) => {
+        if (!timeString) return '';
+        const now = new Date();
+        const date = new Date(timeString);
+
+        // Is it today?
+        if (now.toDateString() === date.toDateString()) {
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // Within last 6 days?
+        const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+        if (diffDays < 7) {
+            return date.toLocaleDateString([], { weekday: 'short' });
+        }
+
+        return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
     };
 
-    const renderGroup = ({ item }) => (
-        <Pressable
-            style={styles.groupItem}
-            onPress={() => {
-                haptics.light();
-                console.log('Navigating to chat:', item.id);
-                // Optimistically clear the badge immediately
-                setGroups(prev => prev.map(g =>
-                    g.id === item.id ? { ...g, unreadCount: 0 } : g
-                ));
-                router.push(`/chat/${item.id}`);
-            }}
-        >
-            {/* Group Avatar with Members Badge */}
-            <View style={styles.groupAvatarWrapper}>
-                <GroupAvatar language={item.language} size={60} />
-                {/* Small group icon overlay */}
-                <View style={styles.groupBadge}>
-                    <Users size={12} color="#fff" />
-                </View>
-            </View>
+    const renderGroup = ({ item }) => {
+        // dynamic values based on DM or Group
+        const isDM = item.isDM;
+        const displayName = isDM ? (item.partner?.display_name || 'User') : item.name;
+        const avatarSource = isDM ? (item.partner?.avatar_url) : item.avatarUrl;
+        // For DMs, use partner avatar source logic
+        // For Groups, use item.avatarUrl directly (assuming it's a URL or needs processing)
 
-            <View style={styles.groupInfo}>
-                <View style={styles.groupHeader}>
-                    <View style={styles.groupTitleRow}>
-                        <ThemedText style={styles.groupName}>{item.name}</ThemedText>
-                        <View style={styles.memberBadge}>
-                            <Users size={10} color={Colors.textLight} />
-                            <Text style={styles.memberBadgeText}>{item.memberCount}</Text>
-                        </View>
-                    </View>
-                    {item.lastMessage && (
-                        <Text style={styles.time}>{formatTime(item.lastMessage.time)}</Text>
-                    )}
-                </View>
-
-                <View style={styles.groupFooter}>
-                    {item.lastMessage ? (
-                        <Text style={styles.lastMessage} numberOfLines={1}>
-                            <Text style={styles.senderNameInPreview}>{item.lastMessage.senderName}: </Text>
-                            {item.lastMessage.type === 'voice' ? '🎤 Voice message' : item.lastMessage.content}
-                        </Text>
+        return (
+            <Pressable
+                style={styles.groupItem}
+                onPress={() => {
+                    haptics.light();
+                    console.log('Navigating to chat:', item.id);
+                    // Optimistically clear the badge immediately
+                    setGroups(prev => prev.map(g =>
+                        g.id === item.id ? { ...g, unreadCount: 0 } : g
+                    ));
+                    router.push(`/chat/${item.id}`);
+                }}
+            >
+                {/* Avatar Wrapper */}
+                <View style={styles.groupAvatarWrapper}>
+                    {isDM ? (
+                        <Image
+                            source={getAvatarSource(avatarSource)}
+                            style={styles.groupAvatar}
+                        />
                     ) : (
-                        <Text style={styles.noMessages}>No messages yet</Text>
+                        <GroupAvatar language={item.language} size={60} />
                     )}
 
-                    {item.unreadCount > 0 && (
-                        <View style={styles.unreadBadge}>
-                            <Text style={styles.unreadText}>{item.unreadCount}</Text>
-                        </View>
-                    )}
+                    {/* Badge Overlay */}
+                    <View style={[styles.groupBadge, isDM && { backgroundColor: SOUP_COLORS.blue }]}>
+                        {isDM ? (
+                            <MessageCircle size={10} color="#fff" />
+                        ) : (
+                            <Users size={12} color="#fff" />
+                        )}
+                    </View>
                 </View>
-            </View>
 
-            {/* CTA Arrow */}
-            <View style={styles.arrowContainer}>
-                <ChevronRight size={20} color="#CFD8DC" />
-            </View>
-        </Pressable>
+                <View style={styles.groupInfo}>
+                    <View style={styles.groupHeader}>
+                        <View style={styles.groupTitleRow}>
+                            <ThemedText style={styles.groupName} numberOfLines={1}>{displayName}</ThemedText>
+                            {!isDM && (
+                                <View style={styles.memberBadge}>
+                                    <Users size={10} color={Colors.textLight} />
+                                    <Text style={styles.memberBadgeText}>{item.memberCount}</Text>
+                                </View>
+                            )}
+                        </View>
+                        {item.lastMessage && (
+                            <Text style={styles.time}>{formatTime(item.lastMessage.time)}</Text>
+                        )}
+                    </View>
+
+                    <View style={styles.groupFooter}>
+                        {item.lastMessage ? (
+                            <Text style={styles.lastMessage} numberOfLines={1}>
+                                <Text style={styles.senderNameInPreview}>
+                                    {item.lastMessage.senderName === 'Me' ? 'You' : item.lastMessage.senderName}:
+                                </Text>
+                                {' '}
+                                {item.lastMessage.type === 'voice' ? '🎤 Voice message' : item.lastMessage.content}
+                            </Text>
+                        ) : (
+                            <Text style={styles.noMessages}>No messages yet</Text>
+                        )}
+
+                        {item.unreadCount > 0 && (
+                            <View style={styles.unreadBadge}>
+                                <Text style={styles.unreadText}>{item.unreadCount}</Text>
+                            </View>
+                        )}
+                    </View>
+                </View>
+
+                <View style={styles.arrowContainer}>
+                    <ChevronRight size={20} color="#CFD8DC" />
+                </View>
+            </Pressable>
+        )
+    };
+
+    // Helper to render section header
+    const renderSectionHeader = (title) => (
+        <View style={styles.sectionHeader}>
+            <Text style={styles.sectionHeaderText}>{title}</Text>
+        </View>
     );
 
     if (loading) {
@@ -518,10 +524,15 @@ export default function HomeScreen() {
         );
     }
 
+    // Split groups for rendering
+    const dmGroups = groups.filter(g => g.isDM);
+    const commGroups = groups.filter(g => !g.isDM && !g.name.toLowerCase().includes('support'));
+
     return (
         <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
             {/* Header - Layout Restored */}
             <View style={styles.header}>
+                {/* ... */}
                 <View style={styles.headerContent}>
                     <Image
                         source={require('../../assets/images/logo.png')}
@@ -529,23 +540,24 @@ export default function HomeScreen() {
                         resizeMode="contain"
                     />
                     <View>
-                        <Text style={[styles.headerTitle, { color: SOUP_COLORS.blue, fontDesign: 'rounded' }]}>Your Soup</Text>
+                        <Text style={[styles.headerTitle, { color: SOUP_COLORS.blue }]}>Your Soup</Text>
                     </View>
                 </View>
 
                 {/* Right Side Buttons */}
                 <View style={styles.headerButtons}>
-
-                    {/* DEBUG BUTTON */}
-                    <Pressable
-                        style={styles.headerButtonWithLabel}
-                        onPress={forceTestSoup}
-                    >
-                        <View style={[styles.headerIconCircle, { backgroundColor: '#FFE5E5' }]}>
-                            <Sparkles size={20} color={SOUP_COLORS.pink} />
-                        </View>
-                        <Text style={[styles.headerButtonLabel, { color: SOUP_COLORS.pink }]}>Test</Text>
-                    </Pressable>
+                    {/* Admin-only: Test Onboarding Mission */}
+                    {isAdmin && (
+                        <Pressable
+                            style={styles.headerButtonWithLabel}
+                            onPress={() => setShowOnboardingMission(true)}
+                        >
+                            <View style={[styles.headerIconCircle, { backgroundColor: '#FFE5E5' }]}>
+                                <Text style={{ fontSize: 16 }}>🐣</Text>
+                            </View>
+                            <Text style={[styles.headerButtonLabel, { color: SOUP_COLORS.pink }]}>Test</Text>
+                        </Pressable>
+                    )}
 
                     <Pressable
                         style={styles.headerButtonWithLabel}
@@ -586,9 +598,21 @@ export default function HomeScreen() {
             < SecurityBanner />
 
             <FlatList
-                data={groups.filter(g => !g.name.toLowerCase().includes('support'))}
-                renderItem={renderGroup}
-                keyExtractor={(item) => item.id}
+
+                data={[
+                    ...(dmGroups.length > 0 ? [{ type: 'header', title: 'Direct Soups 🥣' }, ...dmGroups] : []),
+                    { type: 'header', title: dmGroups.length > 0 ? 'Community Soups 🍲' : 'Your Soups 🍲' },
+                    ...commGroups
+                ]}
+
+                renderItem={({ item }) => {
+                    if (item.type === 'header') {
+                        return renderSectionHeader(item.title);
+                    }
+                    return renderGroup({ item });
+                }}
+
+                keyExtractor={(item) => item.id || item.title}
                 contentContainerStyle={styles.list}
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -656,11 +680,6 @@ export default function HomeScreen() {
                 onSubmit={handleLanguageRequest}
             />
 
-
-
-
-
-
             <Pressable
                 style={styles.adminToggleButton}
                 onPress={() => {
@@ -702,15 +721,39 @@ export default function HomeScreen() {
                 onComplete={() => setShowChallengeQueue(false)}
                 userId={user?.id}
             />
-        </SafeAreaView >
+
+            <OnboardingMissionModal
+                visible={showOnboardingMission && groups.length > 0}
+                groups={groups}
+                onComplete={() => {
+                    setShowOnboardingMission(false);
+                    checkOnboardingStatus(); // Re-verify
+                    loadGroups(); // Refresh feed
+                }}
+            />
+        </SafeAreaView>
     );
 }
 
 const styles = StyleSheet.create({
+    sectionHeader: {
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        paddingBottom: 8,
+    },
+    sectionHeaderText: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: SOUP_COLORS.text,
+        letterSpacing: -0.5,
+    },
     container: {
         flex: 1,
         backgroundColor: Colors.background, // cream
     },
+
+
+
     center: {
         flex: 1,
         justifyContent: 'center',
@@ -733,6 +776,12 @@ const styles = StyleSheet.create({
     headerLogo: {
         width: 52,
         height: 52,
+    },
+    headerTitle: {
+        fontSize: 28,
+        fontWeight: '900',
+        letterSpacing: -0.5,
+        fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
     },
     headerTextContainer: {
         flex: 1,

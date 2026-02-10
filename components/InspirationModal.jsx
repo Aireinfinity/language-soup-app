@@ -13,10 +13,62 @@ const SOUP_COLORS = {
     dark: '#1a1a1a',
 };
 
-export function InspirationModal({ visible, onClose, metadata, language }) {
+const LOADING_MESSAGES = [
+    "Going to Trader Joe's...",
+    "Foraging in the garden...",
+    "Haggling at the farmer's market...",
+    "Checking the pantry...",
+    "Simmering the broth...",
+    "Asking grandma for the recipe...",
+];
+
+export function InspirationModal({ visible, onClose, metadata: initialMetadata, language, prompt, challengeId }) {
     const [activeTab, setActiveTab] = useState('phrase'); // 'phrase' | 'vocab'
     const [loading, setLoading] = useState(false);
     const [sound, setSound] = useState();
+    const [metadata, setMetadata] = useState(initialMetadata);
+    const [isGenerating, setIsGenerating] = useState(false);
+    const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES[0]);
+
+    // Sync initial metadata when props change
+    useEffect(() => {
+        setMetadata(initialMetadata);
+    }, [initialMetadata]);
+
+    // Auto-generate hints when modal opens and metadata is missing
+    useEffect(() => {
+        if (visible && (!metadata || !metadata.starter_phrase) && prompt && !isGenerating) {
+            generateHints();
+        }
+    }, [visible, prompt]);
+
+    const generateHints = async () => {
+        if (!prompt) return;
+        setIsGenerating(true);
+        setLoadingMessage(LOADING_MESSAGES[Math.floor(Math.random() * LOADING_MESSAGES.length)]);
+
+        try {
+            const { data: userData } = await supabase.auth.getUser();
+            const { data, error } = await supabase.functions.invoke('voice-feedback', {
+                body: {
+                    task: 'generate_hints',
+                    prompt: prompt,
+                    language: language || 'Target Language',
+                    challengeId: challengeId,
+                    userId: userData?.user?.id,
+                },
+            });
+
+            if (error) throw error;
+            if (data && data.starter_phrase) {
+                setMetadata(data);
+            }
+        } catch (err) {
+            console.error('🥣 [InspirationModal] Generation error:', err);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
 
     const phrase = metadata?.starter_phrase;
     const vocabList = metadata?.vocab_bank || [];
@@ -26,9 +78,6 @@ export function InspirationModal({ visible, onClose, metadata, language }) {
         setLoading(true);
 
         try {
-
-
-            // 1. Get Audio URL
             const { data, error } = await supabase.functions.invoke('voice-feedback', {
                 body: {
                     text: text,
@@ -40,22 +89,17 @@ export function InspirationModal({ visible, onClose, metadata, language }) {
             if (error) throw error;
             if (!data?.pronunciationUrl) throw new Error('No audio URL returned');
 
-
-
-            // 1.5 Set Audio Mode (Force Speaker)
             await Audio.setAudioModeAsync({
                 allowsRecordingIOS: false,
                 playsInSilentModeIOS: true,
             });
 
-            // 2. Play Sound
             const { sound } = await Audio.Sound.createAsync(
                 { uri: data.pronunciationUrl },
                 { shouldPlay: true }
             );
             setSound(sound);
 
-            // Cleanup when done
             sound.setOnPlaybackStatusUpdate((status) => {
                 if (status.didJustFinish) {
                     sound.unloadAsync();
@@ -120,7 +164,12 @@ export function InspirationModal({ visible, onClose, metadata, language }) {
 
                     {/* Content */}
                     <ScrollView contentContainerStyle={styles.contentContainer}>
-                        {activeTab === 'phrase' ? (
+                        {isGenerating ? (
+                            <View style={styles.generatingContainer}>
+                                <ActivityIndicator size="large" color={SOUP_COLORS.pink} />
+                                <Text style={styles.generatingText}>{loadingMessage}</Text>
+                            </View>
+                        ) : activeTab === 'phrase' ? (
                             <View style={styles.phraseContainer}>
                                 {phrase ? (
                                     <>
@@ -183,7 +232,7 @@ const styles = StyleSheet.create({
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
         padding: 24,
-        height: '50%', // Half-height sheet
+        height: '50%',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: -4 },
         shadowOpacity: 0.25,
@@ -229,6 +278,17 @@ const styles = StyleSheet.create({
     },
     contentContainer: {
         paddingBottom: 20,
+    },
+    generatingContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 40,
+        gap: 16,
+    },
+    generatingText: {
+        color: SOUP_COLORS.pink,
+        fontSize: 16,
+        fontWeight: '600',
     },
     phraseContainer: {
         alignItems: 'center',

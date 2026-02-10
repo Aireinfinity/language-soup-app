@@ -1,34 +1,111 @@
-import React from 'react';
-import { View, Text, StyleSheet, Image, Pressable, Modal, Alert } from 'react-native';
+import { useRouter } from 'expo-router';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
+import { Modal, View, Text, Pressable, StyleSheet, Image, Dimensions, Alert } from 'react-native';
 import { X } from 'lucide-react-native';
 import { getLanguageFlag } from '../utils/languageFlags';
 import { getAvatarSource } from '../utils/soupUtils';
+
+const { width } = Dimensions.get('window');
 
 const SOUP_COLORS = {
     blue: '#00adef',
     pink: '#ec008b',
     cream: '#FDF5E6',
+    text: '#2d3436',
+    subtext: '#636e72',
 };
 
-export function UserPreviewModal({ visible, user, onClose }) {
-    if (!user) return null;
+export function UserPreviewModal({ visible, user: targetUser, onClose }) {
+    const { user: currentUser } = useAuth();
+    const router = useRouter();
 
-    // Defensive access to user properties to prevent crashes
-    const displayName = user?.display_name || 'Anonymous';
-    const avatarUrl = user?.avatar_url;
-    const statusText = user?.status_text;
+    if (!targetUser) return null;
+
+    const displayName = targetUser?.display_name || 'Anonymous';
+    const avatarUrl = targetUser?.avatar_url;
+    const statusText = targetUser?.status_text;
     const initial = displayName?.[0]?.toUpperCase() || '?';
-    const handleSendMessage = () => {
-        Alert.alert(
-            'Coming Soon! 💬',
-            'Direct messaging will be available soon. Stay tuned!',
-            [{ text: 'OK' }]
-        );
+
+    const handleSendMessage = async () => {
+        if (!currentUser || !targetUser) return;
+
+        try {
+            // 1. Find existing DM group
+            // Algorithm: Find group where BOTH users are members and group.name == 'DM' (or special flag)
+            // Simplified: Fetch my groups, filter for one where targetUser is also a member and name is 'DM'
+
+            const { data: myGroups } = await supabase
+                .from('app_group_members')
+                .select('group_id, app_groups(name)')
+                .eq('user_id', currentUser.id);
+
+            const myGroupIds = myGroups?.map(g => g.group_id) || [];
+
+            if (myGroupIds.length > 0) {
+                // Check if target matches any of these
+                const { data: commonGroups } = await supabase
+                    .from('app_group_members')
+                    .select('group_id')
+                    .eq('user_id', targetUser.id)
+                    .in('group_id', myGroupIds);
+
+                // Filter for "DM" name
+                const commonGroupIds = commonGroups?.map(g => g.group_id) || [];
+
+                // We need to check the group NAME locally (since we fetched it in myGroups)
+                // Filter myGroups for matches
+                const existingDM = myGroups.find(g =>
+                    commonGroupIds.includes(g.group_id) &&
+                    g.app_groups?.name === 'DM'
+                );
+
+                if (existingDM) {
+                    onClose();
+                    router.push(`/chat/${existingDM.group_id}`);
+                    return;
+                }
+            }
+
+            // 2. Create new DM group if none exists
+            // Create group
+            const { data: newGroup, error: createError } = await supabase
+                .from('app_groups')
+                .insert({
+                    name: 'DM', // Special name to identify DMs
+                    language: targetUser.fluent_languages?.[0] || 'English', // Default language
+                    level: 'N/A',
+                    is_public: false, // DMs are private
+                    member_count: 2,
+                    avatar_url: targetUser.avatar_url // Initially use target avatar? No, leave null for "DM"
+                })
+                .select()
+                .single();
+
+            if (createError) throw createError;
+
+            // Add members
+            const { error: memberError } = await supabase
+                .from('app_group_members')
+                .insert([
+                    { group_id: newGroup.id, user_id: currentUser.id },
+                    { group_id: newGroup.id, user_id: targetUser.id }
+                ]);
+
+            if (memberError) throw memberError;
+
+            onClose();
+            router.push(`/chat/${newGroup.id}`);
+
+        } catch (error) {
+            console.error('Error starting DM:', error);
+            Alert.alert('Error', 'Could not start chat. Please try again.');
+        }
     };
 
-    // Get all language flags
     const learningLanguages = user.learning_languages || [];
     const fluentLanguages = user.fluent_languages || [];
+    const allLanguages = [...new Set([...learningLanguages, ...fluentLanguages])];
 
     return (
         <Modal
@@ -41,69 +118,51 @@ export function UserPreviewModal({ visible, user, onClose }) {
                 <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
                     {/* Close button */}
                     <Pressable onPress={onClose} style={styles.closeButton}>
-                        <X size={24} color="#666" />
+                        <X size={24} color="#fff" />
                     </Pressable>
 
-                    {/* Avatar */}
-                    <View style={styles.avatarContainer}>
-                        {user.avatar_url ? (
-                            <Image
-                                source={getAvatarSource(user.avatar_url)}
-                                style={styles.avatar}
-                            />
-                        ) : (
-                            <View style={styles.avatarPlaceholder}>
-                                <Text style={styles.avatarInitial}>
-                                    {user.display_name?.[0]?.toUpperCase() || '?'}
-                                </Text>
-                            </View>
-                        )}
-                    </View>
-
-                    {/* Name */}
-                    <Text style={styles.name}>{user.display_name || 'Anonymous'}</Text>
-
-                    {/* Tagline */}
-                    {user.status_text && (
-                        <Text style={styles.tagline}>"{user.status_text}"</Text>
+                    {/* Large Pinterest-style image */}
+                    {avatarUrl ? (
+                        <Image
+                            source={getAvatarSource(avatarUrl)}
+                            style={styles.heroImage}
+                        />
+                    ) : (
+                        <View style={styles.heroPlaceholder}>
+                            <Text style={styles.heroInitial}>{initial}</Text>
+                        </View>
                     )}
 
-                    {/* Languages */}
-                    <View style={styles.languagesContainer}>
-                        {learningLanguages.length > 0 && (
-                            <View style={styles.languageSection}>
-                                <Text style={styles.languageLabel}>Learning</Text>
-                                <View style={styles.flagRow}>
-                                    {learningLanguages.map((lang, i) => (
-                                        <Text key={i} style={styles.flag}>
-                                            {getLanguageFlag(lang)}
-                                        </Text>
-                                    ))}
-                                </View>
+                    {/* Content section */}
+                    <View style={styles.content}>
+                        {/* Name */}
+                        <Text style={styles.name}>{displayName}</Text>
+
+                        {/* Tagline */}
+                        {statusText && (
+                            <Text style={styles.tagline}>"{statusText}"</Text>
+                        )}
+
+                        {/* Languages as flag pills */}
+                        {allLanguages.length > 0 && (
+                            <View style={styles.flagsContainer}>
+                                {allLanguages.map((lang, i) => (
+                                    <View key={i} style={styles.flagPill}>
+                                        <Text style={styles.flagEmoji}>{getLanguageFlag(lang)}</Text>
+                                        <Text style={styles.flagLabel}>{lang}</Text>
+                                    </View>
+                                ))}
                             </View>
                         )}
 
-                        {fluentLanguages.length > 0 && (
-                            <View style={styles.languageSection}>
-                                <Text style={styles.languageLabel}>Fluent</Text>
-                                <View style={styles.flagRow}>
-                                    {fluentLanguages.map((lang, i) => (
-                                        <Text key={i} style={styles.flag}>
-                                            {getLanguageFlag(lang)}
-                                        </Text>
-                                    ))}
-                                </View>
-                            </View>
-                        )}
+                        {/* Send Message Button */}
+                        <Pressable
+                            style={styles.messageButton}
+                            onPress={handleSendMessage}
+                        >
+                            <Text style={styles.messageButtonText}>Send Message</Text>
+                        </Pressable>
                     </View>
-
-                    {/* Send Message Button */}
-                    <Pressable
-                        style={styles.messageButton}
-                        onPress={handleSendMessage}
-                    >
-                        <Text style={styles.messageButtonText}>Send Message</Text>
-                    </Pressable>
                 </Pressable>
             </Pressable>
         </Modal>
@@ -113,18 +172,17 @@ export function UserPreviewModal({ visible, user, onClose }) {
 const styles = StyleSheet.create({
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: 'rgba(0,0,0,0.6)',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 20,
+        padding: 24,
     },
     card: {
         backgroundColor: '#fff',
         borderRadius: 24,
-        padding: 24,
-        width: '100%',
-        maxWidth: 400,
-        alignItems: 'center',
+        width: width - 48,
+        maxWidth: 380,
+        overflow: 'hidden',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 10 },
         shadowOpacity: 0.3,
@@ -133,68 +191,74 @@ const styles = StyleSheet.create({
     },
     closeButton: {
         position: 'absolute',
-        top: 16,
-        right: 16,
+        top: 12,
+        right: 12,
         zIndex: 10,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(0,0,0,0.35)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
-    avatarContainer: {
-        marginBottom: 16,
+    heroImage: {
+        width: '100%',
+        height: 280,
+        backgroundColor: '#f0f0f0',
     },
-    avatar: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        borderWidth: 4,
-        borderColor: SOUP_COLORS.cream,
-    },
-    avatarPlaceholder: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
+    heroPlaceholder: {
+        width: '100%',
+        height: 280,
         backgroundColor: SOUP_COLORS.blue,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 4,
-        borderColor: SOUP_COLORS.cream,
     },
-    avatarInitial: {
-        fontSize: 48,
+    heroInitial: {
+        fontSize: 80,
         fontWeight: '700',
         color: '#fff',
     },
+    content: {
+        padding: 20,
+        alignItems: 'center',
+    },
     name: {
         fontSize: 24,
-        fontWeight: '700',
-        color: '#2d3436',
-        marginBottom: 8,
+        fontWeight: '800',
+        color: SOUP_COLORS.text,
+        marginBottom: 6,
     },
     tagline: {
-        fontSize: 16,
+        fontSize: 15,
         fontStyle: 'italic',
-        color: '#636e72',
+        color: SOUP_COLORS.subtext,
         textAlign: 'center',
-        marginBottom: 20,
+        marginBottom: 16,
+        lineHeight: 22,
     },
-    languagesContainer: {
-        width: '100%',
-        marginBottom: 20,
-    },
-    languageSection: {
-        marginBottom: 12,
-    },
-    languageLabel: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: '#636e72',
-        marginBottom: 4,
-        textTransform: 'uppercase',
-    },
-    flagRow: {
+    flagsContainer: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
         gap: 8,
+        marginBottom: 20,
     },
-    flag: {
-        fontSize: 24,
+    flagPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#f5f5f5',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+        gap: 4,
+    },
+    flagEmoji: {
+        fontSize: 18,
+    },
+    flagLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: SOUP_COLORS.subtext,
     },
     messageButton: {
         backgroundColor: SOUP_COLORS.blue,

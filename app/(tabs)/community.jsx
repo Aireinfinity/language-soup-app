@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, Image, Pressable, ActivityIndicator, Platform, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MessageCircle, Users, ChevronRight } from 'lucide-react-native';
+import { MessageCircle, Users, ChevronRight, Play, Pause, Target, Globe, PlusCircle } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { Audio } from 'expo-av';
+import WelcomeMissionModal from '../../components/WelcomeMissionModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { UserPreviewModal } from '../../components/UserPreviewModal';
@@ -38,14 +40,23 @@ export default function CommunityScreen() {
     const [unreadCount, setUnreadCount] = useState(0);
     const [activeUsers, setActiveUsers] = useState([]);
     const [selectedUser, setSelectedUser] = useState(null);
-    const [selectedLanguage, setSelectedLanguage] = useState(null);
-    const [availableLanguages, setAvailableLanguages] = useState([]);
+    const [sortMode, setSortMode] = useState('all');
     const { completeQuest } = useQuests();
+
+    // Global Welcome Logic
+    const [globalWelcomes, setGlobalWelcomes] = useState([]);
+    const [isPlayingGlobal, setIsPlayingGlobal] = useState(false);
+    const [activeGlobalUri, setActiveGlobalUri] = useState(null);
+    const [globalSound, setGlobalSound] = useState(null);
+    const [showWelcomeMission, setShowWelcomeMission] = useState(false);
+    const [myGroups, setMyGroups] = useState([]);
 
     useFocusEffect(
         React.useCallback(() => {
             loadData();
             loadActiveUsers();
+            loadGlobalWelcomes();
+            loadMyGroups();
         }, [])
     );
 
@@ -55,10 +66,16 @@ export default function CommunityScreen() {
             .channel('community-updates')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'app_community_announcements' }, loadData)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'app_support_messages' }, loadData)
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'app_messages', filter: "challenge_id=eq.global-welcome" }, loadGlobalWelcomes)
             .subscribe();
 
-        return () => supabase.removeChannel(channel);
-    }, []);
+        return () => {
+            supabase.removeChannel(channel);
+            if (globalSound) {
+                globalSound.unloadAsync();
+            }
+        };
+    }, [globalSound]);
 
     const loadData = async () => {
         try {
@@ -91,10 +108,15 @@ export default function CommunityScreen() {
                 .limit(6);
             setActiveGroups(groupData || []);
 
-            // Get total member count
+            // Get total member count (excluding bots, test profiles, blank names)
             const { count } = await supabase
                 .from('app_users')
-                .select('*', { count: 'exact', head: true });
+                .select('*', { count: 'exact', head: true })
+                .not('display_name', 'is', null)
+                .neq('display_name', '')
+                .not('display_name', 'ilike', '%test%')
+                .not('display_name', 'ilike', '%NOAA%')
+                .not('display_name', 'ilike', '%bot%');
             setMemberCount(count || 0);
 
         } catch (error) {
@@ -109,49 +131,139 @@ export default function CommunityScreen() {
         }
     };
 
+    const loadGlobalWelcomes = async () => {
+        try {
+            const { data } = await supabase
+                .from('app_messages')
+                .select('*, sender:app_users(display_name, avatar_url)')
+                .eq('challenge_id', 'global-welcome')
+                .order('created_at', { ascending: false })
+                .limit(20);
+
+            // Filter to unique senders for the gallery
+            const unique = [];
+            const seen = new Set();
+            data?.forEach(msg => {
+                if (!seen.has(msg.sender_id)) {
+                    seen.add(msg.sender_id);
+                    unique.push(msg);
+                }
+            });
+
+            setGlobalWelcomes(unique);
+        } catch (e) {
+            console.error('Error loading global welcomes:', e);
+        }
+    };
+
+    const loadMyGroups = async () => {
+        if (!user) return;
+        const { data } = await supabase
+            .from('app_group_members')
+            .select('group_id, app_groups(id, name)')
+            .eq('user_id', user.id);
+
+        setMyGroups(data?.map(m => m.app_groups) || []);
+    };
+
+    const playGlobalGreeting = async (uri) => {
+        try {
+            if (globalSound) {
+                await globalSound.unloadAsync();
+                setGlobalSound(null);
+            }
+
+            if (activeGlobalUri === uri && isPlayingGlobal) {
+                setIsPlayingGlobal(false);
+                return;
+            }
+
+            const { sound } = await Audio.Sound.createAsync(
+                { uri },
+                { shouldPlay: true }
+            );
+
+            setGlobalSound(sound);
+            setActiveGlobalUri(uri);
+            setIsPlayingGlobal(true);
+
+            sound.setOnPlaybackStatusUpdate((status) => {
+                if (status.didJustFinish) {
+                    setIsPlayingGlobal(false);
+                    setActiveGlobalUri(null);
+                }
+            });
+        } catch (e) {
+            console.error('Error playing greeting:', e);
+        }
+    };
+
     const loadActiveUsers = async () => {
         try {
             // Fetch a much larger pool to show "everybody"
             const { data: usersData } = await supabase
                 .from('app_users')
-                .select('id, display_name, avatar_url, status_text, fluent_languages, learning_languages')
+                .select('id, display_name, avatar_url, status_text, fluent_languages, learning_languages, created_at')
                 .not('display_name', 'is', null)
                 .order('created_at', { ascending: false })
                 .limit(500);
 
             if (!usersData) return;
 
-            // Extract available languages dynamically
-            const allLangs = new Set();
-            usersData.forEach(u => {
-                if (u.learning_languages) {
-                    u.learning_languages.forEach(lang => allLangs.add(lang));
+            // --- FILTER NOAH DUPLICATES ---
+            // Only allow "Noah :)" and "Noah Android"
+            // We'll filter based on display_name patterns
+            const filteredUsers = usersData.filter(u => {
+                const name = u.display_name?.toLowerCase() || '';
+                if (name.includes('noah')) {
+                    // Allowed Noahs
+                    return name === 'noah :)' || name === 'noah android';
                 }
+                return true;
             });
-            setAvailableLanguages(Array.from(allLangs).sort());
 
-            // 1. Split into tiers
-            // Photos Tier: Google, Facebook, or .jpg/jpeg
-            const photos = usersData.filter(u => {
-                if (!u.avatar_url) return false;
-                const url = u.avatar_url.toLowerCase();
+            const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+            const now = new Date();
+
+            // 0. New Chefs (Joined in last 72 hours) - The VIP tier
+            const newChefs = filteredUsers.filter(u => {
+                if (!u.created_at) return false;
+                return (now - new Date(u.created_at)) < THREE_DAYS_MS;
+            });
+
+            const remaining = filteredUsers.filter(u => {
+                if (!u.created_at) return true;
+                return (now - new Date(u.created_at)) >= THREE_DAYS_MS;
+            });
+
+            // Helper to check if it's a "Real Photo"
+            const isRealPhoto = (avatarUrl) => {
+                if (!avatarUrl) return false;
+                const url = avatarUrl.toLowerCase();
                 return url.includes('.jpg') || url.includes('.jpeg') || url.includes('googleusercontent') || url.includes('fbsbx.com');
-            });
+            };
 
-            // Soup/Avatar Tier: .png or DiceBear or others with URLs
-            const soupAndAvatars = usersData.filter(u => {
-                if (!u.avatar_url) return false;
-                const url = u.avatar_url.toLowerCase();
-                return !url.includes('.jpg') && !url.includes('.jpeg') && !url.includes('googleusercontent') && !url.includes('fbsbx.com');
-            });
+            // 1. Split remaining into tiers
+            const photos = remaining.filter(u => isRealPhoto(u.avatar_url));
+            const soupAndAvatars = remaining.filter(u => u.avatar_url && !isRealPhoto(u.avatar_url));
+            const rest = remaining.filter(u => !u.avatar_url);
 
-            const rest = usersData.filter(u => !u.avatar_url);
+            // Also split NEW CHEFS by photos vs avatars for maximum VIP priority
+            const newChefsWithPhotos = newChefs.filter(u => isRealPhoto(u.avatar_url));
+            const newChefsOthers = newChefs.filter(u => !isRealPhoto(u.avatar_url));
 
             // 2. Shuffle each tier individually for constant randomization
             const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
 
-            // 3. Combine in priority order: Photos -> Soup/Avatars -> Rest
-            const finalSelection = [...shuffle(photos), ...shuffle(soupAndAvatars), ...shuffle(rest)];
+            // 3. Combine in priority order: 
+            // New Chefs (Photos) -> New Chefs (Others) -> Photos -> Soup/Avatars -> Rest
+            const finalSelection = [
+                ...shuffle(newChefsWithPhotos),
+                ...shuffle(newChefsOthers),
+                ...shuffle(photos),
+                ...shuffle(soupAndAvatars),
+                ...shuffle(rest)
+            ];
 
             setActiveUsers(finalSelection);
         } catch (error) {
@@ -200,72 +312,141 @@ export default function CommunityScreen() {
         <SafeAreaView style={styles.container} edges={['top']}>
             {/* Header */}
             <View style={styles.header}>
-                <Text style={styles.headerTitle}>Community Hub 🌍</Text>
+                <View style={styles.headerTop}>
+                    <Text style={styles.headerTitle}>Community Hub 🌍</Text>
+                </View>
+                {memberCount > 0 && (
+                    <View style={styles.heroSection}>
+                        <Text style={styles.heroNumber}>{memberCount}</Text>
+                        <Text style={styles.heroLabel}>soupers worldwide</Text>
+                    </View>
+                )}
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                {/* Global Welcome CTA & Gallery */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>🌍 The Soup Greetings</Text>
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.galleryContainer}
+                    >
+                        {/* Recording CTA Card */}
+                        <Pressable
+                            style={styles.recordGreetingCard}
+                            onPress={() => setShowWelcomeMission(true)}
+                        >
+                            <View style={styles.recordIconCircle}>
+                                <PlusCircle size={28} color="#fff" />
+                            </View>
+                            <Text style={styles.recordText}>Say Hello!</Text>
+                        </Pressable>
+
+                        {/* Greetings Gallery */}
+                        {globalWelcomes.map((item) => (
+                            <Pressable
+                                key={item.id}
+                                style={styles.greetingItem}
+                                onPress={() => playGlobalGreeting(item.media_url)}
+                            >
+                                <View style={styles.greetingAvatarContainer}>
+                                    <Image
+                                        source={getAvatarSource(item.sender?.avatar_url)}
+                                        style={styles.greetingAvatar}
+                                    />
+                                    <View style={styles.playOverlay}>
+                                        {(isPlayingGlobal && activeGlobalUri === item.media_url) ? (
+                                            <Pause size={14} color="#fff" fill="#fff" />
+                                        ) : (
+                                            <Play size={14} color="#fff" fill="#fff" />
+                                        )}
+                                    </View>
+                                </View>
+                                <Text style={styles.greetingName} numberOfLines={1}>
+                                    {item.sender?.display_name?.split(' ')[0]}
+                                </Text>
+                            </Pressable>
+                        ))}
+                    </ScrollView>
+                </View>
+
                 {/* The Soup Pot - Iconic Design */}
                 {activeUsers.length > 0 && (
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>🍜 The Soup</Text>
 
-                        {/* Language Filters */}
+                        {/* Sort/Filter Pills */}
                         <ScrollView
                             horizontal
                             showsHorizontalScrollIndicator={false}
                             contentContainerStyle={styles.filterContainer}
                         >
-                            <Pressable
-                                style={[styles.filterChip, !selectedLanguage && styles.filterChipActive]}
-                                onPress={() => setSelectedLanguage(null)}
-                            >
-                                <Text style={[styles.filterText, !selectedLanguage && styles.filterTextActive]}>All</Text>
-                            </Pressable>
-                            {availableLanguages.map(lang => (
+                            {[
+                                { key: 'all', label: 'All' },
+                                { key: 'az', label: 'A-Z' },
+                                { key: 'photo', label: '📸 Photo' },
+                                { key: 'avatar', label: '🍜 Soup Avatar' },
+                            ].map(opt => (
                                 <Pressable
-                                    key={lang}
-                                    style={[styles.filterChip, selectedLanguage === lang && styles.filterChipActive]}
-                                    onPress={() => setSelectedLanguage(lang)}
+                                    key={opt.key}
+                                    style={[styles.filterChip, sortMode === opt.key && styles.filterChipActive]}
+                                    onPress={() => setSortMode(sortMode === opt.key ? 'all' : opt.key)}
                                 >
-                                    <Text style={styles.filterEmoji}>{getLanguageFlag(lang)}</Text>
-                                    <Text style={[styles.filterText, selectedLanguage === lang && styles.filterTextActive]}>{lang}</Text>
+                                    <Text style={[styles.filterText, sortMode === opt.key && styles.filterTextActive]}>{opt.label}</Text>
                                 </Pressable>
                             ))}
                         </ScrollView>
 
                         {/* People Cards - Asymmetrical Grid */}
                         <View style={styles.pinterestGrid}>
-                            {(selectedLanguage
-                                ? activeUsers.filter(u => u.learning_languages?.includes(selectedLanguage))
-                                : activeUsers
-                            ).map((person, index) => (
-                                <Pressable
-                                    key={person.id}
-                                    style={styles.pinterestCard}
-                                    onPress={() => setSelectedUser(person)}
-                                >
-                                    {person.avatar_url && (
-                                        <Image
-                                            source={getAvatarSource(person.avatar_url)}
-                                            style={[
-                                                styles.cardImage,
-                                                { height: index % 3 === 0 ? 180 : index % 3 === 1 ? 220 : 150 }
-                                            ]}
-                                        />
-                                    )}
-                                    <View style={styles.cardContent}>
-                                        <Text style={styles.cardName}>{person.display_name}</Text>
-                                        {person.status_text && (
-                                            <Text style={styles.cardTagline} numberOfLines={3}>"{person.status_text}"</Text>
+                            {(() => {
+                                let filtered = [...activeUsers];
+                                if (sortMode === 'az') filtered.sort((a, b) => (a.display_name || '').localeCompare(b.display_name || ''));
+                                if (sortMode === 'photo') filtered = filtered.filter(u => u.avatar_url && !u.avatar_url.startsWith('soup://'));
+                                if (sortMode === 'avatar') filtered = filtered.filter(u => u.avatar_url?.startsWith('soup://'));
+                                return filtered.map((person, index) => (
+                                    <Pressable
+                                        key={person.id}
+                                        style={styles.pinterestCard}
+                                        onPress={() => setSelectedUser(person)}
+                                    >
+                                        {person.avatar_url && (
+                                            <Image
+                                                source={getAvatarSource(person.avatar_url)}
+                                                style={[
+                                                    styles.cardImage,
+                                                    { height: index % 3 === 0 ? 180 : index % 3 === 1 ? 220 : 150 }
+                                                ]}
+                                            />
                                         )}
-                                        <View style={styles.cardFlags}>
-                                            {person.learning_languages?.slice(0, 5).map((lang, i) => (
-                                                <Text key={i} style={styles.cardFlag}>{getLanguageFlag(lang)}</Text>
-                                            ))}
+                                        {(() => {
+                                            const isNew = person.created_at && (new Date() - new Date(person.created_at)) < (48 * 60 * 60 * 1000);
+                                            if (isNew) {
+                                                return (
+                                                    <View style={styles.newBadgeDiagonal}>
+                                                        <Text style={styles.newBadgeText}>NEW 🍲</Text>
+                                                    </View>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
+                                        <View style={styles.cardContent}>
+                                            <View style={styles.nameRow}>
+                                                <Text style={styles.cardName}>{person.display_name}</Text>
+                                            </View>
+                                            {person.status_text && (
+                                                <Text style={styles.cardTagline} numberOfLines={3}>"{person.status_text}"</Text>
+                                            )}
+                                            <View style={styles.cardFlags}>
+                                                {person.learning_languages?.slice(0, 5).map((lang, i) => (
+                                                    <Text key={i} style={styles.cardFlag}>{getLanguageFlag(lang)}</Text>
+                                                ))}
+                                            </View>
                                         </View>
-                                    </View>
-                                </Pressable>
-                            ))}
+                                    </Pressable>
+                                ));
+                            })()}
                         </View>
                     </View>
                 )}
@@ -321,6 +502,12 @@ export default function CommunityScreen() {
                 user={selectedUser}
                 onClose={() => setSelectedUser(null)}
             />
+
+            <WelcomeMissionModal
+                visible={showWelcomeMission}
+                onClose={() => setShowWelcomeMission(false)}
+                groups={myGroups}
+            />
         </SafeAreaView>
     );
 }
@@ -337,15 +524,43 @@ const styles = StyleSheet.create({
     },
     header: {
         paddingHorizontal: 20,
-        paddingVertical: 12,
-        backgroundColor: '#fff',
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0,0,0,0.05)',
+        paddingTop: 16,
+        paddingBottom: 20,
+        backgroundColor: SOUP_COLORS.blue,
+        borderBottomLeftRadius: 24,
+        borderBottomRightRadius: 24,
+    },
+    headerTop: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
     },
     headerTitle: {
-        fontSize: 24,
+        fontSize: 22,
         fontWeight: '800',
-        color: SOUP_COLORS.text,
+        color: '#fff',
+    },
+    headerSubtitle: {
+        fontSize: 14,
+        fontWeight: '500',
+        color: 'rgba(255,255,255,0.8)',
+        marginTop: 2,
+    },
+    heroSection: {
+        alignItems: 'center',
+        marginTop: 8,
+    },
+    heroNumber: {
+        fontSize: 52,
+        fontWeight: '900',
+        color: '#fff',
+        letterSpacing: -2,
+    },
+    heroLabel: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: 'rgba(255,255,255,0.85)',
+        marginTop: -6,
     },
     scrollContent: {
         paddingBottom: 100,
@@ -667,20 +882,21 @@ const styles = StyleSheet.create({
     filterChip: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 14,
+        justifyContent: 'center',
+        paddingHorizontal: 10,
         paddingVertical: 8,
         borderRadius: 20,
         backgroundColor: '#fff',
-        borderWidth: 1,
-        borderColor: 'rgba(0,0,0,0.1)',
-        gap: 6,
+        borderWidth: 1.5,
+        borderColor: 'rgba(0,0,0,0.08)',
+        minWidth: 40,
     },
     filterChipActive: {
         backgroundColor: SOUP_COLORS.blue,
         borderColor: SOUP_COLORS.blue,
     },
     filterEmoji: {
-        fontSize: 16,
+        fontSize: 18,
     },
     filterText: {
         fontSize: 14,
@@ -722,7 +938,33 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '700',
         color: SOUP_COLORS.text,
+    },
+    nameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
         marginBottom: 6,
+    },
+    newBadgeDiagonal: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        backgroundColor: SOUP_COLORS.red,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderBottomRightRadius: 16,
+        zIndex: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        elevation: 5,
+    },
+    newBadgeText: {
+        color: '#fff',
+        fontSize: 11,
+        fontWeight: '900',
+        letterSpacing: 0.5,
     },
     cardTagline: {
         fontSize: 13,
@@ -738,6 +980,79 @@ const styles = StyleSheet.create({
     },
     cardFlag: {
         fontSize: 18,
+    },
+
+    // Gallery / Welcome Wall Styles
+    galleryContainer: {
+        paddingLeft: 16,
+        paddingRight: 16,
+        paddingBottom: 8,
+        gap: 16,
+    },
+    recordGreetingCard: {
+        width: 100,
+        height: 120,
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: SOUP_COLORS.pink,
+        borderStyle: 'dashed',
+        gap: 8,
+    },
+    recordIconCircle: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: SOUP_COLORS.pink,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    recordText: {
+        fontSize: 12,
+        fontWeight: '800',
+        color: SOUP_COLORS.pink,
+    },
+    greetingItem: {
+        width: 100,
+        alignItems: 'center',
+        gap: 8,
+    },
+    greetingAvatarContainer: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        padding: 4,
+        backgroundColor: '#fff',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    greetingAvatar: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 36,
+    },
+    playOverlay: {
+        position: 'absolute',
+        bottom: 0,
+        right: 0,
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: SOUP_COLORS.blue,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#fff',
+    },
+    greetingName: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: SOUP_COLORS.text,
     },
 });
 

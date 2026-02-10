@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Dimensions, PanResponder } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Dimensions, Image } from 'react-native';
 import { Audio } from 'expo-av';
-import { Mic, Play, Pause, Trash2, Send } from 'lucide-react-native';
+import { Mic, Play, Pause, Trash2, Send, Volume2 } from 'lucide-react-native';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { LiveAudioWaveform } from './LiveAudioWaveform';
-
-import { Lightbulb } from 'lucide-react-native';
-import { InspirationModal } from './InspirationModal';
+import { supabase } from '../lib/supabase';
 
 const SOUP_COLORS = {
     cream: '#FDF5E6',
@@ -16,6 +14,8 @@ const SOUP_COLORS = {
 };
 
 const WAVEFORM_BARS = 30;
+
+
 
 export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
     const {
@@ -27,10 +27,135 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
     } = useVoiceRecorder();
 
     const [recordedUri, setRecordedUri] = useState(null);
-    const [finalDuration, setFinalDuration] = useState(0); // in seconds
+    const [finalDuration, setFinalDuration] = useState(0);
     const [sound, setSound] = useState(null);
     const [isPlaying, setIsPlaying] = useState(false);
-    const [showInspiration, setShowInspiration] = useState(false);
+
+    const ttsSoundRef = useRef(null); // Ref to track TTS sound for cleanup
+
+    // Audio Cache for TTS (Vocab & Phrases)
+    const [audioCache, setAudioCache] = useState({});
+
+    // Inline ingredients state
+    const [hints, setHints] = useState(challenge?.metadata || null);
+    const [hintsLoading, setHintsLoading] = useState(false);
+
+    // Prefetch Helper (Speeds up loading)
+    const prefetchAudio = async (text) => {
+        if (!text || audioCache[text]) return;
+        try {
+            const { data } = await supabase.functions.invoke('voice-feedback', {
+                body: { text, task: 'pronunciation', language: groupName || 'Multilingual' }
+            });
+            if (data?.pronunciationUrl) {
+                setAudioCache(prev => ({ ...prev, [text]: data.pronunciationUrl }));
+            }
+        } catch (e) {
+            // Silent fail on prefetch is fine
+        }
+    };
+
+    // Auto-generate hints on mount & Save to DB
+    useEffect(() => {
+        // If we already have hints, prefetch their audio immediately
+        if (hints?.starter_phrase) {
+            prefetchAudio(hints.starter_phrase);
+            hints.vocab_bank?.forEach(v => prefetchAudio(v.word));
+            return;
+        }
+
+        const generate = async () => {
+            setHintsLoading(true);
+            try {
+                const promptText = challenge?.prompt_text;
+                if (!promptText) return;
+
+                const { data, error } = await supabase.functions.invoke('voice-feedback', {
+                    body: { task: 'generate_hints', prompt: promptText, language: groupName || 'Target Language', challengeId: challenge?.id }
+                });
+
+                if (error) throw error;
+
+                if (data?.starter_phrase) {
+                    setHints(data);
+
+                    // SAVE TO SUPABASE (Persistence)
+                    // This prevents "reloading" next time
+                    await supabase.from('challenges')
+                        .update({ metadata: data })
+                        .eq('id', challenge.id);
+
+                    // PREFETCH AUDIO (Speed)
+                    prefetchAudio(data.starter_phrase);
+                    data.vocab_bank?.forEach(v => prefetchAudio(v.word));
+                }
+            } catch (e) {
+                console.error('Hint generation error:', e);
+            } finally {
+                setHintsLoading(false);
+            }
+        };
+        generate();
+    }, [challenge?.id]);
+
+    // TTS pronunciation via OpenAI (Phrases only)
+    const [speakingWord, setSpeakingWord] = useState(null);
+
+    // Unified TTS Handler (OpenAI with Cache)
+    const playTts = async (text) => {
+        if (!text) return;
+
+        // Stop any previous audio
+        if (ttsSoundRef.current) {
+            await ttsSoundRef.current.unloadAsync();
+            ttsSoundRef.current = null;
+        }
+
+        setSpeakingWord(text);
+
+        try {
+            let audioUrl = audioCache[text];
+
+            // If not cached, fetch from OpenAI
+            if (!audioUrl) {
+                const { data, error } = await supabase.functions.invoke('voice-feedback', {
+                    body: { text, task: 'pronunciation', language: groupName || 'Multilingual' }
+                });
+
+                if (error || !data?.pronunciationUrl) throw new Error('No audio generated');
+
+                audioUrl = data.pronunciationUrl;
+                setAudioCache(prev => ({ ...prev, [text]: audioUrl }));
+            }
+
+            // Critical: switch directly to playback mode
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: false,
+                playsInSilentModeIOS: true,
+            });
+
+            const { sound: ttsSound } = await Audio.Sound.createAsync(
+                { uri: audioUrl },
+                { shouldPlay: true }
+            );
+            ttsSoundRef.current = ttsSound;
+
+            ttsSound.setOnPlaybackStatusUpdate((status) => {
+                if (status.didJustFinish) {
+                    ttsSound.unloadAsync();
+                    if (ttsSoundRef.current === ttsSound) ttsSoundRef.current = null;
+                    setSpeakingWord(null);
+                }
+            });
+
+        } catch (e) {
+            console.error('TTS error:', e);
+            setSpeakingWord(null);
+        }
+    };
+
+    // 2. High-Quality OpenAI TTS for Phrase (Phenomenal)
+
 
     // Playback Progress
     const [playbackPosition, setPlaybackPosition] = useState(0);
@@ -48,7 +173,45 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
         };
     }, [sound]);
 
+    // Community Bubbles Logic
+    const [communityBubbles, setCommunityBubbles] = useState([]);
+    useEffect(() => {
+        const fetchCommunity = async () => {
+            // Fetch recent active users with avatars
+            const { data } = await supabase
+                .from('app_users')
+                .select('avatar_url')
+                .not('avatar_url', 'is', null)
+                .order('created_at', { ascending: false })
+                .limit(50);
+
+            if (data && data.length > 0) {
+                // 1. STRICTLY Real Photos (Filter like community tab: jpg, jpeg, google, fab)
+                const realPhotos = data.filter(u => {
+                    const url = u.avatar_url?.toLowerCase();
+                    return url && (url.includes('.jpg') || url.includes('.jpeg') || url.includes('googleusercontent') || url.includes('fbsbx.com'));
+                });
+
+                // Pick 7 random photos for a neat row
+                const shuffled = realPhotos.sort(() => 0.5 - Math.random()).slice(0, 7);
+                setCommunityBubbles(shuffled); // Just store user objects
+            }
+        };
+        fetchCommunity();
+    }, []);
+
     const handleRecordPress = async () => {
+        // STOP ALL AUDIO before recording to prevent "Retry failed" errors
+        if (ttsSoundRef.current) {
+            await ttsSoundRef.current.unloadAsync();
+            ttsSoundRef.current = null;
+        }
+        if (sound) {
+            await sound.unloadAsync();
+            setSound(null);
+            setIsPlaying(false);
+        }
+
         if (isRecording) {
             // Capture current duration as fallback before stopping (which resets it)
             const fallbackDuration = recordingDuration;
@@ -185,14 +348,60 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
                     })()}
                 </View>
 
-                {/* Inspiration Button (Always Visible) */}
-                <Pressable
-                    style={[styles.inspirationButton, { marginTop: 24, marginBottom: 0 }]}
-                    onPress={() => setShowInspiration(true)}
-                >
-                    <Lightbulb size={18} color="#FFF" />
-                    <Text style={styles.inspirationText}>Need some ingredients?</Text>
-                </Pressable>
+                {/* Inline Ingredients */}
+                {hintsLoading && (
+                    <View style={styles.hintsLoading}>
+                        <ActivityIndicator size="small" color="rgba(255,255,255,0.8)" />
+                        <Text style={styles.hintsLoadingText}>Grabbing ingredients...</Text>
+                    </View>
+                )}
+                {!hintsLoading && hints?.starter_phrase && (
+                    <View style={styles.hintsContainer}>
+                        <Text style={styles.hintsLabel}>BEGINNER PHRASE:</Text>
+                        <Pressable
+                            style={[styles.starterPhraseCard, speakingWord === hints.starter_phrase && styles.speakingActive]}
+                            onPress={() => playTts(hints.starter_phrase)}
+                        >
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.starterPhrase}>"{hints.starter_phrase}"</Text>
+                                <Text style={styles.starterTranslation}>
+                                    {hints.starter_phrase_translation || 'Tap to hear it'}
+                                </Text>
+                            </View>
+                            <View style={styles.playCircle}>
+                                {speakingWord === hints.starter_phrase ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Volume2 size={20} color="#fff" />
+                                )}
+                            </View>
+                        </Pressable>
+                        {hints.vocab_bank?.length > 0 && (
+                            <>
+                                <Text style={[styles.hintsLabel, { marginTop: 10 }]}>ADVANCED VOCAB:</Text>
+                                <View style={styles.vocabRow}>
+                                    {hints.vocab_bank.map((item, i) => (
+                                        <Pressable
+                                            key={i}
+                                            style={[styles.vocabPill, speakingWord === item.word && styles.speakingActive]}
+                                            onPress={() => playTts(item.word)}
+                                        >
+                                            <View style={styles.vocabIconContainer}>
+                                                {speakingWord === item.word ? (
+                                                    <ActivityIndicator size="small" color="#fff" />
+                                                ) : (
+                                                    <Volume2 size={14} color="rgba(255,255,255,0.6)" />
+                                                )}
+                                            </View>
+                                            <Text style={styles.vocabWord}>{item.word}</Text>
+                                            <Text style={styles.vocabTranslation}>{item.translation}</Text>
+                                        </Pressable>
+                                    ))}
+                                </View>
+                            </>
+                        )}
+                    </View>
+                )}
             </View>
 
             {/* Interaction Area */}
@@ -270,6 +479,19 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
                 ) : (
                     // RECORD MODE
                     <View style={styles.recordContainer}>
+                        {/* Peeking Community Row */}
+                        {!isRecording && communityBubbles.length > 0 && (
+                            <View style={styles.peekingRow} pointerEvents="none">
+                                {communityBubbles.map((user, i) => (
+                                    <Image
+                                        key={i}
+                                        source={{ uri: user.avatar_url }}
+                                        style={[styles.peekingAvatar, { zIndex: i }]}
+                                    />
+                                ))}
+                            </View>
+                        )}
+
                         {isRecording && (
                             <View style={styles.waveformContainer}>
                                 <LiveAudioWaveform
@@ -301,13 +523,7 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
                     </View>
                 )}
             </View>
-            <InspirationModal
-                visible={showInspiration}
-                onClose={() => setShowInspiration(false)}
-                metadata={challenge?.metadata}
-                language={groupName}
-            />
-        </View >
+        </View>
     );
 }
 
@@ -322,11 +538,10 @@ const styles = StyleSheet.create({
     card: {
         flex: 1,
         justifyContent: 'space-between',
-        padding: 24,
-        paddingBottom: 60, // More bottom padding for immersive feel
-        width: Dimensions.get('window').width, // Full width
-        backgroundColor: 'transparent', // Transparent for immersive
-        // Removed shadows and margins
+        padding: 16, // Reduced from 24
+        paddingBottom: 40, // Reduced from 60
+        width: Dimensions.get('window').width,
+        backgroundColor: 'transparent',
     },
     promptContainer: {
         flex: 1,
@@ -334,12 +549,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     groupName: {
-        fontSize: 16,
+        fontSize: 14, // Reduced from 16
         fontWeight: '600',
-        color: 'rgba(255, 255, 255, 0.9)', // White-ish
+        color: 'rgba(255, 255, 255, 0.9)',
         textTransform: 'uppercase',
         letterSpacing: 2,
-        marginBottom: 32,
+        marginBottom: 16, // Reduced from 32
     },
     inspirationButton: {
         flexDirection: 'row',
@@ -357,41 +572,40 @@ const styles = StyleSheet.create({
         fontSize: 14,
     },
     promptText: {
-        fontSize: 34, // Larger
+        fontSize: 28, // Reduced from 34
         fontWeight: '800',
-        color: '#fff', // White
+        color: '#fff',
         textAlign: 'center',
-        lineHeight: 42,
-        // Stronger shadow for legibility on all colors
+        lineHeight: 34, // Reduced from 42
         textShadowColor: 'rgba(0, 0, 0, 0.2)',
         textShadowOffset: { width: 0, height: 2 },
         textShadowRadius: 6,
     },
     secondaryPrompt: {
-        fontSize: 22,
+        fontSize: 20, // Reduced from 22
         fontWeight: '600',
         color: 'rgba(255, 255, 255, 0.8)',
-        marginTop: 16,
-        lineHeight: 30,
+        marginTop: 12, // Reduced from 16
+        lineHeight: 26,
         textShadowColor: 'rgba(0, 0, 0, 0.2)',
         textShadowOffset: { width: 0, height: 2 },
         textShadowRadius: 6,
     },
     actionContainer: {
-        minHeight: 180,
+        minHeight: 140, // Reduced from 180
         justifyContent: 'center',
         alignItems: 'center',
     },
     recordContainer: {
         alignItems: 'center',
-        gap: 16,
+        gap: 12, // Reduced from 16
         width: '100%',
     },
     recordButton: {
-        width: 96,
-        height: 96,
-        borderRadius: 48,
-        backgroundColor: '#fff', // White button for contrast
+        width: 80, // Reduced from 96
+        height: 80, // Reduced from 96
+        borderRadius: 40,
+        backgroundColor: '#fff',
         justifyContent: 'center',
         alignItems: 'center',
         shadowColor: '#000',
@@ -405,34 +619,34 @@ const styles = StyleSheet.create({
         transform: [{ scale: 1.1 }],
     },
     stopIcon: {
-        width: 28,
-        height: 28,
+        width: 24,
+        height: 24,
         borderRadius: 4,
         backgroundColor: 'white',
     },
     hintText: {
-        fontSize: 16,
-        color: 'rgba(255, 255, 255, 0.8)', // Lighter
+        fontSize: 14, // Reduced from 16
+        color: 'rgba(255, 255, 255, 0.8)',
         fontWeight: '600',
-        marginTop: 8,
+        marginTop: 4,
     },
     waveformContainer: {
-        height: 40,
-        marginBottom: 10,
+        height: 32, // Reduced from 40
+        marginBottom: 8,
         alignItems: 'center',
         justifyContent: 'center',
     },
     scrubberContainer: {
         width: '100%',
         alignItems: 'center',
-        paddingVertical: 10,
+        paddingVertical: 8,
     },
     staticWaveform: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         gap: 4,
-        height: 48,
+        height: 40,
         width: '100%',
     },
     waveBar: {
@@ -440,36 +654,36 @@ const styles = StyleSheet.create({
         borderRadius: 2,
     },
     timerText: {
-        fontSize: 14,
-        color: 'white', // White timer
+        fontSize: 13,
+        color: 'white',
         fontWeight: '700',
-        marginTop: 8,
+        marginTop: 4,
         textAlign: 'center',
         fontVariant: ['tabular-nums'],
     },
     reviewContainer: {
         width: '100%',
         alignItems: 'center',
-        gap: 20,
+        gap: 16,
     },
     playbackControls: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 24,
+        gap: 20,
     },
     controlButton: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
+        width: 48, // Reduced
+        height: 48,
+        borderRadius: 24,
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: '#F5F5F5',
     },
     playButton: {
-        width: 72,
-        height: 72,
-        borderRadius: 36,
+        width: 64, // Reduced
+        height: 64,
+        borderRadius: 32,
         backgroundColor: '#E6F7FD',
         borderWidth: 2,
         borderColor: SOUP_COLORS.turquoise,
@@ -481,8 +695,118 @@ const styles = StyleSheet.create({
         backgroundColor: '#FFF0F0',
     },
     reviewText: {
-        fontSize: 14,
+        fontSize: 13,
         color: '#999',
         fontWeight: '600',
+    },
+    // Inline Ingredients
+    hintsLoading: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        marginTop: 12,
+        paddingVertical: 8,
+    },
+    hintsLoadingText: {
+        color: 'rgba(255,255,255,0.8)',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    hintsContainer: {
+        marginTop: 12, // Reduced
+        marginBottom: 8,
+        gap: 6,
+        width: '100%',
+        alignItems: 'center',
+    },
+    starterPhraseCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        borderRadius: 12,
+        padding: 12,
+        gap: 10,
+        width: '100%',
+    },
+    playCircle: {
+        width: 36, // Reduced from 44
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,255,255,0.25)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    speakingActive: {
+        backgroundColor: 'rgba(255,255,255,0.3)',
+    },
+    hintsLabel: {
+        fontSize: 10, // Reduced
+        fontWeight: '700',
+        color: 'rgba(255,255,255,0.6)',
+        letterSpacing: 1,
+        marginBottom: 2,
+        alignSelf: 'flex-start',
+    },
+    starterPhrase: {
+        fontSize: 16, // Reduced
+        fontWeight: '700',
+        color: '#fff',
+        lineHeight: 22,
+    },
+    starterTranslation: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.7)',
+        marginTop: 2,
+        fontStyle: 'italic',
+    },
+    vocabRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+        justifyContent: 'center',
+    },
+    vocabPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.12)',
+        paddingRight: 12,
+        paddingLeft: 4, // Reduce left padding since container has width
+        paddingVertical: 6,
+        borderRadius: 16,
+        gap: 4,
+    },
+    vocabIconContainer: {
+        width: 24,
+        height: 24,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    vocabWord: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#fff',
+    },
+    vocabTranslation: {
+        fontSize: 11,
+        color: 'rgba(255,255,255,0.7)',
+    },
+    // Peeking Row
+    peekingRow: {
+        position: 'absolute',
+        bottom: -60, // Moved down further
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        justifyContent: 'center',
+        width: '100%',
+        height: 60,
+    },
+    peekingAvatar: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.2)',
+        marginLeft: -10, // Overlap
     },
 });
