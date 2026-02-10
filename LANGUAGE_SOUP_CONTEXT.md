@@ -256,6 +256,7 @@
 - No surprises
 
 **Rules:**
+- **Customer issues ALWAYS come first.** Open tickets > planned features.
 - Don't over-engineer. Simple > clever.
 - One bug/feature per day is the pace.
 - Ask questions first, code second.
