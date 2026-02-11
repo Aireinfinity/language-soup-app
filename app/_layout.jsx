@@ -75,6 +75,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="status-page" />
                 <Stack.Screen name="login-callback" />
                 <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="chat/[id]" options={{ animation: 'default' }} />
                 <Stack.Screen name="onboarding/avatar" />
                 <Stack.Screen name="onboarding/conversational" />
                 <Stack.Screen name="onboarding/learning" />

@@ -1,6 +1,6 @@
 # Language Soup - Founder Context
 
-> Last updated: 2026-02-10 (AI TTS Reversion + Performance Fixes)
+> Last updated: 2026-02-11 (Daily challenge UX, playback, chat tap fix)
 
 ## 🍲 What is Language Soup?
 
@@ -35,6 +35,14 @@
 - **Solution:** Zero-friction Pop-up Queue. Always fresh (0 backlog).
 - **Vibe:** Digital Pop Realism (White UI, Solid Colors).
 - **Goal:** Solve Retention by making the daily habit unmissable and low-stress.
+
+**Recent fixes (Feb 11):**
+- **Completion screen:** No more "All caught up" / "Good Soup" — now celebratory titles + rotating button ("get soupy", "explore language soup", "check out the group chat", etc.).
+- **Voice memo playback:** Challenge flow playback uses speaker + full volume (normal phone volume).
+- **Beginner phrase:** Hints prompt now asks for one short sentence (e.g. "My perfect weekend is spending time with friends"), not long paragraphs.
+- **Advanced vocab TTS:** Prompt clarified so `vocab_bank` word = target language, translation = English (fixes wrong word spoken).
+- **Unread from self:** When user sends (challenge or chat), we update `last_read_at` for that group so it never shows as unread from their own message.
+- **Group chat tap "nothing happens":** Guard for missing group id + alert; haptics wrapped in try/catch; chat route explicitly in root Stack; chat screen shows "couldn't be loaded" + Go back if groupId missing.
 
 ---
 

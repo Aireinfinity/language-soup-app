@@ -1,24 +1,22 @@
-# Language Soup Dashboard 🍜
+# Language Soup App (Expo) 🍜
 
-The admin dashboard for the Language Soup app.
+This folder contains the **main Language Soup user app**, built with **Expo + React Native**.
 
-## Deployment Configuration 🚀
+## What lives here
 
-This project is deployed on **Vercel**.
+- The mobile app that users install on **iOS** and **Android** (and optionally run on web).
+- Screens, components, and logic for challenges, groups, and day-to-day usage.
+- Expo/EAS configuration and scripts for starting the app and running builds.
 
-### Important: Vercel Configuration (`vercel.json`)
-The `vercel.json` file controls the build settings.
+## How it connects
 
-**CRITICAL RULE:**
-Do **NOT** add an `ignoreCommand` that filters by directory (e.g., `git diff ... ./src`).
-*   **Why?** Dependency updates (in `package.json` or `package-lock.json`) happen *outside* the `src` folder.
-*   **Result:** If you filter by `./src`, dependency updates will be **ignored** by Vercel, leading to broken builds (e.g., React version mismatches).
-*   **Current Setup:** We removed the `ignoreCommand` intentionally so that **EVERY** push triggers a build check. This is safer and ensures dependencies are always synced.
+- Talks directly to **Supabase** for users, groups, messages, and more.
+- Works alongside:
+  - The web admin dashboard in `code/app-dashboard`.
+  - The marketing website in `code/website`.
 
-### Environment Variables
-Required in Vercel Project Settings:
-*   `VITE_SUPABASE_URL`: Your Supabase URL
-*   `VITE_SUPABASE_ANON_KEY`: Your Supabase Anon Key
+## Deployment (high level)
 
-(Without these, the app will crash on load).
-Deployment heart-check at Tue Jan 13 01:33:08 CET 2026
+- Local development and previews are run with **Expo**.
+- Production builds for iOS/Android are created via **EAS** (Expo Application Services).
+

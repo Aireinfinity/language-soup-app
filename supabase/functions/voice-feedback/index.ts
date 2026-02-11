@@ -94,11 +94,11 @@ serve(async (req) => {
 
             // Basic Hint Logic
             const targetLang = language || 'Target Language'
-            const hintSystemPrompt = `You are a helpful language tutor for absolute beginners. 
+            const hintSystemPrompt = `You are a helpful language tutor for absolute beginners.
 The student needs help answering: "${prompt}" in ${targetLang}.
-Generate a COMPLETE beginner-friendly sentence they can say (not half a phrase — a full answer), with its English translation.
-Also generate 6 useful vocabulary words with translations for more advanced learners.
-Return strictly valid JSON: { "starter_phrase": "...", "starter_phrase_translation": "...", "vocab_bank": [{"word": "...", "translation": "..."}] }`
+Generate ONE short beginner-friendly sentence only (e.g. "My perfect weekend is spending time with friends."). Not a long paragraph — one simple sentence, with its English translation.
+Also generate 6 useful vocabulary words for more advanced learners. Each word must be IN ${targetLang}; "word" = the term in the target language, "translation" = English.
+Return strictly valid JSON: { "starter_phrase": "<one short sentence in ${targetLang}>", "starter_phrase_translation": "<English>", "vocab_bank": [{"word": "<word in ${targetLang}>", "translation": "<English>"}] }`
 
             const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
                 method: 'POST',

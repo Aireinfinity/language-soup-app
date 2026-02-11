@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, RefreshControl, Text, Image, Platform, Alert } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -50,6 +50,7 @@ export default function HomeScreen() {
     const [pendingChallenges, setPendingChallenges] = useState([]);
     const [showChallengeQueue, setShowChallengeQueue] = useState(false);
     const [showOnboardingMission, setShowOnboardingMission] = useState(false);
+    const hasAutoShownQueueThisSession = useRef(false);
 
     useFocusEffect(
         useCallback(() => {
@@ -127,7 +128,7 @@ export default function HomeScreen() {
 
             const { data: challenges } = await supabase
                 .from('app_challenges')
-                .select('*')
+                .select('*, app_groups(name, language)')
                 .in('group_id', groupIds)
                 .gt('created_at', weekAgo.toISOString())
                 .order('created_at', { ascending: false });
@@ -146,10 +147,30 @@ export default function HomeScreen() {
                 .in('challenge_id', challengeIds);
 
             const completedSet = new Set(completions?.map(c => c.challenge_id));
-            const pending = challenges.filter(c => !completedSet.has(c.id));
+            const uncompleted = challenges
+                .filter(c => !completedSet.has(c.id))
+                .map(c => ({
+                    ...c,
+                    group_name: c.app_groups?.name || c.app_groups?.language || 'Group'
+                }));
+            // One pending per group: keep only the latest (most recent) uncompleted challenge per group.
+            const latestByGroup = new Map();
+            uncompleted.forEach(c => {
+                const existing = latestByGroup.get(c.group_id);
+                if (!existing || new Date(c.created_at) > new Date(existing.created_at)) {
+                    latestByGroup.set(c.group_id, c);
+                }
+            });
+            const pending = Array.from(latestByGroup.values()).sort(
+                (a, b) => new Date(b.created_at) - new Date(a.created_at)
+            );
 
             setPendingChallenges(pending);
-            // Optionally auto-show if high priority? No, let user open queue.
+            // Auto-prompt once per app session when there are pending challenges (e.g. challenge dropped while away).
+            if (pending.length > 0 && !hasAutoShownQueueThisSession.current) {
+                hasAutoShownQueueThisSession.current = true;
+                setShowChallengeQueue(true);
+            }
         } catch (error) {
             console.error('Error checking pending challenges:', error);
         }
@@ -435,8 +456,11 @@ export default function HomeScreen() {
             <Pressable
                 style={styles.groupItem}
                 onPress={() => {
-                    haptics.light();
-                    console.log('Navigating to chat:', item.id);
+                    if (!item?.id) {
+                        Alert.alert('Couldn\'t open chat', 'This group couldn\'t be opened. Please try again or pull to refresh.');
+                        return;
+                    }
+                    try { haptics.light(); } catch (_) {}
                     // Optimistically clear the badge immediately
                     setGroups(prev => prev.map(g =>
                         g.id === item.id ? { ...g, unreadCount: 0 } : g

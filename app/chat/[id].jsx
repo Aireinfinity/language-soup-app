@@ -589,6 +589,8 @@ export default function ChatScreen() {
                 content: messageText,
             }).select().single();
             if (error) throw error;
+            // Mark group as read so we never show unread from our own message
+            await supabase.from('app_group_members').update({ last_read_at: new Date().toISOString() }).eq('user_id', user.id).eq('group_id', groupId);
             setMessages((prev) => prev.map((msg) => (msg.id === tempId ? { ...data, sender: optimisticMessage.sender } : msg)));
 
             // Complete quest for first text message
@@ -713,6 +715,8 @@ export default function ChatScreen() {
                 throw insertError;
             }
             console.log('✅ [VOICE] Database insert successful:', data);
+            // Mark group as read so we never show unread from our own message
+            await supabase.from('app_group_members').update({ last_read_at: new Date().toISOString() }).eq('user_id', user.id).eq('group_id', groupId);
 
             setMessages((prev) => prev.map((msg) => (msg.id === tempId ? { ...data, sender: optimisticMessage.sender } : msg)));
             console.log('🎉 [VOICE] Voice memo sent successfully!');
@@ -872,6 +876,19 @@ export default function ChatScreen() {
 
 
     const messagesWithDates = [...addDateSeparators(messages)].reverse();
+
+    if (!groupId) {
+        return (
+            <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
+                <Text style={{ fontSize: 16, color: Colors.text, textAlign: 'center', marginBottom: 16 }}>
+                    This chat couldn&apos;t be loaded. The group may be invalid or you may need to refresh.
+                </Text>
+                <Pressable onPress={() => router.back()} style={{ paddingVertical: 12, paddingHorizontal: 24, backgroundColor: Colors.primary, borderRadius: 12 }}>
+                    <Text style={{ color: '#fff', fontWeight: '600' }}>Go back</Text>
+                </Pressable>
+            </SafeAreaView>
+        );
+    }
 
     if (loading) {
         return (

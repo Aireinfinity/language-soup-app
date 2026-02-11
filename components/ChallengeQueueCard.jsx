@@ -136,7 +136,7 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
 
             const { sound: ttsSound } = await Audio.Sound.createAsync(
                 { uri: audioUrl },
-                { shouldPlay: true }
+                { shouldPlay: true, volume: 1.0 }
             );
             ttsSoundRef.current = ttsSound;
 
@@ -246,10 +246,16 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
                     setIsPlaying(true);
                 }
             } else {
-                // Load sound
+                // Use speaker and full volume so playback is audible (like normal phone volume)
+                await Audio.setAudioModeAsync({
+                    allowsRecordingIOS: false,
+                    playsInSilentModeIOS: true,
+                    staysActiveInBackground: false,
+                    shouldDuckAndroid: false,
+                });
                 const { sound: newSound } = await Audio.Sound.createAsync(
                     { uri: recordedUri },
-                    { shouldPlay: true }
+                    { shouldPlay: true, volume: 1.0 }
                 );
 
                 newSound.setOnPlaybackStatusUpdate((status) => {
