@@ -18,6 +18,8 @@ Quick log of support-style fixes and user-reported issues. Update when you ship 
 | 4 | Android: White bars on bottom nav | ✅ FIXED (Needs Rebuild) | 1 |
 | 5 | Android: Input field hidden when typing | ✅ FIXED (Needs Rebuild) | 1 |
 | 7 | iOS: Input bar too high above keyboard | ✅ FIXED | 1 |
+| 8 | Persistent "all done" banner on refresh (Hamza) | ✅ FIXED (DM sent to Hamza) | 1 |
+| 9 | Group chat not loading when tapping (Julian) | ✅ FIXED (confirm when back) | 1 |
 
 ### ⚠️ CONFIRM IF FIXED (Test Before Build)
 
@@ -76,8 +78,30 @@ Bundle these into an EAS Update (or Store Build for native changes) immediately.
 - Group chat tap "nothing happens": guards, haptics try/catch, chat route in Stack, error screen if groupId missing
 
 **What to tell users (chill / WhatsApp vibe):**
-- **All done popping up:** "we fixed the bug where the completion screen kept showing — should be in the next update"
-- **Group chat tap:** "hey, we pushed a fix for the group chat tap thing — update the app and try again. if it still does nothing, pull down to refresh on the home screen and tap the group again. lmk if it's still acting up and which group/phone you're on"
+- **All done popping up (Hamza):** "we fixed the bug where the completion screen kept showing — should be in the next update" — ✅ sent
+- **Group chat tap (Julian):** "hey, we pushed a fix for the group chat tap thing — update the app and try again. if it still does nothing, pull down to refresh on the home screen and tap the group again. lmk if it's still acting up and which group/phone you're on"
+
+---
+
+## When you're back (after lunch) 🍜
+
+1. **Ticket Blitz bundle & push**  
+   Finish this doc, then bundle into one EAS build and push the update.
+
+2. **Confirm daily challenge flow**  
+   - Notification goes out when challenges drop.  
+   - Open app → challenge pop-up shows (even if you missed the notification and open late that day).  
+   - Do your challenges; flow feels right.  
+   - Any group chats looking right.
+
+3. **Test new-user activation flow (Test button)**  
+   - Simulate: new user, just signed up, on Your Soup page waiting for first challenge.  
+   - Pop-up: welcome message from everybody + send your own first little challenge to get activated → then ready for next challenge.  
+   - Confirm Test button triggers that flow.  
+   - Then test as a real user to make sure we can activate people.
+
+4. **Finish DM feature**  
+   Simple wrap-up on the DM feature you had in progress.
 
 ---
 
@@ -108,3 +132,11 @@ Bundle these into an EAS Update (or Store Build for native changes) immediately.
 - **When a user reports something:** add a short line under "Open / to triage".
 - **When you ship a fix:** update the table status, add to "What to tell users" if needed, DM using the template.
 - **Ticket blitz:** work down the list, fix, ship, tell the user, then mark shipped.
+
+---
+
+## Git (so the AI can push for you)
+
+- **Push from Cursor:** In Cursor, open Source Control (sidebar or `Cmd+Shift+G`), commit if needed, then click the "..." menu → Push. If you're signed in to GitHub in Cursor, it should work.
+- **One-time terminal auth (so `git push` works from terminal / for AI):** In Terminal, run `gh auth login` (GitHub CLI) and follow the prompts, or set up an SSH key and add it to GitHub. After that, `git push` from the project folder will work without a password prompt, so the AI can run it for you.
+- **App repo path for git commands:** `code/dashboard` is the app repo (that's where you run `git add`, `git commit`, `git push`).
