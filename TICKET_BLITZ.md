@@ -81,6 +81,8 @@ Bundle these into an EAS Update (or Store Build for native changes) immediately.
 - **All done popping up (Hamza):** "we fixed the bug where the completion screen kept showing — should be in the next update" — ✅ sent
 - **Group chat tap (Julian):** "hey, we pushed a fix for the group chat tap thing — update the app and try again. if it still does nothing, pull down to refresh on the home screen and tap the group again. lmk if it's still acting up and which group/phone you're on"
 
+**Done this session:** Admin-only "Challenge" test button on Your Soup header — simulates "challenges just dropped" so you can test the daily challenge pop-up without waiting for the real notification. (Test = new-user onboarding, Challenge = daily challenge queue.)
+
 ---
 
 ## When you're back (after lunch) 🍜
@@ -89,10 +91,8 @@ Bundle these into an EAS Update (or Store Build for native changes) immediately.
    Finish this doc, then bundle into one EAS build and push the update.
 
 2. **Confirm daily challenge flow**  
-   - Notification goes out when challenges drop.  
-   - Open app → challenge pop-up shows (even if you missed the notification and open late that day).  
-   - Do your challenges; flow feels right.  
-   - Any group chats looking right.
+   - Use the admin **Challenge** button to refresh pending and open the queue (or open app when challenges exist).  
+   - Notification when challenges drop; open app → pop-up shows (even if late). Do challenges; group chats look right.
 
 3. **Test new-user activation flow (Test button)**  
    - Simulate: new user, just signed up, on Your Soup page waiting for first challenge.  
@@ -100,8 +100,8 @@ Bundle these into an EAS Update (or Store Build for native changes) immediately.
    - Confirm Test button triggers that flow.  
    - Then test as a real user to make sure we can activate people.
 
-4. **Finish DM feature**  
-   Simple wrap-up on the DM feature you had in progress.
+4. **Redesign Your Soup page (community-first)**  
+   Same content (DMs, challenges, groups, voice memos), new layout — design-first, then implement. DM feature lives inside this.
 
 ---
 

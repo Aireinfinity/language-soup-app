@@ -107,7 +107,7 @@ export default function HomeScreen() {
     }, [user, groups]); // Re-run if user/groups change
 
     const checkPendingChallenges = async () => {
-        if (!user || user.id === undefined) return;
+        if (!user || user.id === undefined) return [];
         try {
             // Get user's groups
             const { data: myGroups } = await supabase
@@ -117,7 +117,7 @@ export default function HomeScreen() {
 
             if (!myGroups || myGroups.length === 0) {
                 setPendingChallenges([]);
-                return;
+                return [];
             }
 
             const groupIds = myGroups.map(g => g.group_id);
@@ -135,7 +135,7 @@ export default function HomeScreen() {
 
             if (!challenges || challenges.length === 0) {
                 setPendingChallenges([]);
-                return;
+                return [];
             }
 
             // Check which ones user has completed (sent message for)
@@ -171,8 +171,10 @@ export default function HomeScreen() {
                 hasAutoShownQueueThisSession.current = true;
                 setShowChallengeQueue(true);
             }
+            return pending;
         } catch (error) {
             console.error('Error checking pending challenges:', error);
+            return [];
         }
     };
 
@@ -570,7 +572,7 @@ export default function HomeScreen() {
 
                 {/* Right Side Buttons */}
                 <View style={styles.headerButtons}>
-                    {/* Admin-only: Test Onboarding Mission */}
+                    {/* Admin-only: Test Onboarding Mission (new user flow) */}
                     {isAdmin && (
                         <Pressable
                             style={styles.headerButtonWithLabel}
@@ -580,6 +582,25 @@ export default function HomeScreen() {
                                 <Text style={{ fontSize: 16 }}>🐣</Text>
                             </View>
                             <Text style={[styles.headerButtonLabel, { color: SOUP_COLORS.pink }]}>Test</Text>
+                        </Pressable>
+                    )}
+                    {/* Admin-only: Test daily challenge pop-up */}
+                    {isAdmin && (
+                        <Pressable
+                            style={styles.headerButtonWithLabel}
+                            onPress={async () => {
+                                const pending = await checkPendingChallenges();
+                                if (pending?.length > 0) {
+                                    setShowChallengeQueue(true);
+                                } else {
+                                    Alert.alert('No pending challenges', 'Add one in admin or wait for today\'s drop.');
+                                }
+                            }}
+                        >
+                            <View style={[styles.headerIconCircle, { backgroundColor: '#E5F5FF' }]}>
+                                <Text style={{ fontSize: 16 }}>🥣</Text>
+                            </View>
+                            <Text style={[styles.headerButtonLabel, { color: SOUP_COLORS.blue }]}>Challenge</Text>
                         </Pressable>
                     )}
 
