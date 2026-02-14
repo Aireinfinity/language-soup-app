@@ -1,24 +1,24 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '../components/ThemedText';
 import SoupBowlAnimation from '../components/SoupBowlAnimation';
-import { Colors } from '../constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
-import Animated, {
-    FadeInUp,
-    FadeIn,
-    useSharedValue,
-    useAnimatedStyle,
-    withRepeat,
-    withTiming,
-    withSequence,
-    Easing
-} from 'react-native-reanimated';
 
 const { height } = Dimensions.get('window');
+
+const SOUP_COLORS = {
+    cream: '#FDF5E6',
+    text: '#2d3436',
+    subtext: '#636e72',
+    turquoise: '#00ADEF',
+    pink: '#EC008B',
+    green: '#19b091',
+};
+// Soft tint for boot gradient (cream → light brand so it doesn’t feel like manila)
+const BOOT_GRADIENT = [SOUP_COLORS.cream, '#F5FBF8'];
 
 export default function BootScreen() {
     const router = useRouter();
@@ -31,33 +31,13 @@ export default function BootScreen() {
         return () => { isMounted.current = false; };
     }, []);
 
-    // Button Pulse Animation
-    const scale = useSharedValue(1);
-
     useEffect(() => {
-        // Initial pulse setup
-        scale.value = withRepeat(
-            withSequence(
-                withTiming(1.1, { duration: 1000, easing: Easing.inOut(Easing.ease) }),
-                withTiming(1, { duration: 1000, easing: Easing.inOut(Easing.ease) })
-            ),
-            -1, // Infinite
-            true // Reverse
-        );
-
-        // FAST PASS: If user is already logged in, auto-advance
         if (user) {
             console.log('[Boot] User found, showing minimalist splash and auto-advancing in 500ms...');
-            const timer = setTimeout(() => {
-                handleSkip();
-            }, 500); // super snappy 500ms splash for existing users
+            const timer = setTimeout(() => handleSkip(), 500);
             return () => clearTimeout(timer);
         }
     }, [user]);
-
-    const animatedButtonStyle = useAnimatedStyle(() => ({
-        transform: [{ scale: scale.value }]
-    }));
 
     const handleSkip = async () => {
         if (!isMounted.current) return;
@@ -85,54 +65,33 @@ export default function BootScreen() {
             activeOpacity={1}
             onPress={handleSkip}
         >
-            {/* Conditional Content: Logo only for existing users, full definition for new ones */}
+            <LinearGradient colors={BOOT_GRADIENT} style={StyleSheet.absoluteFill} />
             <View style={styles.contentWrapper}>
                 {!user ? (
                     <View style={styles.textBlock}>
-                        {/* Title - Fast Entry */}
-                        <Animated.View entering={FadeInUp.delay(200).springify()}>
-                            <ThemedText style={styles.headword}>language soup</ThemedText>
-                        </Animated.View>
-
-                        {/* Phonetic - Slight Delay */}
-                        <Animated.View entering={FadeInUp.delay(600).springify()}>
-                            <ThemedText style={styles.phonetic}>/ˈlæŋɡwɪdʒ suːp/</ThemedText>
-                        </Animated.View>
-
-                        {/* Noun */}
-                        <Animated.View entering={FadeInUp.delay(1000).springify()}>
-                            <ThemedText style={styles.partOfSpeech}>noun</ThemedText>
-                        </Animated.View>
-
-                        {/* Definition - The Punchline */}
-                        <Animated.View style={styles.definitionBlock} entering={FadeInUp.delay(1500).duration(800)}>
+                        <ThemedText style={styles.headword}>language soup</ThemedText>
+                        <ThemedText style={styles.phonetic}>/ˈlæŋɡwɪdʒ suːp/</ThemedText>
+                        <ThemedText style={styles.partOfSpeech}>noun</ThemedText>
+                        <View style={styles.definitionBlock}>
                             <ThemedText style={styles.definitionText}>
-                                <ThemedText style={{ fontWeight: 'bold' }}>Definition: </ThemedText>
+                                <ThemedText style={styles.definitionLabel}>Definition: </ThemedText>
                                 that thing that happens in your head when u mix up multiple languages
                             </ThemedText>
-                        </Animated.View>
-
-                        {/* Example - The Lore */}
-                        <Animated.View style={{ marginTop: 24 }} entering={FadeInUp.delay(2500).duration(800)}>
+                        </View>
+                        <View style={styles.exampleBlock}>
                             <ThemedText style={styles.exampleText}>
                                 <ThemedText style={styles.exampleLabel}>Example: </ThemedText>
                                 "my head feels like language soup right now 😭"
                             </ThemedText>
-                        </Animated.View>
+                        </View>
                     </View>
                 ) : (
-                    /* Minimal splash for existing users - showing only animated bowl */
                     <View style={styles.minimalSplash} />
                 )}
 
-                {/* Button - The Call to Action / Animation */}
                 <View style={[styles.buttonContainer, user && styles.buttonContainerMinimal]}>
                     <SoupBowlAnimation onPress={handleSkip} />
-                    {!user && (
-                        <Animated.View entering={FadeIn.delay(4000)}>
-                            <ThemedText style={styles.tapHint}>tap to continue</ThemedText>
-                        </Animated.View>
-                    )}
+                    {!user && <ThemedText style={styles.tapHint}>tap to continue</ThemedText>}
                 </View>
             </View>
         </TouchableOpacity>
@@ -142,7 +101,6 @@ export default function BootScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: Colors.bg,
     },
     contentWrapper: {
         flex: 1,
@@ -169,44 +127,52 @@ const styles = StyleSheet.create({
     },
     headword: {
         fontSize: 36,
-        fontWeight: 'normal',
-        color: '#000000',
+        fontWeight: '800',
+        color: SOUP_COLORS.text,
         fontFamily: 'System',
         marginBottom: 4,
         lineHeight: 42,
+        letterSpacing: -0.5,
     },
     phonetic: {
-        fontSize: 20,
-        color: '#000000',
+        fontSize: 18,
+        color: SOUP_COLORS.subtext,
         fontFamily: 'System',
         marginBottom: 4,
     },
     partOfSpeech: {
-        fontSize: 18,
+        fontSize: 16,
         fontStyle: 'italic',
-        fontWeight: '500',
-        color: '#000000',
+        fontWeight: '600',
+        color: SOUP_COLORS.subtext,
         marginBottom: 16,
     },
     definitionBlock: {
         marginBottom: 8,
     },
+    definitionLabel: {
+        fontWeight: '700',
+        color: SOUP_COLORS.text,
+    },
     definitionText: {
-        fontSize: 18,
-        lineHeight: 28,
-        color: '#000000',
+        fontSize: 17,
+        lineHeight: 26,
+        color: SOUP_COLORS.text,
         textAlign: 'left',
     },
+    exampleBlock: {
+        marginTop: 24,
+    },
     exampleText: {
-        fontSize: 16,
-        lineHeight: 24,
-        color: '#000000',
+        fontSize: 15,
+        lineHeight: 22,
+        color: SOUP_COLORS.subtext,
         textAlign: 'left',
     },
     exampleLabel: {
         fontStyle: 'normal',
-        fontWeight: 'bold',
-        color: '#000000',
+        fontWeight: '700',
+        color: SOUP_COLORS.text,
     },
     buttonContainer: {
         position: 'absolute',
@@ -220,8 +186,9 @@ const styles = StyleSheet.create({
         bottom: height / 2 - 120, // Center it more for minimal view
     },
     tapHint: {
-        fontSize: 14,
-        color: Colors.textLight,
+        fontSize: 15,
+        color: SOUP_COLORS.turquoise,
+        fontWeight: '700',
         marginTop: 12,
         textAlign: 'center',
     },

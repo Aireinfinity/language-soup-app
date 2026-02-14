@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { haptics } from '../utils/haptics';
 import GroupAvatar from '../components/GroupAvatar';
-import { getAvatarSource } from '../utils/soupUtils';
+import { getAvatarSource, sortPeopleRealPhotosFirst } from '../utils/soupUtils';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -106,11 +106,11 @@ export default function YourGroupsScreen() {
                 if (!group) return null;
                 const lastMsg = lastMessageByGroup[group.id];
                 const recentIds = (recentSenderIdsByGroup[group.id] || []).filter(sid => sid !== '00000000-0000-0000-0000-000000000000');
-                const recentSpeakers = recentIds.map(sid => ({
+                const recentSpeakers = sortPeopleRealPhotosFirst(recentIds.map(sid => ({
                     id: sid,
                     display_name: senderNames[sid] || 'Unknown',
                     avatar_url: senderAvatars[sid] ?? null,
-                }));
+                })));
                 return {
                     id: group.id,
                     name: group.name,
@@ -177,11 +177,11 @@ export default function YourGroupsScreen() {
                 groupsWithDetails.forEach(g => {
                     if (!g.isDM && (!g.recentSpeakers || g.recentSpeakers.length === 0)) {
                         const ids = memberIdsByGroup[g.id] || [];
-                        g.groupMemberFaces = ids.map(sid => ({
+                        g.groupMemberFaces = sortPeopleRealPhotosFirst(ids.map(sid => ({
                             id: sid,
                             display_name: memberProfiles[sid]?.display_name || 'Unknown',
                             avatar_url: memberProfiles[sid]?.avatar_url ?? null,
-                        }));
+                        })));
                     }
                 });
             }
@@ -302,7 +302,7 @@ export default function YourGroupsScreen() {
             ) : groups.length === 0 ? (
                 <View style={styles.emptyWrap}>
                     <Text style={styles.emptyEmoji}>🥣</Text>
-                    <Text style={styles.emptyText}>no groups yet — add languages from home</Text>
+                    <Text style={styles.emptyText}>no groups yet. add languages from home</Text>
                 </View>
             ) : (
                 <FlatList

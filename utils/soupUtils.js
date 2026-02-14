@@ -31,3 +31,26 @@ export const getAvatarSource = (avatarUrl) => {
     // Legacy / Custom Uploads
     return { uri: avatarUrl };
 };
+
+/** Real photos (camera roll, social login). Prefer these over soup avatars whenever we show people. */
+export function isRealPhotoUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    const u = url.toLowerCase();
+    return u.includes('.jpg') || u.includes('.jpeg') || u.includes('googleusercontent') || u.includes('fbsbx.com');
+}
+
+/** Sort avatar URL array so real photos appear first, then soup/other. */
+export function sortAvatarUrlsRealFirst(urls) {
+    if (!urls || !urls.length) return urls || [];
+    const real = urls.filter(isRealPhotoUrl);
+    const other = urls.filter((u) => !isRealPhotoUrl(u));
+    return [...real, ...other];
+}
+
+/** Sort list of people (objects with avatar_url) so real photos first. */
+export function sortPeopleRealPhotosFirst(people) {
+    if (!people || !people.length) return people || [];
+    const withReal = people.filter((p) => isRealPhotoUrl(p.avatar_url ?? p.avatarUrl));
+    const without = people.filter((p) => !isRealPhotoUrl(p.avatar_url ?? p.avatarUrl));
+    return [...withReal, ...without];
+}

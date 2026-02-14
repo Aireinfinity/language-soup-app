@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { View, StyleSheet, FlatList, ScrollView, Pressable, ActivityIndicator, RefreshControl, Text, Image, Platform, Alert, Modal, Dimensions } from 'react-native';
+import { View, StyleSheet, FlatList, ScrollView, Pressable, ActivityIndicator, RefreshControl, Text, Image, Platform, Alert, Modal, Dimensions, Animated as RNAnimated } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,15 +14,14 @@ import { FloatingSupportButton } from '../../components/FloatingSupportButton';
 import { haptics } from '../../utils/haptics';
 import AdminLoginModal from '../../components/AdminLoginModal';
 import FounderWelcomeModal from '../../components/FounderWelcomeModal';
-import { TAB_BAR_HEIGHT } from '../../components/QuestStrip';
+import { TAB_BAR_HEIGHT } from '../../constants/Layout';
 import ContextualTooltip from '../../components/ContextualTooltip';
 import { SecurityBanner } from '../../components/SecurityBanner';
 import GroupAvatar from '../../components/GroupAvatar';
-import { getAvatarSource, getDefaultSoupAvatarForId } from '../../utils/soupUtils';
+import { getAvatarSource, getDefaultSoupAvatarForId, sortPeopleRealPhotosFirst } from '../../utils/soupUtils';
 import { ChallengeQueueCard } from '../../components/ChallengeQueueCard';
 import { AnimatedIdleWaveform } from '../../components/AnimatedIdleWaveform';
-import { uploadChallengeVoiceReply } from '../../lib/uploadChallengeVoice';
-import OnboardingMissionModal from '../../components/OnboardingMissionModal';
+import { uploadChallengeVoiceReply, uploadFirstVoiceToGroups } from '../../lib/uploadChallengeVoice';
 import { shareChallenge } from '../../lib/shareChallenge';
 import { UserPreviewModal } from '../../components/UserPreviewModal';
 import { pickRandom, GENERIC_LOADING_LABELS } from '../../constants/CopyPhilosophy';
@@ -73,6 +72,28 @@ function formatVoiceDuration(seconds) {
     const s = Math.floor(seconds % 60);
     return `${m}:${s.toString().padStart(2, '0')}`;
 }
+// Bold animated "tap me" button for CTA — no text, pulse + waveform
+function CtaPulseButton({ onPress, color, style }) {
+    const scale = useRef(new RNAnimated.Value(1)).current;
+    useEffect(() => {
+        const anim = RNAnimated.loop(
+            RNAnimated.sequence([
+                RNAnimated.timing(scale, { toValue: 1.08, duration: 800, useNativeDriver: true }),
+                RNAnimated.timing(scale, { toValue: 1, duration: 800, useNativeDriver: true }),
+            ])
+        );
+        anim.start();
+        return () => anim.stop();
+    }, [scale]);
+    return (
+        <Pressable onPress={onPress} style={({ pressed }) => [style, pressed && { opacity: 0.9 }]}>
+            <RNAnimated.View style={{ transform: [{ scale }], justifyContent: 'center', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 12 }}>
+                <AnimatedIdleWaveform variant="silky" color={color} barCount={36} barWidth={4} maxHeight={48} />
+            </RNAnimated.View>
+        </Pressable>
+    );
+}
+
 function StaticWaveform({ barCount = 24, seed = 42, color = '#fff', heightScale = 1, style }) {
     const heights = useMemo(() => seededHeights(seed, barCount), [seed, barCount]);
     return (
@@ -118,6 +139,7 @@ const SOUP_COLORS = {
 // Brand colors for hero card (match ChallengeQueue)
 const BRAND_BG_COLORS = [SOUP_COLORS.cream, SOUP_COLORS.green, SOUP_COLORS.pink, '#00ADEF'];
 // Colored-only for Today challenge card so it always shows full design (bowls, prompt, group name)
+// Card uses only blue, green, pink (no cream — cream on cream is hard to see). Color changes when there's a new challenge (by day of latest challenge).
 const TODAY_CHALLENGE_COLORS = [SOUP_COLORS.green, SOUP_COLORS.pink, SOUP_COLORS.blue];
 const CHALLENGE_START_SEEN_KEY = 'challenge_start_seen';
 
@@ -130,7 +152,8 @@ const BOWL_ACCENTS = [
     { key: 'br', bottom: '10%', right: '10%', size: 72, opacity: 0.6 },
 ];
 // Status line — game/challenge vibe
-const STATUS_READY_LINES = ['your turn', "let's go", 'round ready', 'go time', 'challenge is live', 'play now', 'ready? set. go.', 'mission available', 'your challenge is waiting'];
+const STATUS_READY_LINES = ['your turn', "let's go", 'round ready', 'go time', 'challenge is live', 'ready? set. go.', 'mission available', 'your challenge is waiting'];
+const FIRST_CHALLENGE_PROMPT = "what's ur favorite word in this language? curse words count 😏 this isn't a classroom.";
 // Hero left label (mission / round / challenge)
 const HERO_ROUND_LABELS = ["today's mission", "your challenge", "fun challenge", "your turn", "the challenge", "today's round"];
 const HERO_CTA_PLAY = 'play';
@@ -191,6 +214,7 @@ export default function HomeScreen() {
     const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
     const [showAdminModal, setShowAdminModal] = useState(false);
     const [adminModeEnabled, setAdminModeEnabled] = useState(false);
+    const [showOnboardingMission, setShowOnboardingMission] = useState(false);
     const [showFounderWelcome, setShowFounderWelcome] = useState(false);
     const [announcements, setAnnouncements] = useState([]);
     const [unreadAnnouncementsCount, setUnreadAnnouncementsCount] = useState(0);
@@ -203,6 +227,7 @@ export default function HomeScreen() {
     const [recentChallengeResponses, setRecentChallengeResponses] = useState([]);
     const [nextChallengeDropAt, setNextChallengeDropAt] = useState(null); // Date | null from dashboard schedule
     const [nextChallengeIn, setNextChallengeIn] = useState('');
+    const [countdownLastMinuteSeconds, setCountdownLastMinuteSeconds] = useState(null); // 1–60 when in final minute, for dramatic countdown
     const [earlyBirdToday, setEarlyBirdToday] = useState(false);
     const [showChallengeListPicker, setShowChallengeListPicker] = useState(false);
     const [heroRecordingMode, setHeroRecordingMode] = useState('intro'); // 'intro' | 'recording' | 'done'
@@ -215,10 +240,15 @@ export default function HomeScreen() {
     const [speakIndex, setSpeakIndex] = useState(0);
     const heroCardIdRef = useRef(null);
     const lastCompletedGroupIdRef = useRef(null);
+    const heroCurrentChallengeRef = useRef(null);
     const statusReadyLineRef = useRef(null);
+    const todayScrollRef = useRef(null);
     const heroContextLineRef = useRef(null);
     const [historicalChallenges, setHistoricalChallenges] = useState([]);
     const [historicalChallengesLoading, setHistoricalChallengesLoading] = useState(false);
+    const [heroCtaLoading, setHeroCtaLoading] = useState(false);
+    const [showChallengeCardInHero, setShowChallengeCardInHero] = useState(false); // false = first card (CTA); true = showing challenge
+    const [heroPendingSettled, setHeroPendingSettled] = useState(false); // true after first checkPendingChallenges — avoids brief card flash on reload
     // One challenge per day (past 7 days) for "another challenge" modal — pick a day, see that day's question
     const historicalChallengesByDay = useMemo(() => {
         if (!historicalChallenges?.length) return [];
@@ -240,7 +270,6 @@ export default function HomeScreen() {
             return { dateKey, dateLabel, challenge };
         });
     }, [historicalChallenges]);
-    const [showOnboardingMission, setShowOnboardingMission] = useState(false);
     const [userDisplayName, setUserDisplayName] = useState('');
     const [userAvatarUrl, setUserAvatarUrl] = useState(null);
     const [userTagline, setUserTagline] = useState('');
@@ -376,16 +405,29 @@ export default function HomeScreen() {
     useFocusEffect(
         useCallback(() => {
             if (user) {
+                setHeroPendingSettled(false);
                 checkAdminStatus();
-                loadGroups();
-                checkPendingChallenges();
                 fetchNextChallengeDropAt();
-                checkOnboardingStatus();
                 loadUserHomeData();
                 loadPodcastPreview();
+                // Load groups first, then onboarding check — so new users see the first-challenge modal without a flash of Today
+                (async () => {
+                    await loadGroups();
+                    await checkOnboardingStatus();
+                })();
+                checkPendingChallenges();
+                // Cap "loading…" so we never block the hero for more than ~1.2s
+                const t = setTimeout(() => setHeroPendingSettled(true), 1200);
+                return () => clearTimeout(t);
             }
         }, [user])
     );
+
+    // Refetch next challenge drop time every 10s so countdown matches admin dashboard schedule
+    useEffect(() => {
+        const t = setInterval(fetchNextChallengeDropAt, 10 * 1000);
+        return () => clearInterval(t);
+    }, []);
 
     // "Speak Portuguese" / "Speak Spanish" — build from groups, reshuffle when groups load and every time user returns to tab
     const todayGroupsForSpeak = useMemo(() => {
@@ -412,11 +454,12 @@ export default function HomeScreen() {
             }
         }, [])
     );
+    // Cycle "speak [language]" only on the CTA card. Once they tap, lock to current challenge language. Faster cycle.
     useEffect(() => {
-        if (speakItems.length <= 1) return;
-        const t = setInterval(() => setSpeakIndex(i => (i + 1) % speakItems.length), 1400);
+        if (speakItems.length <= 1 || showChallengeCardInHero) return;
+        const t = setInterval(() => setSpeakIndex(i => (i + 1) % speakItems.length), 900);
         return () => clearInterval(t);
-    }, [speakItems.length]);
+    }, [speakItems.length, showChallengeCardInHero]);
 
     // When user has pending challenges, refresh start copy so returning users get fresh fun copy
     useEffect(() => {
@@ -678,12 +721,15 @@ export default function HomeScreen() {
         };
     }, [user, groups]); // Re-run if user/groups change
 
-    // Reset hero flow when no pending challenges
+    // Reset hero flow when no pending challenges; clamp index when list shrinks so we never show wrong prompt
     useEffect(() => {
-        if (!pendingChallenges?.length) {
+        const n = pendingChallenges?.length ?? 0;
+        if (!n) {
             setHeroRecordingMode('intro');
             setHeroChallengeIndex(0);
+            return;
         }
+        setHeroChallengeIndex((prev) => Math.min(prev, n - 1));
     }, [pendingChallenges?.length]);
 
     // First-time vs returning: read AsyncStorage when hero has pending and is on intro
@@ -943,40 +989,62 @@ export default function HomeScreen() {
         setRecentChallengeResponses(out);
     };
 
-    // Fetch next challenge drop time from dashboard schedule (not midnight)
+    // Fetch next challenge drop time: RPC first, then fallback direct query so countdown is always live when schedule exists
     const fetchNextChallengeDropAt = async () => {
         try {
             const { data, error } = await supabase.rpc('get_next_challenge_drop_at');
-            if (error || data == null) {
-                setNextChallengeDropAt(null);
-                return;
+            if (!error && data != null) {
+                const at = typeof data === 'string' ? new Date(data.trim()) : new Date(data);
+                if (!Number.isNaN(at.getTime())) {
+                    setNextChallengeDropAt(at);
+                    return;
+                }
             }
-            setNextChallengeDropAt(new Date(data));
+            const now = new Date().toISOString();
+            const { data: row } = await supabase
+                .from('app_scheduled_challenges')
+                .select('scheduled_time')
+                .in('status', ['pending', 'approved'])
+                .gt('scheduled_time', now)
+                .order('scheduled_time', { ascending: true })
+                .limit(1)
+                .maybeSingle();
+            if (row?.scheduled_time) {
+                const at = new Date(row.scheduled_time);
+                if (!Number.isNaN(at.getTime())) setNextChallengeDropAt(at);
+                else setNextChallengeDropAt(null);
+            } else setNextChallengeDropAt(null);
         } catch (_) {
             setNextChallengeDropAt(null);
         }
     };
 
-    // Live countdown: always show a dynamic countdown (next drop or midnight)
+    // Live countdown: hours → minutes → dramatic 60-second countdown in final minute
     useEffect(() => {
         const update = () => {
-            const target = nextChallengeDropAt || (() => {
-                const tomorrow = new Date();
-                tomorrow.setDate(tomorrow.getDate() + 1);
-                tomorrow.setHours(0, 0, 0, 0);
-                return tomorrow;
-            })();
-            const ms = target - Date.now();
+            if (!nextChallengeDropAt) {
+                setNextChallengeIn('soon');
+                setCountdownLastMinuteSeconds(null);
+                return;
+            }
+            const ms = nextChallengeDropAt - Date.now();
             if (ms <= 0) {
-                setNextChallengeIn(nextChallengeDropAt ? 'any moment now' : '0s');
+                setNextChallengeIn('any moment now');
+                setCountdownLastMinuteSeconds(null);
                 return;
             }
             const h = Math.floor(ms / (1000 * 60 * 60));
             const m = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
             const s = Math.floor((ms % (1000 * 60)) / 1000);
-            if (h > 0) setNextChallengeIn(`${h}h ${m}m`);
-            else if (m > 0) setNextChallengeIn(`${m}m ${s}s`);
-            else setNextChallengeIn(`${s}s`);
+            const totalSeconds = Math.ceil(ms / 1000);
+            if (totalSeconds <= 60) {
+                setCountdownLastMinuteSeconds(totalSeconds);
+                setNextChallengeIn(`0:${String(totalSeconds).padStart(2, '0')}`);
+            } else {
+                setCountdownLastMinuteSeconds(null);
+                if (h > 0) setNextChallengeIn(`${h}h ${m}m`);
+                else setNextChallengeIn(`${m}m`);
+            }
         };
         update();
         const t = setInterval(update, 1000);
@@ -985,14 +1053,13 @@ export default function HomeScreen() {
 
     const checkPendingChallenges = async () => {
         try {
-            const todayStart = new Date();
+            const now = new Date();
+            const todayStart = new Date(now);
             todayStart.setHours(0, 0, 0, 0);
             const todayEnd = new Date(todayStart);
             todayEnd.setDate(todayEnd.getDate() + 1);
-            // Fetch stats first so we know if today has challenges the user hasn't done
             const stats = await fetchTodayChallengeStats();
             let pending = await fetchPendingChallengesInRange(todayStart, todayEnd);
-            // Fallback: if "today" has challenges (stats) but pending is empty, likely timezone or query mismatch — fetch today's challenges with full details and filter to uncompleted
             if (pending.length === 0 && stats?.total > 0 && stats?.responded < stats?.total) {
                 pending = await fetchTodayUncompletedChallenges(todayStart, todayEnd);
             }
@@ -1001,10 +1068,12 @@ export default function HomeScreen() {
             await fetchEarlyBirdToday();
             await fetchRecentChallengeResponses();
             await fetchNextChallengeDropAt();
+            setHeroPendingSettled(true);
             return pending;
         } catch (error) {
             console.error('Error checking pending challenges:', error);
             setPendingChallenges([]);
+            setHeroPendingSettled(true);
             return [];
         }
     };
@@ -1105,6 +1174,7 @@ export default function HomeScreen() {
             setPendingChallenges(list);
             setHeroChallengeIndex(0);
             setHeroRecordingMode(list.length > 0 ? 'intro' : 'intro');
+            setShowChallengeCardInHero(false);
             return list;
         } catch (error) {
             console.error('Error loading recent challenges for test:', error);
@@ -1145,7 +1215,6 @@ export default function HomeScreen() {
     const checkOnboardingStatus = async () => {
         if (!user) return;
         try {
-            // Check if user has sent ANY messages
             const { count, error } = await supabase
                 .from('app_messages')
                 .select('*', { count: 'exact', head: true })
@@ -1153,7 +1222,7 @@ export default function HomeScreen() {
 
             if (error) throw error;
 
-            // If 0 messages, show onboarding mission
+            // New user (0 messages): show first-challenge flow so they send their first memo and learn Today → Community
             if (count === 0) {
                 setShowOnboardingMission(true);
             }
@@ -1322,11 +1391,11 @@ export default function HomeScreen() {
                 if (!group) return null;
                 const lastMsg = lastMessageByGroup[group.id];
                 const recentIds = (recentSenderIdsByGroup[group.id] || []).filter(sid => sid !== '00000000-0000-0000-0000-000000000000');
-                const recentSpeakers = recentIds.map(sid => ({
+                const recentSpeakers = sortPeopleRealPhotosFirst(recentIds.map(sid => ({
                     id: sid,
                     display_name: senderNames[sid] || 'Unknown',
                     avatar_url: senderAvatars[sid] ?? null,
-                }));
+                })));
                 return {
                     id: group.id,
                     name: group.name,
@@ -1412,11 +1481,11 @@ export default function HomeScreen() {
                 groupsWithDetails.forEach(g => {
                     if (!g.isDM && (!g.recentSpeakers || g.recentSpeakers.length === 0)) {
                         const ids = memberIdsByGroup[g.id] || [];
-                        g.groupMemberFaces = ids.map(sid => ({
+                        g.groupMemberFaces = sortPeopleRealPhotosFirst(ids.map(sid => ({
                             id: sid,
                             display_name: memberProfiles[sid]?.display_name || 'Unknown',
                             avatar_url: memberProfiles[sid]?.avatar_url ?? null,
-                        }));
+                        })));
                     }
                 });
             }
@@ -1648,11 +1717,23 @@ export default function HomeScreen() {
     const isNoah = (userDisplayName || '').toLowerCase().trim() === NOAH_DISPLAY_NAME;
 
     const handleHeroSend = async (audioResult) => {
-        const current = pendingChallenges[heroChallengeIndex];
+        const current = heroCurrentChallengeRef.current;
         if (!current || !audioResult?.uri || !user?.id) return;
         lastCompletedGroupIdRef.current = current.group_id;
         setHeroLoading(true);
         try {
+            if (current.id === 'onboarding-icebreaker') {
+                await uploadFirstVoiceToGroups(
+                    { uri: audioResult.uri, duration: audioResult.duration ?? 0 },
+                    commGroups,
+                    user.id
+                );
+                setShowOnboardingMission(false);
+                await loadUserHomeData();
+                setHeroCompletionCopy(getRandomCompletion());
+                setHeroRecordingMode('done');
+                return;
+            }
             await uploadChallengeVoiceReply(
                 { uri: audioResult.uri, duration: audioResult.duration ?? 0 },
                 current,
@@ -1679,6 +1760,46 @@ export default function HomeScreen() {
             < SecurityBanner />
 
             <View style={styles.todayColumn}>
+            {/* Header: same as Community — profile, support, groups so design aligns and all buttons go somewhere */}
+            <View style={[styles.homeHeader, { paddingTop: insets.top + 12, marginBottom: 14 }]}>
+                <Pressable
+                    style={({ pressed }) => [styles.homeHeaderLeft, pressed && { opacity: 0.85 }]}
+                    onPress={() => {
+                        try { haptics.light(); } catch (_) {}
+                        router.push('/(tabs)/profile');
+                    }}
+                >
+                    <View style={styles.homeHeaderAvatarCard}>
+                        {userAvatarUrl ? (
+                            <Image source={getAvatarSource(userAvatarUrl)} style={styles.homeHeaderAvatarImg} />
+                        ) : (
+                            <View style={styles.homeHeaderAvatarPlaceholder}>
+                                <Text style={styles.homeHeaderAvatarLetter}>{displayName[0]?.toUpperCase() || '?'}</Text>
+                            </View>
+                        )}
+                    </View>
+                    <View style={styles.homeHeaderNameWrap}>
+                        <Text style={styles.homeHeaderTitle} numberOfLines={1}>{displayName}</Text>
+                        {userTagline ? (
+                            <Text style={styles.homeHeaderTagline} numberOfLines={1}>{userTagline}</Text>
+                        ) : null}
+                    </View>
+                </Pressable>
+                <View style={styles.homeHeaderButtons}>
+                    <Pressable style={({ pressed }) => [styles.homeHeaderIconBtn, pressed && { opacity: 0.85 }]} onPress={() => { try { haptics.light(); } catch (_) {} router.push('/support-chat'); }}>
+                        <View style={[styles.homeHeaderIconCircle, { backgroundColor: SOUP_COLORS.pink }]}>
+                            <MessageCircle size={16} color="#fff" />
+                        </View>
+                        <Text style={styles.homeHeaderIconLabel}>support</Text>
+                    </Pressable>
+                    <Pressable style={({ pressed }) => [styles.homeHeaderIconBtn, pressed && { opacity: 0.85 }]} onPress={() => { try { haptics.light(); } catch (_) {} setShowMoreMenu(true); }}>
+                        <View style={[styles.homeHeaderIconCircle, { backgroundColor: SOUP_COLORS.green }]}>
+                            <Globe size={16} color="#fff" />
+                        </View>
+                        <Text style={styles.homeHeaderIconLabel}>groups</Text>
+                    </Pressable>
+                </View>
+            </View>
             {(dmGroups.length > 0 || commGroups.length > 0) ? (
             <>
             {/* Today = same design language as Community tab (two-tone hero, redesignSection cards).
@@ -1690,18 +1811,30 @@ export default function HomeScreen() {
             - Data: checkPendingChallenges() fetches today's uncompleted challenges → setPendingChallenges.
               fetchNextChallengeDropAt() → setNextChallengeDropAt; useEffect turns that into nextChallengeIn (e.g. "5h 23m").
             - Order: Hero (record CTA or countdown) → pulse stats → record-your-challenge section (if pending) →
-              next-challenge section (if no pending) → who replied → your groups. */}
+              next-challenge section (if no pending) → who replied → your groups.
+            - Path: see challenge → read/hear (prompt + phrases/vocab) → record → send. One hero action (record). */}
             {(() => {
                 const hasTodayDrop = !!todayChallengePrompt;
                 const didIt = hasTodayDrop ? todayChallengeStats.responded > 0 : yesterdayChallengeDidRespond;
                 const promptToShow = (hasTodayDrop ? (todayChallengePrompt || '').replace(/^#challenge\s*\n?/i, '').trim().split('\n')[0] : (yesterdayChallengePrompt || '').replace(/^#challenge\s*\n?/i, '').trim().split('\n')[0]) || 'Say something in your language!';
+                const isFirstChallengeMode = showOnboardingMission && commGroups.length > 0 && !(pendingChallenges?.length > 0);
+                const firstChallengeSynthetic = commGroups[0] ? {
+                    id: 'onboarding-icebreaker',
+                    prompt_text: FIRST_CHALLENGE_PROMPT,
+                    group_id: commGroups[0].id,
+                    group_name: commGroups[0].name || 'Soup',
+                    group_language: commGroups[0].language,
+                } : null;
                 const hasPending = pendingChallenges?.length > 0;
-                // Show challenge whenever there are pending challenges (fix: was only when hasTodayDrop)
-                const showIntro = hasPending && heroRecordingMode === 'intro';
-                const showRecording = hasPending && heroRecordingMode === 'recording';
-                const showHeroDone = hasPending && heroRecordingMode === 'done';
-                const showClassicDone = !hasPending;
-                const currentChallenge = hasPending ? (pendingChallenges[heroChallengeIndex] ?? pendingChallenges[0]) : null;
+                const effectiveHasPending = hasPending || isFirstChallengeMode;
+                const clampedIndex = hasPending ? Math.min(heroChallengeIndex, pendingChallenges.length - 1) : 0;
+                const currentChallenge = hasPending ? (pendingChallenges[clampedIndex] ?? pendingChallenges[0]) : (isFirstChallengeMode ? firstChallengeSynthetic : null);
+                heroCurrentChallengeRef.current = currentChallenge;
+                const showIntro = effectiveHasPending && heroRecordingMode === 'intro';
+                const showRecording = effectiveHasPending && heroRecordingMode === 'recording';
+                const showHeroDone = effectiveHasPending && heroRecordingMode === 'done';
+                const showClassicDone = !effectiveHasPending;
+                const showCard = (effectiveHasPending && showChallengeCardInHero) || isFirstChallengeMode;
 
                 let statusLine;
                 if (hasTodayDrop && !didIt) {
@@ -1719,54 +1852,67 @@ export default function HomeScreen() {
                 };
                 const handleHeroSkip = () => {
                     try { haptics.light(); } catch (_) {}
-                    if (heroChallengeIndex < pendingChallenges.length - 1) setHeroChallengeIndex((prev) => prev + 1);
-                    else { setHeroCompletionCopy(getRandomCompletion()); setHeroRecordingMode('done'); }
+                    if (heroCurrentChallengeRef.current?.id === 'onboarding-icebreaker') {
+                        setShowOnboardingMission(false);
+                        return;
+                    }
+                    if (heroChallengeIndex < pendingChallenges.length - 1) {
+                        setHeroChallengeIndex((prev) => prev + 1);
+                    } else {
+                        setHeroCompletionCopy(getRandomCompletion());
+                        setHeroRecordingMode('done');
+                    }
                 };
+                const effectivePendingCount = hasPending ? pendingChallenges.length : (isFirstChallengeMode ? 1 : 0);
 
                 return (
                 <ScrollView
+                    ref={todayScrollRef}
                     style={[styles.todayScroll, { backgroundColor: SOUP_COLORS.cream }]}
                     contentContainerStyle={[styles.todayScrollContent, { paddingBottom: 24 + TAB_BAR_HEIGHT + insets.bottom }]}
                     showsVerticalScrollIndicator={false}
                 >
                     <View style={[styles.todayContentWrap, { paddingTop: insets.top + 16 }]}>
                     {/* "today's challenge" + big "speak [language]" right above the blue card; speak is static, only languages move (soupy slide) */}
-                    {(hasPending || (dmGroups.length + commGroups.length) > 0) && (
+                    {(effectiveHasPending || (dmGroups.length + commGroups.length) > 0) && (
                         (() => {
-                            const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (24 * 60 * 60 * 1000));
-                            const heroBg = hasPending
-                                ? (showHeroDone ? heroCompletionCopy.bgColor : TODAY_CHALLENGE_COLORS[dayOfYear % TODAY_CHALLENGE_COLORS.length])
-                                : TODAY_CHALLENGE_COLORS[dayOfYear % TODAY_CHALLENGE_COLORS.length];
-                            const isCreamBg = heroBg === SOUP_COLORS.cream;
+                            // Color by "new challenge" (day of first pending or today) so it changes when a new challenge drops; only blue/green/pink
+                            const colorSeed = pendingChallenges[0]?.created_at || (todayChallengePrompt ? new Date().toISOString() : null) || new Date().toISOString();
+                            const colorIndex = Math.floor(new Date(colorSeed).getTime() / (24 * 60 * 60 * 1000)) % TODAY_CHALLENGE_COLORS.length;
+                            const heroBg = TODAY_CHALLENGE_COLORS[colorIndex];
+                            const isCreamBg = false; // we no longer use cream for the card
                             const heroTextColor = isCreamBg ? SOUP_COLORS.dark : '#fff';
+                            // Card area height: fit above tab bar so back/skip are visible
+                            const todayBannerHeight = 100;
+                            const todayCardAreaHeight = Math.max(320, SCREEN_HEIGHT - insets.top - 16 - todayBannerHeight - TAB_BAR_HEIGHT - insets.bottom - 24);
                             return (
                                 <>
-                                {/* Thin red banner + next countdown + speak ticker */}
+                                {/* Thin red banner + next countdown + speak ticker — one color for card + language */}
                                 <View style={styles.todayAboveCard}>
                                     <View style={styles.todayThinBannerRow}>
                                         <View style={styles.todayThinBanner}>
                                             <Text style={styles.todayThinBannerText}>today's challenge</Text>
                                         </View>
-                                                <View style={styles.todayCountdownPill}>
-                                            <Text style={styles.todayCountdownPillText}>
-                                                next in {nextChallengeIn}
+                                                <View style={[styles.todayCountdownPill, countdownLastMinuteSeconds != null && styles.todayCountdownPillDramatic]}>
+                                            <Text style={[styles.todayCountdownPillText, countdownLastMinuteSeconds != null && styles.todayCountdownPillTextDramatic]}>
+                                                {nextChallengeIn === 'soon' || nextChallengeIn === 'any moment now' ? nextChallengeIn : countdownLastMinuteSeconds != null ? nextChallengeIn : `next in ${nextChallengeIn}`}
                                             </Text>
                                         </View>
                                     </View>
                                                 <View style={styles.todaySpeakRow} collapsable={false}>
-                                        {speakItems.length > 0 ? (
+                                        {showCard ? (
+                                            <>
+                                                <Text style={styles.todaySpeakStatic}>speak </Text>
+                                                <Text style={[styles.todaySpeakTick, { color: heroBg }]}>
+                                                    {((currentChallenge?.group_language || currentChallenge?.group_name) || 'another').toLowerCase()}
+                                                </Text>
+                                            </>
+                                        ) : speakItems.length > 0 ? (
                                             <>
                                                 <Text style={styles.todaySpeakStatic}>speak </Text>
                                                 <View style={styles.todaySpeakSlot}>
-                                                    <Animated.View
-                                                        key={speakIndex}
-                                                        entering={SlideInDown.duration(260).springify().damping(16)}
-                                                        exiting={SlideOutUp.duration(160)}
-                                                        style={styles.todaySpeakTickWrap}
-                                                    >
-                                                        <Text style={[styles.todaySpeakTick, { color: speakItems[speakIndex % speakItems.length]?.color || SOUP_COLORS.blue }]}>
-                                                            {speakItems[speakIndex % speakItems.length]?.language?.toLowerCase()}
-                                                        </Text>
+                                                    <Animated.View key={speakIndex} entering={FadeIn.duration(400)} exiting={FadeOut.duration(300)} style={styles.todaySpeakTickWrap}>
+                                                        <Text style={[styles.todaySpeakTick, { color: heroBg }]}>{speakItems[speakIndex % speakItems.length]?.language?.toLowerCase()}</Text>
                                                     </Animated.View>
                                                 </View>
                                             </>
@@ -1774,11 +1920,11 @@ export default function HomeScreen() {
                                             <Text style={[styles.todaySpeakTick, { color: SOUP_COLORS.subtext }]}>time to speak</Text>
                                         )}
                                     </View>
-                                    {(hasPending && (showHeroDone || showRecording || statusLine) || todayChallengeReplyCount > 0) && (
+                                    {(effectiveHasPending && (showHeroDone || showRecording || statusLine) || todayChallengeReplyCount > 0) && (
                                         <View style={styles.todayBannerStatusRow}>
-                                            {hasPending && (
+                                            {effectiveHasPending && (
                                                 <Text style={styles.todayBannerStatusDot}>
-                                                    {showHeroDone ? 'done' : showRecording ? 'recording' : (statusLine || 'your turn')}
+                                                    {showHeroDone ? 'done' : (statusLine || 'your turn')}
                                                 </Text>
                                             )}
                                             {todayChallengeReplyCount > 0 && (
@@ -1790,59 +1936,104 @@ export default function HomeScreen() {
                                 <View style={[
                                     styles.todayRecordWindow,
                                     styles.todayReplyZone,
-                                    { backgroundColor: heroBg },
+                                    { backgroundColor: heroBg, height: todayCardAreaHeight },
                                 ]}>
                                     <View style={styles.todayReplyZoneInner}>
-                                    {hasPending ? (
+                                    {!heroPendingSettled ? (
+                                        <View style={[styles.todayHeroNoPendingWrap, styles.todayHeroNoPendingFill]}>
+                                            <ActivityIndicator size="large" color={heroTextColor} />
+                                            <Text style={[styles.todayHeroNoPendingHint, { color: heroTextColor, opacity: 0.9, marginTop: 12 }]}>loading…</Text>
+                                        </View>
+                                    ) : effectiveHasPending && !showChallengeCardInHero && !isFirstChallengeMode ? (
+                                        <View style={[styles.todayHeroNoPendingWrap, styles.todayHeroNoPendingFill]}>
+                                            <Text style={[styles.todayHeroNoPendingPrompt, styles.todayHeroNoPendingPromptBig, { color: heroTextColor }]}>time to do your challenges</Text>
+                                            <Text style={[styles.todayHeroNoPendingHint, { color: heroTextColor, opacity: 0.9 }]}>tap below to start</Text>
+                                            <CtaPulseButton
+                                                color={heroBg}
+                                                style={[styles.todayHeroNoPendingCta, styles.todayHeroNoPendingCtaScream]}
+                                                onPress={() => { try { haptics.light(); } catch (_) {} setShowChallengeCardInHero(true); }}
+                                            />
+                                        </View>
+                                    ) : showCard ? (
                                         <>
                                             {showHeroDone ? (
-                                                <View style={styles.todayHeroCompletionContent}>
-                                                    <View style={[styles.todayHeroCompletionIcon, { backgroundColor: isCreamBg ? SOUP_COLORS.dark : 'rgba(255,255,255,0.95)' }]}>
-                                                        <Check size={56} color={isCreamBg ? '#fff' : heroBg} strokeWidth={2.5} />
-                                                    </View>
-                                                    <Text style={[styles.todayHeroStartTitle, styles.todayHeroCompletionTitle, { color: heroTextColor, marginBottom: 28 }]}>{heroCompletionCopy.title}</Text>
+                                                <View style={[styles.todayHeroCompletionContent, styles.todayHeroNoPendingFill]}>
+                                                    <Text style={[styles.todayHeroNoPendingPrompt, styles.todayHeroNoPendingPromptBig, { color: heroTextColor }]}>{heroCompletionCopy.title}</Text>
+                                                    <Text style={[styles.todayHeroNoPendingHint, { color: heroTextColor, opacity: 0.9 }]}>back to today</Text>
                                                     <Pressable
-                                                        style={({ pressed }) => [styles.todayHeroStartCta, styles.todayHeroCompletionCta, pressed && { opacity: 0.9 }, { backgroundColor: isCreamBg ? '#141414' : '#fff' }]}
+                                                        style={({ pressed }) => [styles.todayHeroNoPendingCta, styles.todayHeroCompletionCta, pressed && { opacity: 0.9 }, { backgroundColor: '#fff' }]}
                                                         onPress={() => {
                                                             try { haptics.light(); } catch (_) {}
-                                                            if (lastCompletedGroupIdRef.current) router.push(`/chat/${lastCompletedGroupIdRef.current}`);
+                                                            setShowChallengeCardInHero(false);
+                                                            setHeroChallengeIndex(0);
                                                             setHeroRecordingMode('intro');
-                                                            checkPendingChallenges();
+                                                            checkPendingChallenges().then(p => setPendingChallenges(p || []));
                                                         }}
                                                     >
-                                                        <Headphones size={22} color={isCreamBg ? '#fff' : heroBg} strokeWidth={2} />
-                                                        <Text style={[styles.todayHeroStartCtaText, { color: isCreamBg ? '#fff' : heroBg }]}>{heroCompletionCopy.button}</Text>
+                                                        <Text style={[styles.todayHeroStartCtaText, { color: heroBg, fontSize: 20 }]}>back to today</Text>
                                                     </Pressable>
+                                                    {lastCompletedGroupIdRef.current && (
+                                                        <Pressable
+                                                            style={({ pressed }) => [styles.todayHeroCompletionSecondary, pressed && { opacity: 0.8 }]}
+                                                            onPress={() => {
+                                                                try { haptics.light(); } catch (_) {}
+                                                                router.push(`/chat/${lastCompletedGroupIdRef.current}`);
+                                                            }}
+                                                        >
+                                                            <Headphones size={18} color={heroTextColor} strokeWidth={2} />
+                                                            <Text style={[styles.todayHeroCompletionSecondaryText, { color: heroTextColor }]}>see who replied</Text>
+                                                        </Pressable>
+                                                    )}
                                                 </View>
                                             ) : (
                                                 <>
-                                                    {showRecording && (
-                                                        <Pressable onPress={() => { try { haptics.light(); } catch (_) {} setHeroRecordingMode('intro'); }} style={({ pressed }) => [styles.todaySectionBack, pressed && { opacity: 0.8 }]}>
-                                                            <Text style={[styles.todaySectionCtaText, { color: heroTextColor }]}>← back</Text>
-                                                        </Pressable>
-                                                    )}
-                                                    {pendingChallenges.length > 1 && (
-                                                        <View style={styles.heroProgressRow}>
-                                                            {pendingChallenges.map((_, idx) => (
-                                                                <View key={idx} style={[styles.heroProgressDotLight, idx === heroChallengeIndex && styles.heroProgressDotActiveLight, idx < heroChallengeIndex && styles.heroProgressDotDoneLight]} />
-                                                            ))}
-                                                        </View>
-                                                    )}
                                                     {currentChallenge ? (
-                                                        <View style={styles.todayCardWrapper}>
-                                                            <ChallengeQueueCard
-                                                                key={currentChallenge.id}
-                                                                challenge={currentChallenge}
-                                                                groupName={currentChallenge.group_name}
-                                                                onSend={handleHeroSend}
-                                                                loading={heroLoading}
-                                                                isLightBackground={false}
-                                                                currentCardIdRef={heroCardIdRef}
-                                                                isCompact={false}
-                                                                embedInSection
-                                                                minimal={false}
-                                                            />
-                                                        </View>
+                                                        <>
+                                                            <View style={styles.todayCardWrapper}>
+                                                                <ChallengeQueueCard
+                                                                    key={currentChallenge.id}
+                                                                    challenge={currentChallenge}
+                                                                    groupName={currentChallenge.group_name}
+                                                                    onSend={handleHeroSend}
+                                                                    loading={heroLoading}
+                                                                    isLightBackground={isCreamBg}
+                                                                    currentCardIdRef={heroCardIdRef}
+                                                                    isCompact={false}
+                                                                    embedInSection
+                                                                    minimal={false}
+                                                                />
+                                                            </View>
+                                                            <View style={styles.todayCardNavBar}>
+                                                                <Pressable
+                                                                    onPress={async () => {
+                                                                        try { haptics.light(); } catch (_) {}
+                                                                        if (currentChallenge?.id === 'onboarding-icebreaker') {
+                                                                            setShowOnboardingMission(false);
+                                                                            return;
+                                                                        }
+                                                                        if (heroChallengeIndex > 0) {
+                                                                            setHeroChallengeIndex((prev) => prev - 1);
+                                                                        } else {
+                                                                            setShowChallengeCardInHero(false);
+                                                                            setHeroChallengeIndex(0);
+                                                                            setHeroRecordingMode('intro');
+                                                                        }
+                                                                    }}
+                                                                    style={({ pressed }) => [styles.todayCardNavBtn, pressed && { opacity: 0.8 }]}
+                                                                >
+                                                                    <Text style={[styles.todayCardNavBtnText, { color: heroTextColor }]}>← back</Text>
+                                                                </Pressable>
+                                                                <View style={styles.todayCardNavProgressWrap}>
+                                                                    <Text style={[styles.todayCardNavProgress, { color: heroTextColor }]}>
+                                                                        {clampedIndex + 1} of {effectivePendingCount}
+                                                                        {currentChallenge?.group_language || currentChallenge?.group_name ? ` · ${(currentChallenge.group_language || currentChallenge.group_name).toLowerCase()}` : ''}
+                                                                    </Text>
+                                                                </View>
+                                                                <Pressable style={({ pressed }) => [styles.todayCardNavBtn, pressed && { opacity: 0.8 }]} onPress={handleHeroSkip}>
+                                                                    <Text style={[styles.todayCardNavBtnText, { color: heroTextColor }]}>skip →</Text>
+                                                                </Pressable>
+                                                            </View>
+                                                        </>
                                                     ) : (
                                                         <View style={styles.todayCardPlaceholder}>
                                                             <Pressable style={({ pressed }) => [styles.todayStartCta, pressed && { opacity: 0.9 }]} onPress={() => checkPendingChallenges()}>
@@ -1851,9 +2042,6 @@ export default function HomeScreen() {
                                                             </Pressable>
                                                         </View>
                                                     )}
-                                                    <Pressable style={({ pressed }) => [styles.todaySkipBtn, pressed && { opacity: 0.8 }]} onPress={handleHeroSkip}>
-                                                        <Text style={[styles.todaySkipBtnText, { color: heroTextColor }]}>skip →</Text>
-                                                    </Pressable>
                                                 </>
                                             )}
                                         </>
@@ -1864,67 +2052,73 @@ export default function HomeScreen() {
                                                     <Text style={styles.todayHeroNoPendingPrompt}>
                                                         {(todayChallengePrompt || yesterdayChallengePrompt).replace(/^#challenge\s*\n?/i, '').trim().split('\n')[0]}
                                                     </Text>
-                                                    <Text style={styles.todayHeroNoPendingHint}>tap to open your challenge: prompt, phrases, vocab, then record</Text>
+                                                    <Text style={styles.todayHeroNoPendingHint}>tap below to start. prompt, phrases, then record.</Text>
                                                 </>
                                             ) : (
                                                 <Text style={[styles.todayHeroNoPendingPrompt, { fontSize: 28 }]}>today's challenge will show here once it drops</Text>
                                             )}
-                                            <View style={styles.todayHeroNoPendingWaveformWrap}>
-                                                <AnimatedIdleWaveform
-                                                    variant="silky"
-                                                    color={SOUP_COLORS.blue}
-                                                    barCount={28}
-                                                    barWidth={4}
-                                                    maxHeight={28}
-                                                />
-                                            </View>
                                             <Pressable
-                                                style={({ pressed }) => [styles.todayHeroNoPendingCta, pressed && { opacity: 0.9 }]}
+                                                style={({ pressed }) => [
+                                                    styles.todayHeroNoPendingCta,
+                                                    pressed && !heroCtaLoading && styles.todayHeroNoPendingCtaPressed,
+                                                ]}
                                                 onPress={async () => {
+                                                    if (heroCtaLoading) return;
                                                     try { haptics.light(); } catch (_) {}
+                                                    setHeroCtaLoading(true);
+                                                    if (historicalChallenges?.length > 0) {
+                                                        setPendingChallenges([historicalChallenges[0]]);
+                                                        setHeroChallengeIndex(0);
+                                                        setHeroRecordingMode('recording');
+                                                        setHeroCtaLoading(false);
+                                                        return;
+                                                    }
                                                     const pending = await checkPendingChallenges();
-                                                    if (pending?.length === 0) {
+                                                    if (pending?.length > 0) {
+                                                        setPendingChallenges(pending);
+                                                        setHeroChallengeIndex(0);
+                                                        setHeroRecordingMode('intro');
+                                                        setShowChallengeCardInHero(true);
+                                                    } else {
                                                         const hist = await fetchHistoricalChallengesOnly();
                                                         if (hist?.length > 0) {
                                                             setPendingChallenges([hist[0]]);
-                                                            setHeroRecordingMode('recording');
                                                             setHeroChallengeIndex(0);
+                                                            setHeroRecordingMode('recording');
+                                                            setShowChallengeCardInHero(true);
                                                         }
                                                     }
+                                                    setHeroCtaLoading(false);
                                                 }}
+                                                disabled={heroCtaLoading}
                                             >
-                                                <Mic size={44} color={SOUP_COLORS.blue} />
-                                                <Text style={styles.todayHeroNoPendingCtaText}>
-                                                    {(todayChallengePrompt || yesterdayChallengePrompt) ? 'tap to record' : "get today's challenge"}
-                                                </Text>
+                                                {heroCtaLoading ? (
+                                                    <ActivityIndicator size="large" color={SOUP_COLORS.blue} />
+                                                ) : (
+                                                    <AnimatedIdleWaveform
+                                                        variant="silky"
+                                                        color={SOUP_COLORS.blue}
+                                                        barCount={32}
+                                                        barWidth={4}
+                                                        maxHeight={40}
+                                                    />
+                                                )}
                                             </Pressable>
                                         </View>
                                     )}
                                     </View>
                                 </View>
 
-                                {/* One CTA: another challenge (opens list of recent challenges — same question to all groups, so by challenge not by group) */}
-                                <Pressable
-                                    style={({ pressed }) => [styles.todayAnotherChallengeBtn, pressed && { opacity: 0.85 }]}
-                                    onPress={() => {
-                                        try { haptics.light(); } catch (_) {}
-                                        loadHistoricalPendingChallenges();
-                                    }}
-                                >
-                                    <Text style={styles.todayAnotherChallengeBtnText}>another challenge</Text>
-                                </Pressable>
                                 </>
                             );
                         })()
                     )}
 
-                    {/* One minimal footer: countdown · replies · groups (no "do another" — use another challenge button) */}
+                    {/* Minimal footer: countdown · replies (another challenge is in done screen; groups link removed per request) */}
                     {(() => {
-                        const allGroups = [...dmGroups, ...commGroups];
                         const parts = [];
                         if (showClassicDone && nextChallengeIn) parts.push({ label: `next in ${nextChallengeIn}`, onPress: () => loadHistoricalPendingChallenges() });
-                        if (todayChallengeReplyCount > 0) parts.push({ label: `${todayChallengeReplyCount} replied`, onPress: () => recentChallengeResponses[0]?.groupId && router.push(`/chat/${recentChallengeResponses[0].groupId}`) });
-                        if (allGroups.length > 0) parts.push({ label: 'groups', onPress: () => router.push('/(tabs)/community') });
+                        if (todayChallengeReplyCount > 0) parts.push({ label: `${todayChallengeReplyCount} replied`, onPress: () => { if (recentChallengeResponses[0]?.groupId) router.push(`/chat/${recentChallengeResponses[0].groupId}`); else router.push('/(tabs)/community'); } });
                         if (parts.length === 0) return null;
                         return (
                             <View style={styles.todayFooterLine}>
@@ -2107,7 +2301,8 @@ export default function HomeScreen() {
                                                     setPendingChallenges([challenge]);
                                                     setShowChallengeListPicker(false);
                                                     setHeroChallengeIndex(0);
-                                                    setHeroRecordingMode('intro');
+                                                    setHeroRecordingMode('recording');
+                                                    setTimeout(() => todayScrollRef.current?.scrollTo?.({ y: 0, animated: true }), 150);
                                                 }}
                                             >
                                                 <Text style={styles.challengePickerRowPrompt} numberOfLines={2}>{promptPreview}</Text>
@@ -2121,16 +2316,6 @@ export default function HomeScreen() {
                     </SafeAreaView>
                 </Pressable>
             </Modal>
-
-            <OnboardingMissionModal
-                visible={showOnboardingMission && groups.length > 0}
-                groups={groups}
-                onComplete={() => {
-                    setShowOnboardingMission(false);
-                    checkOnboardingStatus(); // Re-verify
-                    loadGroups(); // Refresh feed
-                }}
-            />
 
             <UserPreviewModal
                 visible={!!selectedUser}
@@ -2799,11 +2984,21 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         borderRadius: 999,
     },
+    todayCountdownPillDramatic: {
+        backgroundColor: SOUP_COLORS.blue + '35',
+        paddingVertical: 10,
+        paddingHorizontal: 18,
+    },
     todayCountdownPillText: {
         fontSize: 12,
         fontWeight: '800',
         color: SOUP_COLORS.blue,
         textTransform: 'lowercase',
+    },
+    todayCountdownPillTextDramatic: {
+        fontSize: 22,
+        fontWeight: '900',
+        letterSpacing: 1,
     },
     todayNextChallengeIn: {
         fontSize: 12,
@@ -2880,6 +3075,20 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '600',
         color: SOUP_COLORS.subtext,
+        textTransform: 'lowercase',
+    },
+    todayLanguagePill: {
+        marginTop: 6,
+        paddingVertical: 4,
+        paddingHorizontal: 10,
+        backgroundColor: 'rgba(0,0,0,0.08)',
+        borderRadius: 12,
+        alignSelf: 'center',
+    },
+    todayLanguagePillText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: SOUP_COLORS.dark,
         textTransform: 'lowercase',
     },
     todayHeaderMinimal: {
@@ -3251,15 +3460,17 @@ const styles = StyleSheet.create({
         color: SOUP_COLORS.text,
     },
     todayRecordWindow: {
-        marginTop: 12,
+        marginTop: 8,
         marginHorizontal: -20,
         backgroundColor: SOUP_COLORS.card,
-        borderTopLeftRadius: 32,
-        borderTopRightRadius: 32,
-        paddingTop: 24,
-        paddingBottom: 28,
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        borderBottomLeftRadius: 0,
+        borderBottomRightRadius: 0,
+        paddingTop: 12,
+        paddingBottom: 12,
         paddingHorizontal: 20,
-        minHeight: 420,
+        minHeight: 320,
         borderWidth: 0,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: -4 },
@@ -4380,6 +4591,25 @@ const styles = StyleSheet.create({
         paddingHorizontal: 36,
         minWidth: 280,
     },
+    todayBackToTodayBtn: {
+        paddingVertical: 24,
+        paddingHorizontal: 40,
+        minWidth: 300,
+    },
+    todayHeroCompletionSecondary: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        marginTop: 16,
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+    },
+    todayHeroCompletionSecondaryText: {
+        fontSize: 15,
+        fontWeight: '600',
+        textTransform: 'lowercase',
+    },
     todayDoAnotherSection: {
         marginTop: 28,
         width: '100%',
@@ -4419,33 +4649,80 @@ const styles = StyleSheet.create({
         maxWidth: 120,
     },
     todayCardWrapper: {
-        minHeight: 380,
+        width: '100%',
+        maxWidth: '100%',
+        alignSelf: 'stretch',
+        flex: 1,
+        minHeight: 200,
+    },
+    todayCardNavBar: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: 12,
+        paddingBottom: 4,
+        paddingHorizontal: 4,
         width: '100%',
     },
+    todayCardNavProgressWrap: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    todayCardNavProgress: {
+        fontSize: 13,
+        fontWeight: '600',
+        opacity: 0.9,
+    },
+    todayCardNavBtn: {
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+    },
+    todayCardNavBtnText: {
+        fontSize: 14,
+        fontWeight: '600',
+        textTransform: 'lowercase',
+    },
     todayHeroNoPendingWrap: {
-        paddingVertical: 28,
+        paddingVertical: 16,
         paddingHorizontal: 8,
         alignItems: 'stretch',
         width: '100%',
     },
+    todayHeroNoPendingFill: {
+        flex: 1,
+        justifyContent: 'center',
+    },
     todayHeroNoPendingPrompt: {
-        fontSize: 32,
+        fontSize: 28,
         fontWeight: '900',
         color: '#fff',
         textAlign: 'center',
-        lineHeight: 42,
-        marginBottom: 20,
+        lineHeight: 36,
+        marginBottom: 12,
         paddingHorizontal: 12,
         letterSpacing: -0.4,
     },
+    todayHeroNoPendingPromptBig: {
+        fontSize: 32,
+        lineHeight: 40,
+        marginBottom: 16,
+    },
     todayHeroNoPendingHint: {
-        fontSize: 17,
+        fontSize: 16,
         fontWeight: '600',
         color: 'rgba(255,255,255,0.9)',
         textAlign: 'center',
-        marginBottom: 32,
+        marginBottom: 16,
         textTransform: 'lowercase',
-        lineHeight: 24,
+        lineHeight: 22,
+    },
+    todayHeroNoPendingCtaScream: {
+        paddingVertical: 16,
+        paddingHorizontal: 24,
+        minHeight: 56,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     todayHeroNoPendingSub: {
         fontSize: 15,
@@ -4461,17 +4738,23 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         gap: 12,
         backgroundColor: '#fff',
-        paddingVertical: 20,
+        paddingVertical: 18,
         paddingHorizontal: 28,
-        borderRadius: 32,
+        borderRadius: 28,
         width: '100%',
         alignSelf: 'stretch',
-        marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.18,
-        shadowRadius: 12,
-        elevation: 6,
+        marginBottom: 8,
+        shadowColor: SOUP_COLORS.blue,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.28,
+        shadowRadius: 16,
+        elevation: 8,
+        borderWidth: 2,
+        borderColor: SOUP_COLORS.blue + '40',
+    },
+    todayHeroNoPendingCtaPressed: {
+        opacity: 0.92,
+        transform: [{ scale: 0.98 }],
     },
     todayHeroNoPendingCtaWaveform: {
         marginRight: 4,

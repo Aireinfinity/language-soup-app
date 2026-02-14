@@ -420,7 +420,7 @@ export const AuthProvider = ({ children }) => {
 
     const signOut = async () => {
         await supabase.auth.signOut();
-        router.replace('/login');
+        router.replace('/');
     };
 
     return (

@@ -1,43 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Dimensions, Image, Animated } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Dimensions, Image, Animated, ScrollView } from 'react-native';
 import { Audio } from 'expo-av';
+import * as Speech from 'expo-speech';
 import { BlurView } from 'expo-blur';
-import { Mic, Play, Pause, Trash2, Send, Volume2 } from 'lucide-react-native';
+import { Mic, Play, Pause, Trash2, Send, Volume2, Shuffle } from 'lucide-react-native';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { LiveAudioWaveform } from './LiveAudioWaveform';
 import { AnimatedIdleWaveform } from './AnimatedIdleWaveform';
 import AnimatedReanimated, { FadeIn, ZoomIn, useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { supabase } from '../lib/supabase';
+import { pickRandom, NEW_IDEAS_BUTTON_LABELS, NEW_IDEAS_LOADING_LABELS } from '../constants/CopyPhilosophy';
 
 const BOWL_ICON = require('../assets/ls-icon-bowl.png');
 
-// Wrapper so the question pops in when challenge changes and "breathes" so it feels dynamic
+// Wrapper: no layout shift when challenge changes — only phrases/vocab content updates
 function TodayQuestionPulseWrapper({ embedInSection, challengeId, isTodayLayout, promptContainerStyle, children }) {
-    const scale = useSharedValue(1);
-    useEffect(() => {
-        if (!embedInSection) return;
-        scale.value = withRepeat(
-            withSequence(
-                withTiming(1.02, { duration: 1400 }),
-                withTiming(1, { duration: 1400 })
-            ),
-            -1,
-            false
-        );
-    }, [embedInSection]);
-    const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
     if (!embedInSection) {
         return <View style={promptContainerStyle}>{children}</View>;
     }
-    return (
-        <AnimatedReanimated.View
-            key={challengeId}
-            entering={ZoomIn.duration(550).springify().damping(18)}
-            style={[promptContainerStyle, animatedStyle]}
-        >
-            {children}
-        </AnimatedReanimated.View>
-    );
+    return <View style={promptContainerStyle}>{children}</View>;
 }
 
 // Bowl accents — no dark box; pop via opacity + shadow + soft white glow on colored backgrounds.
@@ -158,16 +139,26 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName, isLi
     })();
     const [hints, setHints] = useState(initialHints);
     const [hintsLoading, setHintsLoading] = useState(false);
+    const [refreshingHints, setRefreshingHints] = useState(false);
+
+    // Normalize text for TTS: trim and strip surrounding quotes so API gets clean input
+    const normalizeTtsText = (t) => {
+        if (t == null || typeof t !== 'string') return '';
+        let s = t.trim();
+        if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) s = s.slice(1, -1).trim();
+        return s;
+    };
 
     // Prefetch Helper (Speeds up loading)
     const prefetchAudio = async (text) => {
-        if (!text || audioCache[text]) return;
+        const normalized = normalizeTtsText(text);
+        if (!normalized || audioCache[normalized]) return;
         try {
             const { data } = await supabase.functions.invoke('voice-feedback', {
-                body: { text, task: 'pronunciation', language: groupName || 'Multilingual' }
+                body: { text: normalized, task: 'pronunciation', language: groupName || 'Multilingual' }
             });
             if (data?.pronunciationUrl) {
-                setAudioCache(prev => ({ ...prev, [text]: data.pronunciationUrl }));
+                setAudioCache(prev => ({ ...prev, [normalized]: data.pronunciationUrl }));
             }
         } catch (e) {
             // Silent fail on prefetch is fine
@@ -178,11 +169,15 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName, isLi
     useEffect(() => {
         const challengeId = challenge?.id;
         const meta = challenge?.metadata;
-        const hasCachedHints = meta?.starter_phrase && (meta.starter_phrase || '').trim().split(/\s+/).length <= 10;
-        if (hasCachedHints) {
+        const hasPhrases = (meta?.starter_phrases?.length > 0) || (meta?.starter_phrase && (meta.starter_phrase || '').trim().split(/\s+/).length <= 10);
+        if (hasPhrases) {
             setHints(meta);
             setHintsLoading(false);
-            prefetchAudio(meta.starter_phrase);
+            if (meta.starter_phrases?.length) {
+                meta.starter_phrases.forEach(p => p?.phrase && prefetchAudio(p.phrase));
+            } else if (meta.starter_phrase) {
+                prefetchAudio(meta.starter_phrase);
+            }
             return;
         }
 
@@ -204,12 +199,16 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName, isLi
 
                 // Only apply if user hasn't switched to another challenge (avoid Farsi then Spanish flash)
                 if (currentChallengeIdRef.current !== challengeId) return;
-                if (data?.starter_phrase) {
+                if (data?.starter_phrases?.length || data?.starter_phrase) {
                     setHints(data);
                     await supabase.from('app_challenges')
                         .update({ metadata: data })
                         .eq('id', challengeId);
-                    prefetchAudio(data.starter_phrase);
+                    if (data.starter_phrases?.length) {
+                        data.starter_phrases.forEach(p => p?.phrase && prefetchAudio(p.phrase));
+                    } else if (data.starter_phrase) {
+                        prefetchAudio(data.starter_phrase);
+                    }
                 }
             } catch (e) {
                 if (currentChallengeIdRef.current === challengeId) console.error('Hint generation error:', e);
@@ -220,101 +219,117 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName, isLi
         generate();
     }, [challenge?.id]);
 
+    // Regenerate phrases/vocab for this session only (no DB save) — "other ideas"
+    const refreshHintsForSession = async () => {
+        const promptText = challenge?.prompt_text;
+        if (!promptText || refreshingHints || hintsLoading) return;
+        const challengeId = challenge?.id;
+        setRefreshingHints(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('voice-feedback', {
+                body: { task: 'generate_hints', prompt: promptText, language: groupName || 'Target Language', challengeId, variation: true }
+            });
+            if (error) throw error;
+            if (currentChallengeIdRef?.current !== challengeId) return;
+            if (data?.starter_phrases?.length || data?.starter_phrase) {
+                setHints(data);
+                if (data.starter_phrases?.length) {
+                    data.starter_phrases.forEach(p => p?.phrase && prefetchAudio(p.phrase));
+                } else if (data.starter_phrase) {
+                    prefetchAudio(data.starter_phrase);
+                }
+            }
+        } catch (e) {
+            if (currentChallengeIdRef?.current === challengeId) console.error('Refresh hints error:', e);
+        } finally {
+            if (currentChallengeIdRef?.current === challengeId) setRefreshingHints(false);
+        }
+    };
+
     // TTS pronunciation via OpenAI (Phrases only)
     const [speakingWord, setSpeakingWord] = useState(null);
     const [ttsLoadComplete, setTtsLoadComplete] = useState(false); // so fill bar only reaches 100% when load is done
     const [minimalPhrasesExpanded, setMinimalPhrasesExpanded] = useState(false);
 
-    // Unified TTS Handler (OpenAI with Cache). Only the last tapped phrase plays; rapid taps don't queue stale audio.
+    // Tap to hear: OpenAI TTS via voice-feedback (nice voice). Card language passed so it lands on the right language. Fallback to expo-speech if API fails.
+    // Important: we use only the `text` argument for the request so the audio always matches what was clicked.
     const playTts = async (text) => {
-        if (!text) return;
+        if (text == null || typeof text !== 'string') return;
+        const normalized = normalizeTtsText(text);
+        if (!normalized) return;
 
-        // Stop any previous playback immediately so only one thing plays
         if (ttsSoundRef.current) {
-            try {
-                await ttsSoundRef.current.stopAsync();
-                await ttsSoundRef.current.unloadAsync();
-            } catch (_) {}
+            try { await ttsSoundRef.current.unloadAsync(); } catch (_) {}
             ttsSoundRef.current = null;
         }
-
-        lastTtsRequestRef.current = text;
+        Speech.stop();
+        lastTtsRequestRef.current = normalized;
+        setSpeakingWord(normalized);
         setTtsLoadComplete(false);
-        setSpeakingWord(text);
 
-        try {
-            let audioUrl = audioCache[text];
+        const cardLanguage = groupName || 'Multilingual';
 
-            // If not cached, fetch from OpenAI
-            if (!audioUrl) {
-                const { data, error } = await supabase.functions.invoke('voice-feedback', {
-                    body: { text, task: 'pronunciation', language: groupName || 'Multilingual' }
-                });
-
-                if (error || !data?.pronunciationUrl) throw new Error('No audio generated');
-
-                audioUrl = data.pronunciationUrl;
-                setAudioCache(prev => ({ ...prev, [text]: audioUrl }));
-            }
-
-            // User tapped another phrase while we were loading — don't play this one
-            if (lastTtsRequestRef.current !== text) {
-                setSpeakingWord(null);
-                return;
-            }
-            // User went to next card while we were loading — don't play (avoids both cards playing)
-            if (currentCardIdRef && currentCardIdRef.current !== challenge?.id) {
-                setSpeakingWord(null);
-                return;
-            }
-
-            // Ensure playback mode so sentence audio actually plays (e.g. after recording mode)
+        const playUrl = async (url) => {
+            if (lastTtsRequestRef.current !== normalized) return;
             await Audio.setAudioModeAsync({
                 allowsRecordingIOS: false,
                 playsInSilentModeIOS: true,
                 staysActiveInBackground: false,
-                interruptionModeIOS: 1,
-                shouldDuckAndroid: true,
+                shouldDuckAndroid: false,
             });
-
-            const { sound: ttsSound } = await Audio.Sound.createAsync(
-                { uri: audioUrl },
-                { shouldPlay: false, volume: 1.0, rate: 0.9 }
+            const { sound: s } = await Audio.Sound.createAsync(
+                { uri: url },
+                { shouldPlay: true, volume: 1.0 }
             );
-
-            // Another tap happened while we were creating the sound — don't play
-            if (lastTtsRequestRef.current !== text) {
-                ttsSound.unloadAsync().catch(() => {});
-                setSpeakingWord(null);
+            if (lastTtsRequestRef.current !== normalized) {
+                s.unloadAsync().catch(() => {});
                 return;
             }
-            // User went to next card — don't play (avoids old card + new card both playing)
-            if (currentCardIdRef && currentCardIdRef.current !== challenge?.id) {
-                ttsSound.unloadAsync().catch(() => {});
-                setSpeakingWord(null);
-                return;
-            }
-            ttsSoundRef.current = ttsSound;
-            setTtsLoadComplete(true); // bar fills to 100% once, then we play
-
-            ttsSound.setOnPlaybackStatusUpdate((status) => {
-                if (status.didJustFinish) {
-                    ttsSound.unloadAsync();
-                    if (ttsSoundRef.current === ttsSound) ttsSoundRef.current = null;
-                    setSpeakingWord(null);
+            try { await s.setRateAsync(0.85, true); } catch (_) {}
+            ttsSoundRef.current = s;
+            setTtsLoadComplete(true);
+            s.setOnPlaybackStatusUpdate((status) => {
+                if (status.isLoaded && status.didJustFinish) {
+                    if (lastTtsRequestRef.current === normalized) setSpeakingWord(null);
+                    s.unloadAsync().catch(() => {});
+                    ttsSoundRef.current = null;
                 }
             });
+        };
 
-            await ttsSound.playAsync();
-        } catch (e) {
-            if (lastTtsRequestRef.current === text) {
-                console.error('TTS error:', e);
-                setSpeakingWord(null);
+        const fallbackSpeech = () => {
+            const lang = (cardLanguage || '').toLowerCase();
+            const code = lang.includes('farsi') || lang.includes('persian') ? 'fa' : lang.includes('spanish') ? 'es' : lang.includes('french') ? 'fr' : lang.includes('portuguese') ? 'pt' : lang.includes('italian') ? 'it' : undefined;
+            Speech.speak(normalized, {
+                language: code,
+                rate: 0.85,
+                onDone: () => { if (lastTtsRequestRef.current === normalized) setSpeakingWord(null); },
+                onStopped: () => setSpeakingWord(null),
+                onError: () => setSpeakingWord(null),
+            });
+            setTtsLoadComplete(true);
+        };
+
+        // Only use cache if it's for this exact request (avoid playing wrong phrase)
+        const cachedUrl = audioCache[normalized];
+        if (cachedUrl && lastTtsRequestRef.current === normalized) {
+            playUrl(cachedUrl).catch(() => fallbackSpeech());
+            return;
+        }
+        try {
+            const { data } = await supabase.functions.invoke('voice-feedback', {
+                body: { text: normalized, task: 'pronunciation', language: cardLanguage }
+            });
+            if (data?.pronunciationUrl) {
+                setAudioCache(prev => ({ ...prev, [normalized]: data.pronunciationUrl }));
+                await playUrl(data.pronunciationUrl);
+            } else {
+                fallbackSpeech();
             }
+        } catch (_) {
+            fallbackSpeech();
         }
     };
-
-    // 2. High-Quality OpenAI TTS for Phrase (Phenomenal)
 
 
     // Playback Progress
@@ -492,7 +507,9 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName, isLi
         waveformLayout.current = event.nativeEvent.layout;
     };
 
-    const cardStyle = isCompact ? [styles.card, stylesCompact.card, embedInSection && { width: '100%' }] : [styles.card, embedInSection && { width: '100%' }];
+    const cardStyle = isCompact
+        ? [styles.card, stylesCompact.card, embedInSection && { width: '100%', flex: 1, minHeight: 0, padding: 0, justifyContent: 'flex-start' }]
+        : [styles.card, embedInSection && { width: '100%', flex: 1, minHeight: 0, padding: 0, justifyContent: 'flex-start' }];
     const promptContainerStyle = isCompact ? [styles.promptContainer, stylesCompact.promptContainer] : styles.promptContainer;
     const groupNameStyle = isCompact ? [styles.groupName, isLightBackground && styles.textOnLight, stylesCompact.groupName] : [styles.groupName, isLightBackground && styles.textOnLight];
     const promptTextStyle = isCompact ? [styles.promptText, isLightBackground && styles.textOnLight, stylesCompact.promptText] : [styles.promptText, isLightBackground && styles.textOnLight];
@@ -501,7 +518,9 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName, isLi
     const hintsLabelStyle = isCompact ? [styles.hintsLabel, stylesCompact.hintsLabel] : styles.hintsLabel;
     const starterPhraseCardStyle = isCompact ? [styles.starterPhraseCard, stylesCompact.starterPhraseCard] : styles.starterPhraseCard;
     const starterPhraseStyle = isCompact ? [styles.starterPhrase, stylesCompact.starterPhrase] : [styles.starterPhrase];
-    const actionContainerStyle = isCompact ? [styles.actionContainer, stylesCompact.actionContainer] : styles.actionContainer;
+    const actionContainerStyle = embedInSection
+        ? [styles.embedActionBlock, styles.todayCardSectionRecord]
+        : isCompact ? [styles.actionContainer, stylesCompact.actionContainer] : [styles.actionContainer];
     const recordContainerStyle = isCompact ? [styles.recordContainer, stylesCompact.recordContainer] : styles.recordContainer;
     const recordButtonStyle = isCompact ? [styles.recordButton, isLightBackground && styles.recordButtonOnLight, stylesCompact.recordButton] : [styles.recordButton, isLightBackground && styles.recordButtonOnLight];
     const hintTextStyle = isCompact ? [styles.hintText, stylesCompact.hintText] : styles.hintText;
@@ -517,7 +536,7 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName, isLi
 
     return (
         <View style={cardStyle}>
-            {!isTodayLayout && (
+            {!isTodayLayout && !embedInSection && (
             <View style={styles.bowlBackground} pointerEvents="none">
                 {BOWL_ACCENTS.map(({ key, size, opacity, ...pos }) => (
                     <View
@@ -544,133 +563,240 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName, isLi
                 ))}
             </View>
             )}
-            {/* Challenge Prompt — message-style when Today layout */}
-            <View style={[promptContainerStyle, isTodayLayout && styles.todayPromptWrap]}>
-                {!isTodayLayout && <Text style={[groupNameStyle, styles.todayGroupName]}>{groupName || 'Soup Group'}</Text>}
-                {embedInSection && (
-                    <Text style={[styles.todayPromptLabel, isLightBackground && styles.textOnLight]} numberOfLines={1}>today's question</Text>
-                )}
-                <TodayQuestionPulseWrapper
-                    embedInSection={embedInSection}
-                    challengeId={challenge?.id}
-                    isTodayLayout={isTodayLayout}
-                    promptContainerStyle={isTodayLayout ? styles.todayPromptBubble : { alignItems: 'center' }}
-                >
-                    {(() => {
-                        const rawText = challenge?.prompt_text || "Ready to Soup?";
-                        // Split by newline to separate multiple languages if present
-                        const parts = rawText.split(/\n+/).filter(p => p.trim());
+            {/* Card boundary when embed: visible edge + padding so content fits inside */}
+            <View style={[embedInSection && styles.embedCardBoundary, { flex: 1, minHeight: 0 }]}>
+            {/* Challenge content — embed: three sections = question | phrases+vocab | record */}
+            <View style={[promptContainerStyle, (isTodayLayout || embedInSection) && styles.todayPromptWrap, embedInSection && styles.embedPromptOuter]}>
+                {embedInSection ? (
+                    <View style={styles.embedContent}>
+                        {/* Section 1: Challenge question */}
+                        <View style={[styles.todayCardSection, styles.todayCardSectionQuestion]}>
+                            <TodayQuestionPulseWrapper
+                                embedInSection={embedInSection}
+                                challengeId={challenge?.id}
+                                isTodayLayout={isTodayLayout}
+                                promptContainerStyle={[(isTodayLayout || embedInSection) ? styles.todayPromptBubble : { alignItems: 'center' }, embedInSection && styles.embedPromptBubble]}
+                            >
+                                {(() => {
+                                    const raw = (challenge?.prompt_text || "Ready to Soup?").replace(/^#challenge\s*\n?/i, '').trim();
+                                    const rawText = raw || "Ready to Soup?";
+                                    const parts = rawText.split(/\n+/).filter(p => p.trim());
+                                    const promptNumLines = embedInSection ? 4 : (isCompact ? 2 : undefined);
+                                    const secondaryNumLines = embedInSection ? 3 : (isCompact ? 1 : undefined);
+                                    const questionStyle = [promptTextStyle, (isTodayLayout || embedInSection) && styles.todayQuestionText, embedInSection && styles.embedPromptText];
+                                    const secondaryStyle = [secondaryPromptStyle, embedInSection && styles.embedSecondaryPrompt];
 
-                        if (parts.length > 1) {
-                            return (
-                                <>
-                                    <Text style={promptTextStyle} numberOfLines={isCompact ? 2 : undefined}>
-                                        {parts[0]}
+                                    if (parts.length > 1) {
+                                        return (
+                                            <>
+                                                <Text style={questionStyle} numberOfLines={promptNumLines}>
+                                                    {parts[0]}
+                                                </Text>
+                                                <Text style={secondaryStyle} numberOfLines={secondaryNumLines}>
+                                                    {parts.slice(1).join('\n')}
+                                                </Text>
+                                            </>
+                                        );
+                                    }
+                                    return (
+                                        <Text style={questionStyle} numberOfLines={promptNumLines}>
+                                            {rawText}
+                                        </Text>
+                                    );
+                                })()}
+                            </TodayQuestionPulseWrapper>
+                        </View>
+
+                        {/* Section 2: Phrases and vocab */}
+                        {minimal ? (
+                            (hintsLoading || hints?.starter_phrase) && (
+                                <Pressable
+                                    style={({ pressed }) => [styles.minimalPhrasesToggle, pressed && { opacity: 0.8 }]}
+                                    onPress={() => setMinimalPhrasesExpanded(!minimalPhrasesExpanded)}
+                                >
+                                    <Text style={[styles.minimalPhrasesToggleText, isLightBackground && styles.textOnLight]}>
+                                        {minimalPhrasesExpanded ? 'hide phrases' : 'see phrases'}
                                     </Text>
-                                    <Text style={secondaryPromptStyle} numberOfLines={isCompact ? 1 : undefined}>
-                                        {parts.slice(1).join('\n')}
-                                    </Text>
-                                </>
-                            );
-                        }
-
-                        // Single line case
-                        return (
-                            <Text style={promptTextStyle} numberOfLines={isCompact ? 2 : undefined}>
-                                {rawText}
-                            </Text>
-                        );
-                    })()}
-                </TodayQuestionPulseWrapper>
-
-                {/* Inline Ingredients — minimal: one "see phrases" toggle; otherwise full hints */}
-                {minimal ? (
-                    (hintsLoading || hints?.starter_phrase) && (
-                        <Pressable
-                            style={({ pressed }) => [styles.minimalPhrasesToggle, pressed && { opacity: 0.8 }]}
-                            onPress={() => setMinimalPhrasesExpanded(!minimalPhrasesExpanded)}
-                        >
-                            <Text style={[styles.minimalPhrasesToggleText, isLightBackground && styles.textOnLight]}>
-                                {minimalPhrasesExpanded ? 'hide phrases' : 'see phrases'}
-                            </Text>
-                        </Pressable>
-                    )
-                ) : null}
-                {minimal && !minimalPhrasesExpanded ? null : (
-                    <>
+                                </Pressable>
+                            )
+                        ) : null}
+                        {minimal && !minimalPhrasesExpanded ? null : (
+                            <View style={[styles.todayCardSection, styles.todayCardSectionPhrasesVocab]}>
+                    <View style={styles.embedHintsWrap}>
                         {hintsLoading && (
                             <View style={styles.hintsLoading}>
                                 <ActivityIndicator size="small" color={isLightBackground ? '#141414' : 'rgba(255,255,255,0.8)'} />
-                                <Text style={[styles.hintsLoadingText, isLightBackground && styles.textOnLight]}>{isTodayLayout ? 'loading…' : 'loading hints…'}</Text>
+                                <Text style={[styles.hintsLoadingText, isLightBackground && styles.textOnLight]}>{(isTodayLayout || embedInSection) ? 'loading…' : 'loading hints…'}</Text>
                             </View>
                         )}
-                        {!hintsLoading && hints?.starter_phrase && (
-                            <View style={[hintsContainerStyle, isTodayLayout && styles.todayPhraseSection]}>
-                                {!isTodayLayout && (
-                                    <Text style={[hintsLabelStyle, isLightBackground && styles.textOnLight, styles.todaySectionLabel]}>beginner phrase:</Text>
+                        {!hintsLoading && (hints?.starter_phrases?.length > 0 || hints?.starter_phrase) && (
+                            <View style={[hintsContainerStyle, (isTodayLayout || embedInSection) && styles.todayPhraseSection, embedInSection && styles.embedPhraseBlock]}>
+                                {!isTodayLayout && !embedInSection && (
+                                    <Text style={[hintsLabelStyle, isLightBackground && styles.textOnLight, styles.todaySectionLabel]}>beginner phrases:</Text>
                                 )}
-                                <Pressable
-                                    style={[starterPhraseCardStyle, speakingWord === hints.starter_phrase && styles.speakingActive, isLightBackground && styles.starterCardOnLight, isTodayLayout && styles.todayStarterPhraseCard]}
-                                    onPress={() => playTts(hints.starter_phrase)}
-                                    accessibilityLabel={isTodayLayout ? 'Tap to hear pronunciation' : 'Tap to hear it'}
-                                    accessibilityRole="button"
-                                >
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={[starterPhraseStyle, isLightBackground && styles.textOnLight]}>"{hints.starter_phrase}"</Text>
-                                        {hints.starter_phrase_translation ? (
-                                            <Text style={[styles.starterTranslation, isLightBackground && styles.secondaryTextOnLight]}>
-                                                {hints.starter_phrase_translation}
-                                            </Text>
-                                        ) : null}
-                                        {isTodayLayout && (
-                                            <View style={styles.todayHearRow}>
-                                                <Volume2 size={14} color={SOUP_COLORS.subtext} />
-                                                <Text style={styles.todayHearHint}>tap to hear</Text>
+                                {(() => {
+                                    const phrases = hints.starter_phrases?.length
+                                        ? hints.starter_phrases.map(p => ({ text: p.phrase, translation: p.translation }))
+                                        : [{ text: hints.starter_phrase, translation: hints.starter_phrase_translation }];
+                                    return (
+                                        <View style={[styles.phraseListWrap, embedInSection && styles.embedPhraseListRow]}>
+                                    {phrases.map((item, idx) => {
+                                        const phraseText = item.text;
+                                        return (
+                                        <Pressable
+                                            key={`phrase-${idx}-${normalizeTtsText(phraseText) || idx}`}
+                                            style={[starterPhraseCardStyle, speakingWord === normalizeTtsText(phraseText) && styles.speakingActive, isLightBackground && styles.starterCardOnLight, (isTodayLayout || embedInSection) && styles.todayStarterPhraseCard, embedInSection && styles.embedStarterPhraseCard]}
+                                            onPress={() => { if (phraseText) playTts(phraseText); }}
+                                            accessibilityLabel="Tap to hear"
+                                            accessibilityRole="button"
+                                        >
+                                                    <View style={{ flex: 1 }}>
+                                                <Text style={[starterPhraseStyle, isLightBackground && styles.textOnLight]}>"{phraseText}"</Text>
+                                                {item.translation ? (
+                                                    <Text style={[styles.starterTranslation, isLightBackground && styles.secondaryTextOnLight]}>
+                                                        {item.translation}
+                                                    </Text>
+                                                ) : null}
                                             </View>
-                                        )}
-                                        {!isTodayLayout && !hints.starter_phrase_translation && (
-                                            <Text style={[styles.starterTranslation, isLightBackground && styles.secondaryTextOnLight]}>Tap to hear it</Text>
-                                        )}
-                                    </View>
-                                    <View style={[styles.playCircle, isLightBackground && styles.playCircleOnLight, isTodayLayout && styles.todayPlayCircle]}>
-                                        {speakingWord === hints.starter_phrase ? (
+                                            <View style={[styles.playCircle, isLightBackground && styles.playCircleOnLight, (isTodayLayout || embedInSection) && styles.todayPlayCircle]}>
+{speakingWord === normalizeTtsText(phraseText) ? (
                                             <ActivityIndicator size="small" color={isLightBackground ? '#141414' : '#fff'} />
                                         ) : (
-                                            <Volume2 size={isTodayLayout ? 24 : 20} color={isTodayLayout ? SOUP_COLORS.turquoise : (isLightBackground ? '#141414' : '#fff')} />
+                                            <Volume2 size={(isTodayLayout || embedInSection) ? 24 : 20} color={(isTodayLayout || embedInSection) ? SOUP_COLORS.turquoise : (isLightBackground ? '#141414' : '#fff')} />
                                         )}
                                     </View>
-                                </Pressable>
-                                {speakingWord === hints.starter_phrase && (
+                                        </Pressable>
+                                    );
+                                    })}
+                                        </View>
+                                    );
+                                })()}
+                                {speakingWord && (
                                     <>
                                         <TtsLoadingMessage isLightBackground={isLightBackground} />
                                         <TtsLoadingFillBar isLightBackground={isLightBackground} complete={ttsLoadComplete} />
                                     </>
                                 )}
                                 {!hintsLoading && hints?.vocab_bank && hints.vocab_bank.length > 0 && (
-                                    <View style={[vocabBlockStyle, isTodayLayout && styles.todayVocabSection]}>
-                                        {!isTodayLayout && <Text style={[styles.vocabBlockLabel, isLightBackground && styles.textOnLight]}>{'vocab'}</Text>}
-                                        <View style={[styles.vocabRow, isTodayLayout && styles.todayVocabRow]}>
-                                            {(hints.vocab_bank.slice(0, isTodayLayout ? 5 : 10)).map((item, idx) => {
+                                    <View style={[vocabBlockStyle, (isTodayLayout || embedInSection) && styles.todayVocabSection, embedInSection && styles.embedVocabBlock]}>
+                                        {!isTodayLayout && !embedInSection && <Text style={[styles.vocabBlockLabel, isLightBackground && styles.textOnLight]}>{'vocab'}</Text>}
+                                        <View style={[styles.vocabRow, (isTodayLayout || embedInSection) && styles.todayVocabRow]}>
+                                            {(hints.vocab_bank.slice(0, (embedInSection || isTodayLayout) ? 3 : 10)).map((item, idx) => {
                                                 const word = (item.word ?? item.target_term ?? '').trim();
                                                 const translation = (item.translation ?? item.english ?? '').trim();
                                                 if (!word) return null;
                                                 return (
-                                                    <View key={idx} style={[styles.vocabPill, isLightBackground && styles.vocabPillOnLight, isTodayLayout && styles.todayVocabPill]}>
-                                                        <Text style={[styles.vocabWord, isLightBackground && styles.textOnLight, isTodayLayout && styles.todayVocabWord]} numberOfLines={1}>{word}</Text>
-                                                        {translation ? <Text style={[styles.vocabTranslation, isLightBackground && styles.secondaryTextOnLight, isTodayLayout && styles.todayVocabTranslation]} numberOfLines={1}> · {translation}</Text> : null}
-                                                    </View>
+                                                    <Pressable
+                                                        key={`vocab-${idx}-${word}`}
+                                                        onPress={() => playTts(word)}
+                                                        style={({ pressed }) => [styles.vocabPill, isLightBackground && styles.vocabPillOnLight, (isTodayLayout || embedInSection) && styles.todayVocabPill, embedInSection && styles.embedVocabPill, pressed && { opacity: 0.8 }]}
+                                                        accessibilityLabel={`Tap to hear ${word}`}
+                                                        accessibilityRole="button"
+                                                    >
+                                                        <Text style={[styles.vocabWord, isLightBackground && styles.textOnLight, (isTodayLayout || embedInSection) && styles.todayVocabWord, embedInSection && styles.embedVocabWord]} numberOfLines={1}>{word}</Text>
+                                                        {translation ? <Text style={[styles.vocabTranslation, isLightBackground && styles.secondaryTextOnLight, (isTodayLayout || embedInSection) && styles.todayVocabTranslation]} numberOfLines={1}> · {translation}</Text> : null}
+                                                    </Pressable>
                                                 );
                                             })}
                                         </View>
                                     </View>
                                 )}
+                                {embedInSection && !hintsLoading && (hints?.starter_phrases?.length > 0 || hints?.starter_phrase) && (
+                                    <Pressable
+                                        style={({ pressed }) => [
+                                            styles.newIdeasButton,
+                                            {
+                                                backgroundColor: 'rgba(255,255,255,0.28)',
+                                                paddingVertical: 10,
+                                                paddingHorizontal: 14,
+                                                borderRadius: 22,
+                                                borderWidth: 1,
+                                                borderColor: 'rgba(255,255,255,0.35)',
+                                                flexDirection: 'row',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                            },
+                                            pressed && { opacity: 0.8 },
+                                        ]}
+                                        onPress={refreshHintsForSession}
+                                        disabled={refreshingHints}
+                                        accessibilityLabel={refreshingHints ? 'loading new ideas' : 'shuffle phrases and vocab'}
+                                        accessibilityRole="button"
+                                    >
+                                        {refreshingHints ? (
+                                            <ActivityIndicator size="small" color="#fff" />
+                                        ) : (
+                                            <Shuffle size={20} color="#fff" strokeWidth={2.2} />
+                                        )}
+                                    </Pressable>
+                                )}
                             </View>
+                                )}
+                            </View>
+                            </View>
+                        )}
+                    </View>
+                ) : (
+                    <>
+                        {!isTodayLayout && <Text style={[groupNameStyle, styles.todayGroupName]}>{groupName || 'Soup Group'}</Text>}
+                        <TodayQuestionPulseWrapper embedInSection={embedInSection} challengeId={challenge?.id} isTodayLayout={isTodayLayout} promptContainerStyle={isTodayLayout ? styles.todayPromptBubble : { alignItems: 'center' }}>
+                            {(() => {
+                                const raw = (challenge?.prompt_text || "Ready to Soup?").replace(/^#challenge\s*\n?/i, '').trim();
+                                const rawText = raw || "Ready to Soup?";
+                                const parts = rawText.split(/\n+/).filter(p => p.trim());
+                                const qStyle = [promptTextStyle, isTodayLayout && styles.todayQuestionText];
+                                if (parts.length > 1) return (<><Text style={qStyle} numberOfLines={isCompact ? 2 : undefined}>{parts[0]}</Text><Text style={secondaryPromptStyle} numberOfLines={isCompact ? 1 : undefined}>{parts.slice(1).join('\n')}</Text></>);
+                                return <Text style={qStyle} numberOfLines={isCompact ? 2 : undefined}>{rawText}</Text>;
+                            })()}
+                        </TodayQuestionPulseWrapper>
+                        {minimal ? (hintsLoading || hints?.starter_phrases?.length > 0 || hints?.starter_phrase) && <Pressable style={({ pressed }) => [styles.minimalPhrasesToggle, pressed && { opacity: 0.8 }]} onPress={() => setMinimalPhrasesExpanded(!minimalPhrasesExpanded)}><Text style={[styles.minimalPhrasesToggleText, isLightBackground && styles.textOnLight]}>{minimalPhrasesExpanded ? 'hide phrases' : 'see phrases'}</Text></Pressable> : null}
+                        {minimal && !minimalPhrasesExpanded ? null : (
+                            <>
+                                {hintsLoading && <View style={styles.hintsLoading}><ActivityIndicator size="small" color={isLightBackground ? '#141414' : 'rgba(255,255,255,0.8)'} /><Text style={[styles.hintsLoadingText, isLightBackground && styles.textOnLight]}>{(isTodayLayout || embedInSection) ? 'loading…' : 'loading hints…'}</Text></View>}
+                                {!hintsLoading && (hints?.starter_phrases?.length > 0 || hints?.starter_phrase) && (
+                                    <View style={[hintsContainerStyle, isTodayLayout && styles.todayPhraseSection]}>
+                                        {!isTodayLayout && !embedInSection && <Text style={[hintsLabelStyle, isLightBackground && styles.textOnLight, styles.todaySectionLabel]}>beginner phrases:</Text>}
+                                        {(() => {
+                                            const phrases = hints.starter_phrases?.length ? hints.starter_phrases.map(p => ({ text: p.phrase, translation: p.translation })) : [{ text: hints.starter_phrase, translation: hints.starter_phrase_translation }];
+                                            return phrases.map((item, idx) => {
+                                                const phraseText = item.text;
+                                                return (
+                                                <Pressable key={`phrase-${idx}-${normalizeTtsText(phraseText) || idx}`} style={[starterPhraseCardStyle, speakingWord === normalizeTtsText(phraseText) && styles.speakingActive, isLightBackground && styles.starterCardOnLight, isTodayLayout && styles.todayStarterPhraseCard]} onPress={() => { if (phraseText) playTts(phraseText); }} accessibilityLabel="Tap to hear" accessibilityRole="button">
+                                                    <View style={{ flex: 1 }}><Text style={[starterPhraseStyle, isLightBackground && styles.textOnLight]}>"{phraseText}"</Text>{item.translation ? <Text style={[styles.starterTranslation, isLightBackground && styles.secondaryTextOnLight]}>{item.translation}</Text> : null}{!isTodayLayout && !item.translation && <Text style={[styles.starterTranslation, isLightBackground && styles.secondaryTextOnLight]}>Tap to hear</Text>}</View>
+                                                    <View style={[styles.playCircle, isLightBackground && styles.playCircleOnLight, isTodayLayout && styles.todayPlayCircle]}>{speakingWord === normalizeTtsText(phraseText) ? <ActivityIndicator size="small" color={isLightBackground ? '#141414' : '#fff'} /> : <Volume2 size={isTodayLayout ? 24 : 20} color={isTodayLayout ? SOUP_COLORS.turquoise : (isLightBackground ? '#141414' : '#fff')} />}</View>
+                                                </Pressable>
+                                            );
+                                            });
+                                        })()}
+                                        {speakingWord && <><TtsLoadingMessage isLightBackground={isLightBackground} /><TtsLoadingFillBar isLightBackground={isLightBackground} complete={ttsLoadComplete} /></>}
+                                        {hints?.vocab_bank && hints.vocab_bank.length > 0 && (
+                                            <View style={[vocabBlockStyle, isTodayLayout && styles.todayVocabSection]}>
+                                                {!isTodayLayout && !embedInSection && <Text style={[styles.vocabBlockLabel, isLightBackground && styles.textOnLight]}>{'vocab'}</Text>}
+                                                <View style={[styles.vocabRow, isTodayLayout && styles.todayVocabRow]}>
+                                                    {(hints.vocab_bank.slice(0, isTodayLayout ? 3 : 10)).map((item, idx) => {
+                                                        const word = (item.word ?? item.target_term ?? '').trim();
+                                                        const translation = (item.translation ?? item.english ?? '').trim();
+                                                        if (!word) return null;
+                                                        return (
+                                                            <Pressable key={`vocab-${idx}-${word}`} onPress={() => playTts(word)} style={({ pressed }) => [styles.vocabPill, isLightBackground && styles.vocabPillOnLight, isTodayLayout && styles.todayVocabPill, pressed && { opacity: 0.8 }]} accessibilityLabel={`Tap to hear ${word}`} accessibilityRole="button">
+                                                                <Text style={[styles.vocabWord, isLightBackground && styles.textOnLight, isTodayLayout && styles.todayVocabWord]} numberOfLines={1}>{word}</Text>
+                                                                {translation ? <Text style={[styles.vocabTranslation, isLightBackground && styles.secondaryTextOnLight, isTodayLayout && styles.todayVocabTranslation]} numberOfLines={1}> · {translation}</Text> : null}
+                                                            </Pressable>
+                                                        );
+                                                    })}
+                                                </View>
+                                            </View>
+                                        )}
+                                    </View>
+                                )}
+                            </>
                         )}
                     </>
                 )}
             </View>
 
-            {/* Interaction Area */}
+            {/* Record sits at bottom; prompt gets all space above */}
+            {/* Section 3: Record — when embed: sits at very bottom above "1 of 7" */}
             <View style={actionContainerStyle}>
                 {recordedUri ? (
                     // REVIEW MODE
@@ -742,16 +868,13 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName, isLi
                             </Pressable>
                         </View>
                         <Text style={[styles.reviewText, isLightBackground && styles.secondaryTextOnLight]}>
-                            {isTodayLayout ? 'lock it in?' : 'Ready to send?'}
+                            {isTodayLayout ? 'listen back, then send' : 'Ready to send?'}
                         </Text>
                     </View>
                 ) : (
-                    // RECORD MODE — Today layout: "record your reply" hero
-                    <View style={[recordContainerStyle, isTodayLayout && styles.todayReplyZone]}>
-                        {isTodayLayout && (
-                            <Text style={[styles.todayRecordLabel, isLightBackground && styles.textOnLight]}>record</Text>
-                        )}
-                        {!isTodayLayout && !isRecording && communityBubbles.length > 0 && (
+                    // RECORD MODE — Today layout: waveform zone (space above button) then record button
+                    <View style={[recordContainerStyle, (isTodayLayout || embedInSection) && styles.todayReplyZone, embedInSection && styles.embedReplyZone, embedInSection && styles.embedRecordArea]}>
+                        {!embedInSection && !isTodayLayout && !isRecording && communityBubbles.length > 0 && (
                             <View style={[styles.peekingRow, isCompact && stylesCompact.peekingRow]} pointerEvents="none">
                                 {communityBubbles.map((user, i) => (
                                     <View key={i} style={[styles.peekingAvatar, styles.peekingAvatarWrap, isCompact && stylesCompact.peekingAvatar, { zIndex: i }]}>
@@ -762,8 +885,22 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName, isLi
                             </View>
                         )}
 
-                        {isRecording ? (
-                            <View style={[waveformContainerStyle, isTodayLayout && styles.todayWaveformWrap]}>
+                        {embedInSection ? (
+                            <View style={styles.todayCardWaveformZone}>
+                                {isRecording ? (
+                                    <View style={[waveformContainerStyle, styles.todayWaveformWrap, styles.embedWaveformWrap]}>
+                                        <LiveAudioWaveform
+                                            metering={metering}
+                                            recordingDuration={recordingDuration}
+                                            isRecording={isRecording}
+                                            color={isLightBackground ? SOUP_COLORS.turquoise : 'white'}
+                                        />
+                                        <Text style={[styles.timerText, isLightBackground && styles.textOnLight]}>{loadTime(recordingDuration)}</Text>
+                                    </View>
+                                ) : null}
+                            </View>
+                        ) : isRecording ? (
+                            <View style={[waveformContainerStyle, (isTodayLayout || embedInSection) && styles.todayWaveformWrap, embedInSection && styles.embedWaveformWrap]}>
                                 <LiveAudioWaveform
                                     metering={metering}
                                     recordingDuration={recordingDuration}
@@ -772,7 +909,7 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName, isLi
                                 />
                                 <Text style={[styles.timerText, isLightBackground && styles.textOnLight]}>{loadTime(recordingDuration)}</Text>
                             </View>
-                        ) : embedInSection && !recordedUri && !isTodayLayout ? (
+                        ) : !embedInSection && !recordedUri ? (
                             <View style={[styles.idleWaveformWrap, styles.idleWaveformWrapSilky]}>
                                 <AnimatedIdleWaveform
                                     variant="silky"
@@ -784,35 +921,34 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName, isLi
                             </View>
                         ) : null}
 
+                        <View style={embedInSection ? styles.embedRecordButtonWrap : undefined}>
                         <Pressable
                             onPress={handleRecordPress}
-                            style={[
+                            style={({ pressed }) => [
                                 recordButtonStyle,
-                                isTodayLayout && styles.todayRecordButton,
-                                isTodayLayout && !isRecording && styles.todayRecordButtonWaveform,
+                                (isTodayLayout || embedInSection) && styles.todayRecordButton,
+                                embedInSection && styles.embedRecordButton,
+                                (isTodayLayout || embedInSection) && !isRecording && styles.todayRecordButtonWaveform,
                                 isRecording && styles.recordingActive,
-                                isLightBackground && isRecording && styles.recordingActiveOnLight
+                                isLightBackground && isRecording && styles.recordingActiveOnLight,
+                                pressed && { opacity: 0.9 }
                             ]}
                         >
                             {isRecording ? (
                                 <View style={[styles.stopIcon, isCompact && stylesCompact.stopIcon, isLightBackground ? { backgroundColor: '#fff' } : { backgroundColor: SOUP_COLORS.turquoise }]} />
-                            ) : isTodayLayout ? (
-                                <AnimatedIdleWaveform
-                                    variant="silky"
-                                    color={SOUP_COLORS.turquoise}
-                                    barCount={28}
-                                    barWidth={3}
-                                    maxHeight={32}
-                                />
                             ) : (
-                                <Mic size={isCompact ? 28 : 40} color={isLightBackground ? '#fff' : SOUP_COLORS.turquoise} />
+                                <Mic size={embedInSection ? 32 : (isCompact ? 28 : 40)} color={isLightBackground ? '#fff' : SOUP_COLORS.turquoise} />
                             )}
                         </Pressable>
-                        <Text style={[hintTextStyle, isTodayLayout && !isRecording && styles.todayRecordHint, isLightBackground && styles.textOnLight]}>
-                            {isRecording ? "Tap to finish" : "tap to record"}
-                        </Text>
+                        </View>
+                        {!(isTodayLayout && !isRecording) && !embedInSection && (
+                            <Text style={[hintTextStyle, (isTodayLayout || embedInSection) && styles.todayRecordHint, embedInSection && styles.embedRecordHint, isLightBackground && styles.textOnLight]}>
+                                {isRecording ? "Tap to finish" : "tap to record"}
+                            </Text>
+                        )}
                     </View>
                 )}
+            </View>
             </View>
         </View>
     );
@@ -1039,12 +1175,14 @@ const styles = StyleSheet.create({
         backgroundColor: '#F5F5F5',
     },
     playButton: {
-        width: 64, // Reduced
+        width: 64,
         height: 64,
         borderRadius: 32,
         backgroundColor: '#E6F7FD',
         borderWidth: 2,
         borderColor: SOUP_COLORS.turquoise,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     sendButton: {
         backgroundColor: SOUP_COLORS.turquoise,
@@ -1272,6 +1410,8 @@ const stylesCompact = StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 22,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     scrubberContainer: {
         paddingVertical: 4,
@@ -1301,7 +1441,174 @@ const stylesCompact = StyleSheet.create({
         borderRadius: 12,
         marginLeft: -6,
     },
-    // Today layout: thread-style (ask → phrases → reply)
+    embedCardBoundary: {
+        flex: 1,
+        minHeight: 0,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.35)',
+        borderRadius: 20,
+        padding: 16,
+        overflow: 'hidden',
+    },
+    embedPromptOuter: {
+        flex: 1,
+        minHeight: 0,
+    },
+    embedContent: {
+        flex: 1,
+        minHeight: 0,
+        paddingTop: 12,
+        paddingBottom: 0,
+    },
+    todayCardSection: {
+        paddingVertical: 0,
+        paddingHorizontal: 0,
+    },
+    todayCardSectionQuestion: {
+        flex: 0,
+        paddingBottom: 20,
+    },
+    todayCardSectionPhrasesVocab: {
+        flex: 1,
+        minHeight: 0,
+        paddingTop: 8,
+        paddingBottom: 20,
+    },
+    todayCardSectionRecord: {
+        flex: 0,
+        paddingTop: 20,
+        paddingBottom: 14,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255,255,255,0.18)',
+    },
+    todayCardWaveformZone: {
+        minHeight: 44,
+        marginBottom: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    embedPromptBlock: {
+        flex: 0.4,
+        minHeight: 0,
+    },
+    embedPhrasesVocabBlock: {
+        flex: 0.3,
+        minHeight: 0,
+    },
+    embedPhrasesVocabInner: {
+        flex: 1,
+    },
+    embedPhraseListRow: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    embedHintsWrap: {
+        flex: 1,
+        minHeight: 0,
+    },
+    embedLanguageLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        textTransform: 'lowercase',
+        letterSpacing: 0.5,
+        color: 'rgba(255,255,255,0.85)',
+        marginBottom: 4,
+    },
+    embedPromptBubble: {
+        paddingVertical: 0,
+        paddingHorizontal: 0,
+    },
+    todayQuestionText: {
+        fontSize: 18,
+        fontWeight: '800',
+        lineHeight: 26,
+        letterSpacing: -0.2,
+    },
+    embedPromptText: {
+        fontSize: 17,
+        lineHeight: 24,
+        letterSpacing: -0.1,
+    },
+    embedSecondaryPrompt: {
+        fontSize: 13,
+        lineHeight: 19,
+        opacity: 0.95,
+    },
+    embedPhraseBlock: {
+        marginTop: 18,
+        marginBottom: 14,
+    },
+    phraseListWrap: {
+        gap: 10,
+    },
+    embedStarterPhraseCard: {
+        paddingVertical: 12,
+        paddingHorizontal: 14,
+        borderRadius: 14,
+        backgroundColor: 'rgba(255,255,255,0.12)',
+    },
+    embedVocabBlock: {
+        marginTop: 16,
+        marginBottom: 0,
+    },
+    newIdeasButton: {
+        alignSelf: 'flex-start',
+        marginTop: 16,
+        paddingVertical: 10,
+        paddingHorizontal: 18,
+        backgroundColor: 'rgba(255,255,255,0.22)',
+        borderRadius: 22,
+    },
+    newIdeasButtonText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: 'rgba(255,255,255,0.95)',
+    },
+    embedActionBlock: {
+        flex: 0,
+        minHeight: 0,
+        justifyContent: 'flex-end',
+    },
+    embedReplyZone: {
+        marginTop: 0,
+        paddingTop: 6,
+    },
+    embedRecordArea: {
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        paddingBottom: 6,
+    },
+    embedRecordButtonWrap: {
+        alignSelf: 'center',
+    },
+    embedWaveformWrap: {
+        minHeight: 44,
+        marginBottom: 10,
+    },
+    embedRecordButton: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+    },
+    embedHearRow: {
+        marginTop: 2,
+    },
+    embedHearHint: {
+        fontSize: 11,
+    },
+    embedVocabPill: {
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 10,
+        backgroundColor: 'rgba(255,255,255,0.14)',
+    },
+    embedVocabWord: {
+        fontSize: 12,
+    },
+    embedRecordHint: {
+        fontSize: 10,
+        marginTop: 0,
+    },
     todayPromptWrap: {
         alignItems: 'stretch',
     },
@@ -1332,34 +1639,44 @@ const stylesCompact = StyleSheet.create({
         borderBottomRightRadius: 14,
     },
     todayReplyZone: {
-        marginTop: 28,
-        paddingTop: 24,
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(0,0,0,0.06)',
+        marginTop: 0,
+        paddingTop: 0,
+        borderTopWidth: 0,
+        borderTopColor: 'transparent',
     },
     todayWaveformWrap: {
         width: '100%',
         minHeight: 40,
         marginBottom: 8,
     },
+    todayRecordBlockFixed: {
+        minHeight: 160,
+        width: '100%',
+    },
+    todayWaveformAreaFixed: {
+        width: '100%',
+        height: 56,
+        minHeight: 56,
+        marginBottom: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    todayWaveformAsButton: {
+        alignSelf: 'stretch',
+    },
     todayRecordButton: {
         width: 64,
         height: 64,
         borderRadius: 32,
     },
-    todayRecordButtonWaveform: {
-        backgroundColor: '#fff',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
     todayRecordHint: {
         fontSize: 12,
         opacity: 0.9,
-        marginTop: 4,
+        marginTop: 8,
     },
     todayPhraseSection: {
-        marginTop: 20,
-        marginBottom: 8,
+        marginTop: 16,
+        marginBottom: 10,
     },
     todaySectionLabel: {
         fontSize: 11,
@@ -1370,10 +1687,10 @@ const stylesCompact = StyleSheet.create({
         opacity: 0.9,
     },
     todayStarterPhraseCard: {
-        paddingVertical: 20,
-        paddingHorizontal: 20,
+        paddingVertical: 14,
+        paddingHorizontal: 16,
         backgroundColor: 'rgba(0,0,0,0.03)',
-        borderRadius: 20,
+        borderRadius: 16,
         borderWidth: 0,
     },
     todayHearRow: {
@@ -1392,8 +1709,15 @@ const stylesCompact = StyleSheet.create({
         backgroundColor: 'rgba(0,174,239,0.12)',
     },
     todayVocabSection: {
-        marginTop: 24,
-        marginBottom: 4,
+        marginTop: 16,
+        marginBottom: 12,
+    },
+    todayVocabTapHint: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: SOUP_COLORS.subtext,
+        textTransform: 'lowercase',
+        marginBottom: 6,
     },
     todayVocabRow: {
         flexWrap: 'wrap',

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -6,23 +6,41 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Colors } from '../../constants/Colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-
-const EXAMPLE_TAGLINES = [
-    'founder daddy',
-    'scared to send voice memos',
-    'rambler',
-    'lurker',
-    'community momager',
-    'slay slay slay',
-    'always late to challenges',
-    'polyglot in training',
-];
+import { OnboardingSwipeForward } from '../../components/OnboardingSwipeForward';
+import { getRandomTagline, getRandomTaglineChipsWithLanguages, pickRandom, TAGLINE_SUGGESTIONS } from '../../constants/CopyPhilosophy';
 
 export default function TaglineScreen() {
     const { user } = useAuth();
     const router = useRouter();
-    const [tagline, setTagline] = useState('');
+    const [tagline, setTagline] = useState(() => getRandomTagline([]));
     const [saving, setSaving] = useState(false);
+    const [inspirationChips, setInspirationChips] = useState(() => getRandomTaglineChipsWithLanguages(10, []));
+    const [placeholder, setPlaceholder] = useState(() => pickRandom(TAGLINE_SUGGESTIONS));
+
+    const userLanguages = useCallback(async () => {
+        if (!user?.id) return [];
+        const { data } = await supabase.from('app_users').select('learning_languages, fluent_languages').eq('id', user.id).maybeSingle();
+        const langs = data?.learning_languages || data?.fluent_languages || [];
+        return Array.isArray(langs) ? langs : [];
+    }, [user?.id]);
+
+    useEffect(() => {
+        let mounted = true;
+        (async () => {
+            const langs = await userLanguages();
+            if (!mounted) return;
+            setTagline(getRandomTagline(langs));
+            setInspirationChips(getRandomTaglineChipsWithLanguages(10, langs));
+        })();
+        return () => { mounted = false; };
+    }, [userLanguages]);
+
+    const shuffleTagline = useCallback(async () => {
+        const langs = await userLanguages();
+        setTagline(getRandomTagline(langs));
+        setInspirationChips(getRandomTaglineChipsWithLanguages(10, langs));
+        setPlaceholder(pickRandom(TAGLINE_SUGGESTIONS));
+    }, [userLanguages]);
 
     const handleContinue = async () => {
         if (!tagline.trim()) return;
@@ -48,8 +66,17 @@ export default function TaglineScreen() {
         router.push('/onboarding/avatar');
     };
 
+    const handleSwipeForward = () => {
+        if (tagline.trim() && !saving) handleContinue();
+        else handleSkip();
+    };
+
     return (
         <SafeAreaView style={styles.container}>
+            <OnboardingSwipeForward onSwipeForward={handleSwipeForward} onSwipeBack={() => router.replace('/onboarding/your-groups')}>
+            <Pressable onPress={() => router.replace('/onboarding/your-groups')} style={styles.backRow} hitSlop={12}>
+                <Text style={styles.backText}>← back</Text>
+            </Pressable>
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={styles.content}
@@ -61,7 +88,7 @@ export default function TaglineScreen() {
 
                         <TextInput
                             style={styles.input}
-                            placeholder="language soup enthusiast"
+                            placeholder={placeholder}
                             placeholderTextColor="#999"
                             value={tagline}
                             onChangeText={setTagline}
@@ -69,15 +96,20 @@ export default function TaglineScreen() {
                             autoFocus
                         />
 
-                        <Text style={styles.examplesTitle}>need inspiration?</Text>
+                        <View style={styles.inspirationRow}>
+                            <Text style={styles.examplesTitle}>need inspiration?</Text>
+                            <Pressable onPress={shuffleTagline} style={({ pressed }) => [styles.shuffleButton, pressed && { opacity: 0.7 }]}>
+                                <Text style={styles.shuffleButtonText}>another one</Text>
+                            </Pressable>
+                        </View>
                         <View style={styles.examples}>
-                            {EXAMPLE_TAGLINES.map(example => (
+                            {inspirationChips.map((chip, idx) => (
                                 <Pressable
-                                    key={example}
-                                    style={styles.exampleChip}
-                                    onPress={() => setTagline(example)}
+                                    key={`${chip}-${idx}`}
+                                    style={({ pressed }) => [styles.exampleChip, pressed && { opacity: 0.8 }]}
+                                    onPress={() => setTagline(chip)}
                                 >
-                                    <Text style={styles.exampleText}>{example}</Text>
+                                    <Text style={styles.exampleText}>{chip}</Text>
                                 </Pressable>
                             ))}
                         </View>
@@ -102,6 +134,7 @@ export default function TaglineScreen() {
                     </Pressable>
                 </View>
             </KeyboardAvoidingView>
+            </OnboardingSwipeForward>
         </SafeAreaView>
     );
 }
@@ -148,12 +181,28 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginBottom: 32,
     },
+    inspirationRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 12,
+    },
     examplesTitle: {
         fontSize: 14,
         fontWeight: '600',
         color: Colors.textLight,
-        marginBottom: 12,
         textAlign: 'center',
+    },
+    shuffleButton: {
+        paddingVertical: 4,
+        paddingHorizontal: 10,
+    },
+    shuffleButtonText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: Colors.primary,
     },
     examples: {
         flexDirection: 'row',
@@ -205,5 +254,15 @@ const styles = StyleSheet.create({
     skipText: {
         fontSize: 16,
         color: Colors.textLight,
+    },
+    backRow: {
+        paddingHorizontal: 24,
+        paddingTop: 8,
+        paddingBottom: 4,
+    },
+    backText: {
+        fontSize: 16,
+        color: Colors.primary,
+        fontWeight: '600',
     },
 });

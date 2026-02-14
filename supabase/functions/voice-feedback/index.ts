@@ -14,7 +14,7 @@ serve(async (req) => {
     }
 
     try {
-        const { audioUrl, language, userId, task = 'analyze', text, context, prompt, challengeId, messageId } = await req.json()
+        const { audioUrl, language, userId, task = 'analyze', text, context, prompt, challengeId, messageId, variation } = await req.json()
 
         console.log('Voice feedback request:', { task, userId })
 
@@ -27,7 +27,7 @@ serve(async (req) => {
         // TASK: PRONUNCIATION (ElevenLabs)
         // ==========================================
         if (task === 'pronunciation' && text) {
-            // Send exactly the phrase we want spoken — no wrappers, no extra chars. Learners need 100% alignment.
+            // Use only the request body's `text` so the audio always matches what the user tapped. Trim and strip outer quotes only.
             const raw = typeof text === 'string' ? text : String(text);
             let input = raw.trim();
             if ((input.startsWith('"') && input.endsWith('"')) || (input.startsWith("'") && input.endsWith("'"))) {
@@ -38,13 +38,15 @@ serve(async (req) => {
                     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 });
             }
+            // This exact string is sent to TTS — do not substitute or alter so playback matches the tapped phrase/word.
             console.log('Pronunciation input (exact):', JSON.stringify(input), 'length:', input.length);
             const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-            // tts-1: no instructions, reads input verbatim. Use this for exact phrase alignment.
+            // tts-1: no instructions, reads input verbatim. Use this for exact phrase alignment. Slow speed for learners.
             const payload: Record<string, unknown> = {
                 model: 'tts-1',
                 input,
                 voice: 'shimmer',
+                speed: 0.65,
             };
 
             try {
@@ -107,21 +109,36 @@ serve(async (req) => {
 
             // Basic Hint Logic
             const targetLang = language || 'Target Language'
-            const hintSystemPrompt = `You are a helpful language tutor for absolute beginners.
+            const isVariation = variation === true
+
+            const baseRules = `RULES (STRICT):
+1. starter_phrases: an array of EXACTLY 2 short sentences in ${targetLang} only. Each phrase max 8 words. Prefer 5-7 words.
+   Each must be a direct ANSWER to the question. Vary the phrasing (e.g. one formal, one casual).
+2. For each phrase provide "translation": English meaning. Return as starter_phrases: [{ "phrase": "<sentence in ${targetLang}>", "translation": "<English>" }, { "phrase": "<second sentence>", "translation": "<English>" }]
+3. vocab_bank: exactly 3 useful vocabulary words. For EACH item: "target_term": the word IN ${targetLang} we pronounce, "english": English meaning.
+4. Use natural spoken language: contractions, elisions, informal register. Sound like casual speech.`
+
+            const variationInstruction = `IMPORTANT: The user asked for a DIFFERENT set of ideas. Do NOT repeat the same phrases or vocab they may have seen before. Pick a different angle (e.g. different formality, different vocabulary theme, different sentence structures). Be creative and varied.`
+
+            const hintSystemPrompt = isVariation
+                ? `You are a helpful language tutor for absolute beginners.
 The challenge is a QUESTION: "${prompt}"
-The student needs a beginner phrase that is a direct ANSWER to this question, in ${targetLang}.
+The student needs exactly 2 short beginner phrases that are direct ANSWERS to this question, in ${targetLang}.
 
-RULES (STRICT):
-1. starter_phrase: ONE short sentence in ${targetLang} only. Maximum 8 words. Prefer 5-7 words.
-   It must be a direct ANSWER to the question above, not a generic statement about the topic.
-   Example: if the question is "What song are you listening to right now?", the phrase should be like "I'm listening to [song name] right now" or "Right now I'm listening to...", NOT just "I'm listening to music."
-   Example: if the question is "Describe your perfect weekend", the phrase should be like "My perfect weekend is ..." or "On my perfect weekend I ...", NOT "My weekend is perfect."
-2. vocab_bank: 6 useful vocabulary words. For EACH item you MUST provide:
-   - "target_term": the word or phrase IN ${targetLang} that we will pronounce (e.g. "amigo", "sortir", "buongiorno"). This is the only field we speak aloud.
-   - "english": the English meaning only (e.g. "friend", "to go out", "good morning").
-3. Use natural spoken language for the target language: contractions, elisions, and informal register as in real conversation. Apply the usual spoken rules for that language (elision before vowels where standard, contractions, informal forms). The phrase should sound like casual speech, not written or formal.
+${variationInstruction}
 
-Return strictly valid JSON: { "starter_phrase": "<short sentence in ${targetLang}, max 8 words>", "starter_phrase_translation": "<English>", "vocab_bank": [{"target_term": "<term in ${targetLang}>", "english": "<English meaning>"}] }`
+${baseRules}
+
+Return strictly valid JSON: { "starter_phrases": [{"phrase": "<sentence in ${targetLang}>", "translation": "<English>"}, {"phrase": "<second sentence in ${targetLang}>", "translation": "<English>"}], "vocab_bank": [{"target_term": "<term>", "english": "<meaning>"}, {"target_term": "<term>", "english": "<meaning>"}, {"target_term": "<term>", "english": "<meaning>"}] }`
+                : `You are a helpful language tutor for absolute beginners.
+The challenge is a QUESTION: "${prompt}"
+The student needs exactly 2 short beginner phrases that are direct ANSWERS to this question, in ${targetLang}.
+
+${baseRules}
+
+Return strictly valid JSON: { "starter_phrases": [{"phrase": "<sentence in ${targetLang}>", "translation": "<English>"}, {"phrase": "<second sentence in ${targetLang}>", "translation": "<English>"}], "vocab_bank": [{"target_term": "<term>", "english": "<meaning>"}, {"target_term": "<term>", "english": "<meaning>"}, {"target_term": "<term>", "english": "<meaning>"}] }`
+
+            const temperature = isVariation ? 0.9 : 0.3
 
             const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
                 method: 'POST',
@@ -132,7 +149,7 @@ Return strictly valid JSON: { "starter_phrase": "<short sentence in ${targetLang
                 body: JSON.stringify({
                     model: 'llama-3.3-70b-versatile',
                     messages: [{ role: 'user', content: hintSystemPrompt }],
-                    temperature: 0.3,
+                    temperature,
                     response_format: { type: "json_object" }
                 }),
             })
@@ -140,20 +157,26 @@ Return strictly valid JSON: { "starter_phrase": "<short sentence in ${targetLang
             const groqResult = await groqResponse.json()
             const resultJSON = JSON.parse(groqResult.choices[0].message.content)
 
-            // 1. Hard cap: truncate starter_phrase to 8 words
+            // 1. Normalize starter_phrases (array of { phrase, translation }); backward compat: if only starter_phrase exists, wrap it
+            if (resultJSON.starter_phrases && Array.isArray(resultJSON.starter_phrases)) {
+                resultJSON.starter_phrases = resultJSON.starter_phrases.slice(0, 2).map((p: { phrase?: string; translation?: string; text?: string }) => {
+                    const phrase = (p.phrase ?? p.text ?? '').trim()
+                    const words = phrase.split(/\s+/)
+                    const capped = words.length > 8 ? words.slice(0, 8).join(' ').replace(/[,.\s]+$/, '').trim() : phrase
+                    return { phrase: capped || phrase, translation: (p.translation ?? '').trim() }
+                }).filter((p: { phrase: string }) => p.phrase.length > 0)
+            }
             if (resultJSON.starter_phrase && typeof resultJSON.starter_phrase === 'string') {
                 const phrase = resultJSON.starter_phrase.trim()
                 const words = phrase.split(/\s+/)
-                if (words.length > 8) {
-                    resultJSON.starter_phrase = words.slice(0, 8).join(' ').replace(/[,.\s]+$/, '').trim() || words.slice(0, 8).join(' ')
-                } else {
-                    resultJSON.starter_phrase = phrase
-                }
+                const capped = words.length > 8 ? words.slice(0, 8).join(' ').replace(/[,.\s]+$/, '').trim() : phrase
+                resultJSON.starter_phrases = [{ phrase: capped || phrase, translation: (resultJSON.starter_phrase_translation ?? '').trim() }]
             }
+            if (!resultJSON.starter_phrases?.length) resultJSON.starter_phrases = []
 
-            // 2. Vocab: normalize to word (term we speak) + translation (English). Use explicit target_term/english from LLM so we always speak the right term.
+            // 2. Vocab: normalize; keep only 3 items
             if (resultJSON.vocab_bank && Array.isArray(resultJSON.vocab_bank)) {
-                resultJSON.vocab_bank = resultJSON.vocab_bank.map((item: { target_term?: string; english?: string; word?: string; translation?: string }) => {
+                resultJSON.vocab_bank = resultJSON.vocab_bank.slice(0, 3).map((item: { target_term?: string; english?: string; word?: string; translation?: string }) => {
                     const term = (item.target_term ?? item.word ?? '').trim()
                     const eng = (item.english ?? item.translation ?? '').trim()
                     return { word: term, translation: eng }

@@ -3,6 +3,7 @@ import { View, Text } from 'react-native';
 */
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import * as NavigationBar from 'expo-navigation-bar';
@@ -84,7 +85,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="onboarding/conversational" />
                 <Stack.Screen name="onboarding/learning" />
                 <Stack.Screen name="onboarding/tagline" />
-                <Stack.Screen name="onboarding/notifications" />
+                <Stack.Screen name="onboarding/your-groups" />
             </Stack>
             <MiniAudioPlayer />
             <PodcastPlayerExpanded />
@@ -96,16 +97,18 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
     return (
-        <AppErrorBoundary>
-            <AuthProvider>
-                <NotificationProvider>
-                    <AudioPlayerProvider>
-                        <QuestProvider>
-                            <RootLayoutNav />
-                        </QuestProvider>
-                    </AudioPlayerProvider>
-                </NotificationProvider>
-            </AuthProvider>
-        </AppErrorBoundary>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+            <AppErrorBoundary>
+                <AuthProvider>
+                    <NotificationProvider>
+                        <AudioPlayerProvider>
+                            <QuestProvider>
+                                <RootLayoutNav />
+                            </QuestProvider>
+                        </AudioPlayerProvider>
+                    </NotificationProvider>
+                </AuthProvider>
+            </AppErrorBoundary>
+        </GestureHandlerRootView>
     );
 }

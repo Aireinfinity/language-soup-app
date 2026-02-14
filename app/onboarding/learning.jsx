@@ -6,6 +6,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Colors } from '../../constants/Colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { OnboardingSwipeForward } from '../../components/OnboardingSwipeForward';
 
 const ALL_LANGUAGES = [
     'English', 'Spanish (Español)', 'French (Français)', 'German (Deutsch)', 'Italian (Italiano)',
@@ -86,11 +87,20 @@ export default function LearningScreen() {
         router.push('/onboarding/tagline');
     };
 
+    const handleSwipeForward = () => {
+        if (selectedLanguages.length > 0 && !saving) handleContinue();
+        else handleSkip();
+    };
+
     return (
         <SafeAreaView style={styles.container}>
+            <OnboardingSwipeForward onSwipeForward={handleSwipeForward}>
+            <Pressable onPress={() => router.replace('/onboarding/conversational')} style={styles.backRow} hitSlop={12}>
+                <Text style={styles.backText}>← back</Text>
+            </Pressable>
             <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.header}>
-                <Text style={styles.title}>what are you learning? 🌍</Text>
-                <Text style={styles.subtitle}>languages you're practicing</Text>
+                <Text style={styles.title}>which languages are you learning? 🌍</Text>
+                <Text style={styles.subtitle}>we'll match you to groups for these</Text>
             </Animated.View>
 
             <View style={styles.content}>
@@ -158,6 +168,7 @@ export default function LearningScreen() {
                     <Text style={styles.skipText}>skip for now</Text>
                 </Pressable>
             </View>
+            </OnboardingSwipeForward>
         </SafeAreaView>
     );
 }
@@ -268,5 +279,15 @@ const styles = StyleSheet.create({
     skipText: {
         fontSize: 16,
         color: Colors.textLight,
+    },
+    backRow: {
+        paddingHorizontal: 24,
+        paddingTop: 8,
+        paddingBottom: 4,
+    },
+    backText: {
+        fontSize: 16,
+        color: Colors.secondary,
+        fontWeight: '600',
     },
 });

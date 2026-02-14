@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, Image, Alert, ActivityIndicator, ScrollView, Platform } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -12,8 +13,24 @@ import { Colors } from '../../constants/Colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAvatarSource } from '../../utils/soupUtils';
+import { OnboardingSwipeForward } from '../../components/OnboardingSwipeForward';
 
-// Import delicious soups
+// jpg/jpeg = real photos (camera roll). PNGs look like soup avatars / generated. Match community.jsx heuristic.
+const isRealPhotoUrl = (url) => {
+    if (!url || typeof url !== 'string') return false;
+    const u = url.toLowerCase();
+    return u.includes('.jpg') || u.includes('.jpeg') || u.includes('googleusercontent') || u.includes('fbsbx.com');
+};
+
+const shuffle = (arr) => {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+};
+
 const SOUP_AVATARS = [
     { id: 'cereal', name: 'cereal soup', source: require('../../assets/images/avatars/cereal.png') },
     { id: 'tomato', name: 'tomato soup', source: require('../../assets/images/avatars/tomato_soup.png') },
@@ -31,6 +48,22 @@ export default function AvatarScreen() {
     const [selectedSoupId, setSelectedSoupId] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [isCustomPhoto, setIsCustomPhoto] = useState(false);
+    const [exampleAvatars, setExampleAvatars] = useState([]);
+
+    useEffect(() => {
+        if (!user?.id) return;
+        (async () => {
+            const { data } = await supabase
+                .from('app_users')
+                .select('avatar_url')
+                .not('id', 'eq', user.id)
+                .not('avatar_url', 'is', null)
+                .limit(120);
+            const urls = (data || []).map((r) => r?.avatar_url).filter(Boolean);
+            const photos = urls.filter(isRealPhotoUrl);
+            setExampleAvatars(shuffle(photos));
+        })();
+    }, [user?.id]);
 
     const pickImage = async () => {
         try {
@@ -61,11 +94,10 @@ export default function AvatarScreen() {
 
     const handleSelectSoup = async (soup) => {
         try {
-            setUploading(true); // Show loading feedback
-            // For local assets, download the asset first to ensure URI is available
+            setUploading(true);
             const asset = Asset.fromModule(soup.source);
-            await asset.downloadAsync(); // Download asset to get valid URI
-            setAvatarUri(asset.localUri || asset.uri); // Use localUri or fallback to uri
+            await asset.downloadAsync();
+            setAvatarUri(asset.localUri || asset.uri);
             setSelectedSoupId(soup.id);
             setIsCustomPhoto(false);
         } catch (error) {
@@ -77,35 +109,25 @@ export default function AvatarScreen() {
     };
 
     const processUpload = async () => {
-        // If Custom Photo: Must have URI
-        // If Soup: Must have ID
         if (isCustomPhoto && !avatarUri) return;
         if (!isCustomPhoto && !selectedSoupId) return;
 
         setUploading(true);
         try {
-            // STRATEGY: META-SOUP (No Upload) 🍜
-            // If it's a soup, we just save the ID protocol "soup://id"
-            // If it's a photo, we use "Tiny Packet" (Base64)
-
             let finalAvatarUrl = null;
 
             if (!isCustomPhoto && selectedSoupId) {
-                // 1. INSTANT SOUP (No Network Upload)
-                console.log(`[Avatar] Instant Soup Strategy: soup://${selectedSoupId}`);
                 finalAvatarUrl = `soup://${selectedSoupId}`;
-
+                await supabase
+                    .from('app_users')
+                    .update({ avatar_url: finalAvatarUrl })
+                    .eq('id', user.id);
             } else {
-                // 2. TINY PACKET (Photo) - Using Raw Wire Strategy
-                // Bypass supabase-js client to fix [StorageUnknownError: Network request failed]
-
                 const isJpeg = avatarUri.toLowerCase().endsWith('.jpg') || avatarUri.toLowerCase().endsWith('.jpeg');
                 const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
                 const ext = isJpeg ? 'jpg' : 'png';
                 const fileName = `avatar_${Date.now()}.${ext}`;
                 const filePath = `${user.id}/${fileName}`;
-
-                console.log(`[Avatar] Uploading Raw Wire FormData...`);
 
                 const formData = new FormData();
                 formData.append('file', {
@@ -115,19 +137,14 @@ export default function AvatarScreen() {
                 });
 
                 const SUPABASE_URL = 'https://uspegyneclgkscxwmomn.supabase.co';
-
-                // CRITICAL FIX: Use the USER'S access token
                 const { data: { session } } = await supabase.auth.getSession();
                 const accessToken = session?.access_token;
 
                 if (!accessToken) throw new Error('No auth session found');
 
-                // Direct REST API Upload
                 const response = await fetch(`${SUPABASE_URL}/storage/v1/object/avatars/${filePath}`, {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${accessToken}`,
-                    },
+                    headers: { 'Authorization': `Bearer ${accessToken}` },
                     body: formData,
                 });
 
@@ -141,16 +158,13 @@ export default function AvatarScreen() {
                     .getPublicUrl(filePath);
 
                 finalAvatarUrl = publicUrl;
+                await supabase
+                    .from('app_users')
+                    .update({ avatar_url: finalAvatarUrl })
+                    .eq('id', user.id);
             }
 
-            // 3. Save to Profile
-            await supabase
-                .from('app_users')
-                .update({ avatar_url: finalAvatarUrl })
-                .eq('id', user.id);
-
-            // 4. Navigate (Success!)
-            router.push('/onboarding/notifications');
+            router.push('/(tabs)');
 
         } catch (error) {
             console.error('[Avatar] Error:', error);
@@ -160,13 +174,49 @@ export default function AvatarScreen() {
         }
     };
 
+    const handleSwipeForward = () => {
+        if ((avatarUri || selectedSoupId) && !uploading) processUpload();
+        else router.push('/(tabs)');
+    };
+
+    const handleSwipeBack = () => router.back();
+
     return (
         <SafeAreaView style={styles.container}>
+            <OnboardingSwipeForward onSwipeForward={handleSwipeForward} onSwipeBack={handleSwipeBack}>
+            <Pressable onPress={handleSwipeBack} style={styles.backRow} hitSlop={12}>
+                <Text style={styles.backText}>← back</Text>
+            </Pressable>
             <View style={styles.content}>
                 <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
                     <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.header}>
                         <Text style={styles.title}>add your profile pic 📸</Text>
-                        <Text style={styles.subtitle}>let people see your beautiful face</Text>
+                        <Text style={styles.subtitle}>a real photo helps your group recognize you. you can add one later if you're not ready</Text>
+
+                        {exampleAvatars.length > 0 && (
+                            <View style={styles.exampleRow}>
+                                <ScrollView
+                                    horizontal
+                                    showsHorizontalScrollIndicator={false}
+                                    contentContainerStyle={styles.exampleAvatarsScrollContent}
+                                    style={styles.exampleAvatarsScroll}
+                                >
+                                    {exampleAvatars.map((url, i) => (
+                                        <Image key={`ex-${i}-${url?.slice(-20)}`} source={{ uri: url }} style={styles.exampleAvatar} />
+                                    ))}
+                                    {/* Soup avatars peek so people know to scroll */}
+                                    {SOUP_AVATARS.slice(0, 4).map((soup) => (
+                                        <View key={soup.id} style={styles.exampleAvatarPeek}>
+                                            <Image source={soup.source} style={styles.exampleAvatar} resizeMode="contain" />
+                                        </View>
+                                    ))}
+                                </ScrollView>
+                                <View style={styles.scrollFade} pointerEvents="none">
+                                    <LinearGradient colors={['transparent', '#FDF5E6']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.scrollFadeGradient} />
+                                </View>
+                                <Text style={styles.scrollHint}>scroll for more</Text>
+                            </View>
+                        )}
 
                         <Pressable onPress={pickImage} style={styles.avatarContainer}>
                             {avatarUri ? (
@@ -186,33 +236,47 @@ export default function AvatarScreen() {
                     </Animated.View>
 
                     <Animated.View entering={FadeInDown.delay(400).springify()} style={styles.soupSection}>
-                        <Text style={styles.sectionTitle}>camera shy? 🙈</Text>
-                        <Text style={styles.sectionSubtitle}>be some soup until you're ready to show off ur pretty face</Text>
+                        <Text style={styles.sectionTitle}>or pick a soup for now 🙈</Text>
+                        <Text style={styles.sectionSubtitle}>you can switch to a real photo anytime in settings</Text>
 
-                        <View style={styles.soupGrid}>
-                            {SOUP_AVATARS.map((soup) => (
-                                <Pressable
-                                    key={soup.id}
-                                    style={[
-                                        styles.soupOption,
-                                        selectedSoupId === soup.id && styles.soupOptionSelected,
-                                        uploading && { opacity: 0.5 }
-                                    ]}
-                                    onPress={() => handleSelectSoup(soup)}
-                                    disabled={uploading}
-                                >
-                                    <Image source={soup.source} style={styles.soupImage} resizeMode="contain" />
-                                    <Text style={[
-                                        styles.soupName,
-                                        selectedSoupId === soup.id && styles.soupNameSelected
-                                    ]}>{soup.name}</Text>
-                                    {uploading && selectedSoupId === soup.id && (
-                                        <View style={styles.loaderOverlay}>
-                                            <ActivityIndicator color={Colors.primary} size="small" />
-                                        </View>
-                                    )}
-                                </Pressable>
-                            ))}
+                        <View style={styles.soupRowWrap}>
+                            <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={styles.soupScrollContent}
+                            >
+                                {SOUP_AVATARS.map((soup) => (
+                                    <Pressable
+                                        key={soup.id}
+                                        style={[
+                                            styles.soupOption,
+                                            selectedSoupId === soup.id && styles.soupOptionSelected,
+                                            uploading && { opacity: 0.5 }
+                                        ]}
+                                        onPress={() => handleSelectSoup(soup)}
+                                        disabled={uploading}
+                                    >
+                                        <Image source={soup.source} style={styles.soupImage} resizeMode="contain" />
+                                        <Text style={[
+                                            styles.soupName,
+                                            selectedSoupId === soup.id && styles.soupNameSelected
+                                        ]}>{soup.name}</Text>
+                                        {uploading && selectedSoupId === soup.id && (
+                                            <View style={styles.loaderOverlay}>
+                                                <ActivityIndicator color={Colors.primary} size="small" />
+                                            </View>
+                                        )}
+                                    </Pressable>
+                                ))}
+                            </ScrollView>
+                            <LinearGradient
+                                colors={['transparent', Colors.background]}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.soupPeekGradient}
+                                pointerEvents="none"
+                            />
+                            <Text style={styles.soupScrollHint}>scroll for more</Text>
                         </View>
                     </Animated.View>
                 </ScrollView>
@@ -221,8 +285,8 @@ export default function AvatarScreen() {
             <View style={styles.footer}>
                 <Pressable
                     onPress={processUpload}
-                    style={[styles.button, (!avatarUri || uploading) && styles.buttonDisabled]}
-                    disabled={uploading || !avatarUri}
+                    style={[styles.button, ((!avatarUri && !selectedSoupId) || uploading) && styles.buttonDisabled]}
+                    disabled={uploading || (!avatarUri && !selectedSoupId)}
                 >
                     {uploading ? (
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -233,7 +297,11 @@ export default function AvatarScreen() {
                         <Text style={styles.buttonText}>start slurping</Text>
                     )}
                 </Pressable>
+                <Pressable onPress={() => router.replace('/(tabs)')} style={styles.skipButton}>
+                    <Text style={styles.skipText}>skip for now</Text>
+                </Pressable>
             </View>
+            </OnboardingSwipeForward>
         </SafeAreaView>
     );
 }
@@ -311,6 +379,67 @@ const styles = StyleSheet.create({
         color: Colors.textLight,
         fontStyle: 'italic',
     },
+    exampleRow: {
+        marginBottom: 20,
+        width: '100%',
+        alignItems: 'center',
+        position: 'relative',
+    },
+    exampleAvatars: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        gap: 6,
+    },
+    exampleAvatarsRow: {
+        flexDirection: 'row',
+        flexWrap: 'nowrap',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 8,
+    },
+    exampleAvatarsScroll: {
+        maxHeight: 120,
+    },
+    exampleAvatarsScrollContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 14,
+        paddingVertical: 6,
+        paddingRight: 24,
+    },
+    exampleAvatar: {
+        width: 88,
+        height: 88,
+        borderRadius: 44,
+        backgroundColor: '#f0f0f0',
+    },
+    exampleAvatarPeek: {
+        width: 88,
+        height: 88,
+        borderRadius: 44,
+        backgroundColor: '#f0f0f0',
+        overflow: 'hidden',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    scrollFade: {
+        position: 'absolute',
+        right: 0,
+        top: 0,
+        bottom: 0,
+        width: 40,
+        justifyContent: 'center',
+    },
+    scrollFadeGradient: {
+        flex: 1,
+        width: 40,
+    },
+    scrollHint: {
+        fontSize: 12,
+        color: Colors.textLight,
+        marginTop: 6,
+    },
     soupSection: {
         width: '100%',
         marginBottom: 20,
@@ -325,48 +454,67 @@ const styles = StyleSheet.create({
     sectionSubtitle: {
         fontSize: 14,
         color: Colors.textLight,
-        marginBottom: 24,
+        marginBottom: 16,
         textAlign: 'center',
         paddingHorizontal: 20,
         lineHeight: 20,
     },
-    soupGrid: {
+    soupRowWrap: {
+        position: 'relative',
+        width: '100%',
+    },
+    soupScrollContent: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'center',
-        gap: 16,
+        alignItems: 'center',
+        gap: 12,
+        paddingHorizontal: 24,
+        paddingRight: 56,
+    },
+    soupPeekGradient: {
+        position: 'absolute',
+        right: 0,
+        top: 0,
+        bottom: 0,
+        width: 48,
+    },
+    soupScrollHint: {
+        fontSize: 12,
+        color: Colors.textLight,
+        textAlign: 'center',
+        marginTop: 8,
     },
     soupOption: {
-        width: '30%', // roughly 3 per row
-        aspectRatio: 0.85,
+        width: 88,
+        minWidth: 88,
+        aspectRatio: 0.9,
         backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 8,
+        borderRadius: 12,
+        padding: 6,
         alignItems: 'center',
         justifyContent: 'center',
         borderWidth: 2,
         borderColor: 'transparent',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.05,
-        shadowRadius: 4,
+        shadowRadius: 3,
         elevation: 2,
     },
     soupOptionSelected: {
         borderColor: Colors.primary,
-        backgroundColor: '#F0F9FF', // Light blue tint
+        backgroundColor: '#F0F9FF',
     },
     soupImage: {
-        width: '80%',
-        height: '70%',
-        marginBottom: 8,
+        width: '75%',
+        height: '60%',
+        marginBottom: 4,
     },
     soupName: {
-        fontSize: 12,
+        fontSize: 10,
         fontWeight: '600',
         color: Colors.textLight,
         textAlign: 'center',
-        lineHeight: 14,
+        lineHeight: 12,
     },
     soupNameSelected: {
         color: Colors.primary,
@@ -400,5 +548,15 @@ const styles = StyleSheet.create({
     skipButton: {
         paddingVertical: 16,
         alignItems: 'center',
+    },
+    backRow: {
+        paddingHorizontal: 24,
+        paddingTop: 8,
+        paddingBottom: 4,
+    },
+    backText: {
+        fontSize: 16,
+        color: Colors.primary,
+        fontWeight: '600',
     },
 });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, TextInput, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { X } from 'lucide-react-native';
 
@@ -11,9 +11,12 @@ const SOUP_COLORS = {
     subtext: '#8E8E93',
 };
 
-export default function LanguageRequestModal({ visible, onClose, onSubmit }) {
+export default function LanguageRequestModal({ visible, onClose, onSubmit, prefillText }) {
     const [requestText, setRequestText] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    useEffect(() => {
+        if (visible && prefillText) setRequestText(prefillText);
+    }, [visible, prefillText]);
 
     const handleSubmit = async () => {
         if (!requestText.trim()) return;

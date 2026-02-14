@@ -14,8 +14,8 @@ import { UserPreviewModal } from '../../components/UserPreviewModal';
 import { useQuests } from '../../contexts/QuestContext';
 import ContextualTooltip from '../../components/ContextualTooltip';
 import { getLanguageFlag } from '../../utils/languageFlags';
-import { getAvatarSource, getDefaultSoupAvatarForId } from '../../utils/soupUtils';
-import { TAB_BAR_HEIGHT } from '../../components/QuestStrip';
+import { getAvatarSource, getDefaultSoupAvatarForId, isRealPhotoUrl } from '../../utils/soupUtils';
+import { TAB_BAR_HEIGHT } from '../../constants/Layout';
 import GroupAvatar from '../../components/GroupAvatar';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -120,6 +120,7 @@ export default function CommunityScreen() {
     const [pulseRecentVoices, setPulseRecentVoices] = useState([]);     // voice messages in last 24h
     const [tickerItems, setTickerItems] = useState([]);                 // "what's going on" — recent activity
     const [activeVoiceMediaUrl, setActiveVoiceMediaUrl] = useState(null);
+    const [hasNeverSentMessage, setHasNeverSentMessage] = useState(false); // for first-challenge CTA
     const [voiceSound, setVoiceSound] = useState(null);
 
     const loadCommunityChats = useCallback(async () => {
@@ -391,10 +392,14 @@ export default function CommunityScreen() {
     const loadData = async () => {
         try {
             if (user?.id) {
-                const { data: profile } = await supabase.from('app_users').select('display_name, avatar_url, status_text').eq('id', user.id).maybeSingle();
+                const [{ data: profile }, { count: messageCount }] = await Promise.all([
+                    supabase.from('app_users').select('display_name, avatar_url, status_text').eq('id', user.id).maybeSingle(),
+                    supabase.from('app_messages').select('*', { count: 'exact', head: true }).eq('sender_id', user.id)
+                ]);
                 setUserDisplayName(profile?.display_name || '');
                 setUserAvatarUrl(profile?.avatar_url || null);
                 setUserTagline(profile?.status_text?.trim() || '');
+                setHasNeverSentMessage((messageCount ?? 0) === 0);
             }
             // Load announcements
             const { data: announcementData } = await supabase
@@ -557,21 +562,14 @@ export default function CommunityScreen() {
                 return (now - new Date(u.created_at)) >= THREE_DAYS_MS;
             });
 
-            // Helper to check if it's a "Real Photo"
-            const isRealPhoto = (avatarUrl) => {
-                if (!avatarUrl) return false;
-                const url = avatarUrl.toLowerCase();
-                return url.includes('.jpg') || url.includes('.jpeg') || url.includes('googleusercontent') || url.includes('fbsbx.com');
-            };
-
-            // 1. Split remaining into tiers
-            const photos = remaining.filter(u => isRealPhoto(u.avatar_url));
-            const soupAndAvatars = remaining.filter(u => u.avatar_url && !isRealPhoto(u.avatar_url));
+            // 1. Split remaining into tiers (real photos first via shared helper)
+            const photos = remaining.filter(u => isRealPhotoUrl(u.avatar_url));
+            const soupAndAvatars = remaining.filter(u => u.avatar_url && !isRealPhotoUrl(u.avatar_url));
             const rest = remaining.filter(u => !u.avatar_url);
 
             // Also split NEW CHEFS by photos vs avatars for maximum VIP priority
-            const newChefsWithPhotos = newChefs.filter(u => isRealPhoto(u.avatar_url));
-            const newChefsOthers = newChefs.filter(u => !isRealPhoto(u.avatar_url));
+            const newChefsWithPhotos = newChefs.filter(u => isRealPhotoUrl(u.avatar_url));
+            const newChefsOthers = newChefs.filter(u => !isRealPhotoUrl(u.avatar_url));
 
             // 2. Shuffle each tier individually for constant randomization
             const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
@@ -750,9 +748,13 @@ export default function CommunityScreen() {
                         </ScrollView>
                     ) : (
                         <Pressable style={({ pressed }) => [styles.heroEmpty, pressed && { opacity: 0.95 }]} onPress={() => router.push('/(tabs)/index')}>
-                            <Text style={styles.heroEmptyEmoji}>🎤</Text>
-                            <Text style={styles.heroEmptyText}>be the first to drop a voice</Text>
-                            <Text style={styles.heroEmptyCtaText}>record →</Text>
+                            <Text style={styles.heroEmptyEmoji}>{hasNeverSentMessage ? '🥣' : '🎤'}</Text>
+                            <Text style={styles.heroEmptyText}>
+                                {hasNeverSentMessage
+                                    ? "send your first voice from the Today tab — then you'll show up here"
+                                    : 'be the first to drop a voice'}
+                            </Text>
+                            <Text style={styles.heroEmptyCtaText}>{hasNeverSentMessage ? 'go to Today →' : 'record →'}</Text>
                         </Pressable>
                     )}
                 </View>
@@ -781,7 +783,7 @@ export default function CommunityScreen() {
                                     <Pressable
                                         key={item.id}
                                         style={({ pressed }) => [styles.tickerPill, pressed && { opacity: 0.9 }]}
-                                        onPress={() => { try { haptics.light(); } catch (_) {} if (item.groupId) router.push(`/chat/${item.groupId}`); }}
+                                        onPress={() => { try { haptics.light(); } catch (_) {} if (item.groupId) router.push(`/chat/${item.groupId}`); else router.push('/your-groups'); }}
                                     >
                                         <Text style={styles.tickerText} numberOfLines={1}>
                                             {item.senderName} · {item.type === 'voice' ? 'voice' : 'message'} · {item.groupName}

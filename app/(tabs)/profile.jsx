@@ -8,12 +8,11 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { decode } from 'base64-arraybuffer';
-import { Asset } from 'expo-asset';
 import { useQuests } from '../../contexts/QuestContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import GroupAvatar from '../../components/GroupAvatar';
 import { getAvatarSource } from '../../utils/soupUtils';
-import { TAB_BAR_HEIGHT } from '../../components/QuestStrip';
+import { TAB_BAR_HEIGHT } from '../../constants/Layout';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -39,7 +38,6 @@ const EXAMPLE_TAGLINES = [
     'polyglot in training',
 ];
 
-// Soup avatars from onboarding
 const SOUP_AVATARS = [
     { id: 'cereal', name: 'cereal soup', source: require('../../assets/images/avatars/cereal.png') },
     { id: 'tomato', name: 'tomato soup', source: require('../../assets/images/avatars/tomato_soup.png') },
@@ -259,20 +257,15 @@ export default function ProfileScreen() {
         try {
             setUploading(true);
             setSelectedSoupId(soup.id);
-            // DON'T close modal yet - keep it open so user sees loading spinner
-
-            // Upload soup avatar
-            const asset = Asset.fromModule(soup.source);
-            await asset.downloadAsync();
-            setPreviewAvatar(asset.localUri || asset.uri); // Optimistic update
-            await uploadAvatar(asset.localUri, false);
-
-            // Close modal AFTER upload completes
+            const soupUrl = `soup://${soup.id}`;
+            await supabase.from('app_users').update({ avatar_url: soupUrl }).eq('id', authUser.id);
+            setUser(prev => ({ ...prev, avatar_url: soupUrl }));
+            setPreviewAvatar(soupUrl);
             setShowAvatarPicker(false);
         } catch (error) {
             console.error('Error selecting soup:', error);
             Alert.alert('Error', 'Failed to select soup avatar');
-            setShowAvatarPicker(false); // Close on error
+            setShowAvatarPicker(false);
         } finally {
             setUploading(false);
         }
@@ -1127,9 +1120,7 @@ export default function ProfileScreen() {
                             <Text style={styles.sectionTitle}>Choose Your Avatar</Text>
                             <Text style={styles.sectionSubtitle}>Upload a photo or pick a soup</Text>
 
-                            {/* Avatar Grid */}
                             <View style={styles.soupGrid}>
-                                {/* Photo Upload Option */}
                                 <Pressable
                                     style={styles.soupOption}
                                     onPress={() => {
@@ -1143,7 +1134,6 @@ export default function ProfileScreen() {
                                     <Text style={styles.soupName}>your photo</Text>
                                 </Pressable>
 
-                                {/* Soup Avatars */}
                                 {SOUP_AVATARS.map((soup) => (
                                     <Pressable
                                         key={soup.id}
@@ -2239,6 +2229,11 @@ const styles = StyleSheet.create({
     },
     soupNameSelected: {
         color: SOUP_COLORS.blue,
+    },
+    avatarPhotoOption: {
+        alignSelf: 'center',
+        minWidth: 160,
+        marginTop: 16,
     },
     photoUploadIcon: {
         width: '80%',

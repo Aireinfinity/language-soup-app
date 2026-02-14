@@ -1,13 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, ScrollView, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet, Pressable, TextInput, ScrollView, ActivityIndicator, Alert, Image } from 'react-native';
+import { Check } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Colors } from '../../constants/Colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { OnboardingSwipeForward } from '../../components/OnboardingSwipeForward';
+import { groupLanguageMatchesPicker } from '../../utils/languageGroupMatch';
+import { haptics } from '../../utils/haptics';
+import { getAvatarSource, getDefaultSoupAvatarForId, sortAvatarUrlsRealFirst } from '../../utils/soupUtils';
 
-const ALL_LANGUAGES = [
+// Full list for reference
+const _ALL = [
     'English', 'Spanish (Español)', 'French (Français)', 'German (Deutsch)', 'Italian (Italiano)',
     'Portuguese (Português)', 'Russian (Русский)', 'Chinese/Mandarin (中文)', 'Japanese (日本語)',
     'Korean (한국어)', 'Arabic (العربية)', 'Hindi (हिन्दी)', 'Bengali (বাংলা)', 'Urdu (اردو)',
@@ -37,11 +42,26 @@ const ALL_LANGUAGES = [
     'Ilocano', 'Hiligaynon', 'Waray', 'Kapampangan',
     'Esperanto', 'Latin (Latina)', 'Sanskrit (संस्कृतम्)', 'Ancient Greek (Ἑλληνική)', 'Old Norse',
     'Yiddish (ייִדיש)', 'Ladino', 'Maltese (Malti)',
-    'ASL (American Sign Language)', 'BSL (British Sign Language)', 'Auslan (Australian Sign Language)',
-    'LSF (French Sign Language)', 'DGS (German Sign Language)', 'JSL (Japanese Sign Language)',
-    'KSL (Korean Sign Language)', 'CSL (Chinese Sign Language)', 'ISL (Indian Sign Language)',
-    'LSE (Spanish Sign Language)', 'LIS (Italian Sign Language)', 'International Sign',
 ];
+// Most to least popular (learners / we have groups); rest of _ALL appended
+const POPULAR_FIRST = [
+    'Spanish (Español)', 'French (Français)', 'German (Deutsch)', 'Italian (Italiano)', 'Portuguese (Português)',
+    'English', 'Japanese (日本語)', 'Korean (한국어)', 'Chinese/Mandarin (中文)', 'Russian (Русский)', 'Arabic (العربية)',
+    'Hindi (हिन्दी)', 'Turkish (Türkçe)', 'Dutch (Nederlands)', 'Swedish (Svenska)', 'Polish (Polski)',
+    'Greek (Ελληνικά)', 'Romanian (Română)', 'Hebrew (עברית)', 'Thai (ไทย)', 'Vietnamese (Tiếng Việt)',
+    'Indonesian (Bahasa Indonesia)', 'Persian/Farsi (فارسی)', 'Danish (Dansk)', 'Norwegian (Norsk)', 'Finnish (Suomi)',
+];
+const REST = _ALL.filter((l) => !POPULAR_FIRST.includes(l));
+const LANGUAGES_BY_POPULARITY = [...POPULAR_FIRST, ...REST];
+
+// Show full name instead of acronyms (e.g. "French Sign Language" not "LSF")
+function getDisplayName(lang) {
+    const beforeParen = lang.split(' (')[0].trim();
+    const inParens = lang.match(/\(([^)]+)\)/)?.[1]?.trim();
+    const looksLikeAcronym = /^[A-Z]{2,5}$/.test(beforeParen);
+    if (looksLikeAcronym && inParens) return inParens;
+    return beforeParen.split('/')[0].trim();
+}
 
 export default function ConversationalScreen() {
     const { user } = useAuth();
@@ -49,18 +69,77 @@ export default function ConversationalScreen() {
     const [selectedLanguages, setSelectedLanguages] = useState([]);
     const [search, setSearch] = useState('');
     const [saving, setSaving] = useState(false);
+    const [languageCounts, setLanguageCounts] = useState({});
+    const [languageAvatars, setLanguageAvatars] = useState({});
 
-    const filteredLanguages = ALL_LANGUAGES.filter(lang =>
-        !selectedLanguages.includes(lang) &&
-        lang.toLowerCase().includes(search.toLowerCase())
-    );
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const { data: groups } = await supabase
+                .from('app_groups')
+                .select('id, name, language, member_count')
+                .eq('is_visible', true);
+            const filtered = (groups || []).filter(
+                (g) => !['test', 'tester', 'support'].some((w) => (g.name || '').toLowerCase().includes(w))
+            );
+            const counts = {};
+            const bestGroupId = {};
+            for (const pickerLang of LANGUAGES_BY_POPULARITY) {
+                for (const g of filtered) {
+                    if (!groupLanguageMatchesPicker(g.language || g.name, pickerLang)) continue;
+                    const c = g.member_count || 0;
+                    counts[pickerLang] = (counts[pickerLang] || 0) + c;
+                    if (!bestGroupId[pickerLang] || c > (filtered.find((x) => x.id === bestGroupId[pickerLang])?.member_count || 0)) {
+                        bestGroupId[pickerLang] = g.id;
+                    }
+                }
+            }
+            if (cancelled) return;
+            setLanguageCounts(counts);
+            const groupIds = [...new Set(Object.values(bestGroupId).filter(Boolean))].slice(0, 25);
+            if (groupIds.length === 0) return;
+            const { data: members } = await supabase
+                .from('app_group_members')
+                .select('group_id, user_id')
+                .in('group_id', groupIds);
+            if (cancelled || !members?.length) return;
+            const byGroup = {};
+            for (const m of members) {
+                if (!byGroup[m.group_id]) byGroup[m.group_id] = [];
+                if (byGroup[m.group_id].length < 5) byGroup[m.group_id].push(m.user_id);
+            }
+            const userIds = [...new Set(members.map((m) => m.user_id))];
+            const { data: users } = await supabase.from('app_users').select('id, avatar_url').in('id', userIds);
+            if (cancelled) return;
+            const urlByUser = new Map((users || []).map((u) => [u.id, u.avatar_url || getDefaultSoupAvatarForId(u.id)]));
+            const avatarsByGroup = {};
+            for (const [gid, uids] of Object.entries(byGroup)) {
+                avatarsByGroup[gid] = uids.map((uid) => urlByUser.get(uid)).filter(Boolean);
+            }
+            const avatarsByLang = {};
+            for (const [lang, gid] of Object.entries(bestGroupId)) {
+                if (avatarsByGroup[gid]) avatarsByLang[lang] = sortAvatarUrlsRealFirst(avatarsByGroup[gid]);
+            }
+            setLanguageAvatars(avatarsByLang);
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    const searchLower = search.trim().toLowerCase();
+    const listSource = useMemo(() => {
+        if (searchLower) {
+            return LANGUAGES_BY_POPULARITY.filter((lang) => lang.toLowerCase().includes(searchLower));
+        }
+        return [...LANGUAGES_BY_POPULARITY].sort((a, b) => (languageCounts[b] || 0) - (languageCounts[a] || 0));
+    }, [searchLower, languageCounts]);
 
     const toggleLanguage = (lang) => {
+        try { haptics.light(); } catch (_) {}
         if (selectedLanguages.includes(lang)) {
-            setSelectedLanguages(prev => prev.filter(l => l !== lang));
+            setSelectedLanguages((prev) => prev.filter((l) => l !== lang));
         } else {
-            setSelectedLanguages(prev => [...prev, lang]);
-            setSearch(''); // Clear search after selecting
+            setSelectedLanguages((prev) => [...prev, lang]);
+            if (searchLower) setSearch('');
         }
     };
 
@@ -71,10 +150,53 @@ export default function ConversationalScreen() {
         try {
             await supabase
                 .from('app_users')
-                .update({ fluent_languages: selectedLanguages })
+                .update({
+                    fluent_languages: selectedLanguages,
+                    learning_languages: selectedLanguages,
+                })
                 .eq('id', user.id);
 
-            router.push('/onboarding/learning');
+            // Fetch all visible groups and match in JS (DB language strings can vary).
+            const { data: allVisibleGroups } = await supabase
+                .from('app_groups')
+                .select('id, language, name')
+                .eq('is_visible', true);
+            const candidates = (allVisibleGroups || []).filter(
+                (g) => !['test', 'tester', 'support'].some((word) => (g.name || '').toLowerCase().includes(word))
+            );
+
+            const matchingGroups = candidates.filter((g) =>
+                selectedLanguages.some((sel) => groupLanguageMatchesPicker(g.language || g.name, sel))
+            );
+            const matchedLanguages = new Set(matchingGroups.map((g) => g.language || g.name));
+
+            if (matchingGroups.length > 0) {
+                const memberships = matchingGroups.map((g) => ({
+                    user_id: user.id,
+                    group_id: g.id,
+                    role: 'member',
+                }));
+                await supabase
+                    .from('app_group_members')
+                    .upsert(memberships, { onConflict: 'user_id,group_id' });
+            }
+
+            const noGroupFor = selectedLanguages.filter((sel) =>
+                ![...matchedLanguages].some((gl) => groupLanguageMatchesPicker(gl, sel))
+            );
+            if (noGroupFor.length > 0) {
+                const displayNames = noGroupFor.map((l) => l.split(' (')[0].split('/')[0]);
+                const names = displayNames.length <= 4
+                    ? displayNames.join(', ')
+                    : `${displayNames.slice(0, 4).join(', ')} and ${displayNames.length - 4} more`;
+                Alert.alert(
+                    "we don't have those yet",
+                    `No group for ${names} right now. You can request them on the next screen.`,
+                    [{ text: 'ok' }]
+                );
+            }
+
+            router.push('/onboarding/your-groups');
         } catch (error) {
             console.error('Error saving languages:', error);
         } finally {
@@ -82,61 +204,79 @@ export default function ConversationalScreen() {
         }
     };
 
-    const handleSkip = () => {
-        router.push('/onboarding/learning');
+    const handleSwipeForward = () => {
+        if (selectedLanguages.length > 0 && !saving) handleContinue();
+    };
+
+    const renderAvatarStack = (lang, size = 28) => {
+        const urls = languageAvatars[lang] || [];
+        if (urls.length === 0) return null;
+        return (
+            <View style={styles.avatarStack}>
+                {urls.slice(0, 4).map((url, i) => {
+                    const source = getAvatarSource(url);
+                    return (
+                        <View key={i} style={[styles.avatarStackItem, { width: size, height: size, borderRadius: size / 2, marginLeft: i === 0 ? 0 : -6 }]}>
+                            {source ? (
+                                <Image source={source} style={[styles.avatarImg, { width: size, height: size, borderRadius: size / 2 }]} />
+                            ) : (
+                                <View style={[styles.avatarPlaceholder, { width: size, height: size, borderRadius: size / 2 }]} />
+                            )}
+                        </View>
+                    );
+                })}
+            </View>
+        );
     };
 
     return (
         <SafeAreaView style={styles.container}>
-            <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.header}>
-                <Text style={styles.title}>what languages can you chat in? 💬</Text>
-                <Text style={styles.subtitle}>pick all that you're comfortable with</Text>
-            </Animated.View>
-
+            <OnboardingSwipeForward onSwipeForward={handleSwipeForward}>
+            <Pressable onPress={() => router.replace('/login')} style={styles.backRow} hitSlop={12}>
+                <Text style={styles.backText}>←</Text>
+            </Pressable>
+            <View style={styles.header}>
+                <Text style={styles.headline}>add your languages</Text>
+                <Text style={styles.subline}>tap to add the ones you want to practice</Text>
+            </View>
             <View style={styles.content}>
-                {/* Selected Languages */}
-                {selectedLanguages.length > 0 && (
-                    <View style={styles.selectedContainer}>
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.selectedScroll}
-                        >
-                            {selectedLanguages.map(lang => (
-                                <Pressable
-                                    key={lang}
-                                    style={styles.selectedChip}
-                                    onPress={() => toggleLanguage(lang)}
-                                >
-                                    <Text style={styles.selectedChipText}>{lang} ✕</Text>
-                                </Pressable>
-                            ))}
-                        </ScrollView>
-                    </View>
-                )}
-
-                {/* Search */}
                 <TextInput
                     style={styles.searchInput}
-                    placeholder="search languages..."
-                    placeholderTextColor="#999"
+                    placeholder="…"
+                    placeholderTextColor={Colors.textLight}
                     value={search}
                     onChangeText={setSearch}
                 />
 
-                {/* Available Languages - Optimized List (No individual entering animations) */}
-                <ScrollView style={styles.languageList} contentContainerStyle={styles.languageListContent}>
-                    {(search ? filteredLanguages : ALL_LANGUAGES.filter(l => !selectedLanguages.includes(l)))
-                        .slice(0, 50) // Limit initial render if needed, but removing animation helps most
-                        .map((lang, index) => (
+                <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
+                    {listSource.map((lang) => {
+                        const selected = selectedLanguages.includes(lang);
+                        const displayName = getDisplayName(lang);
+                        const count = languageCounts[lang];
+                        return (
                             <Pressable
                                 key={lang}
-                                style={styles.languageChip}
+                                style={({ pressed }) => [
+                                    styles.row,
+                                    selected && styles.rowSelected,
+                                    pressed && styles.rowPressed,
+                                ]}
                                 onPress={() => toggleLanguage(lang)}
                             >
-                                <Text style={styles.languageChipText}>{lang}</Text>
+                                {renderAvatarStack(lang)}
+                                <Text style={[styles.rowText, selected && styles.rowTextSelected]} numberOfLines={1}>
+                                    {displayName}
+                                </Text>
+                                {count != null && count > 0 && (
+                                    <View style={[styles.countBadge, selected && styles.countBadgeSelected]}>
+                                        <Text style={[styles.countText, selected && styles.countTextSelected]}>{count}</Text>
+                                    </View>
+                                )}
+                                {selected && <Check size={20} color={Colors.primary} strokeWidth={2.5} />}
                             </Pressable>
-                        ))}
+                        );
+                    })}
+                    {listSource.length === 0 && <Text style={styles.emptySearch}>—</Text>}
                 </ScrollView>
             </View>
 
@@ -149,14 +289,12 @@ export default function ConversationalScreen() {
                     {saving ? (
                         <ActivityIndicator color="#fff" />
                     ) : (
-                        <Text style={styles.buttonText}>continue ({selectedLanguages.length})</Text>
+                        <Text style={styles.buttonText}>{selectedLanguages.length > 0 ? `${selectedLanguages.length} →` : 'continue'}</Text>
                     )}
                 </Pressable>
 
-                <Pressable onPress={handleSkip} style={styles.skipButton}>
-                    <Text style={styles.skipText}>skip for now</Text>
-                </Pressable>
             </View>
+            </OnboardingSwipeForward>
         </SafeAreaView>
     );
 }
@@ -167,72 +305,103 @@ const styles = StyleSheet.create({
         backgroundColor: Colors.background,
     },
     header: {
-        paddingHorizontal: 24,
-        paddingTop: 16,
-        paddingBottom: 12,
+        paddingHorizontal: 20,
+        paddingTop: 4,
+        paddingBottom: 8,
     },
-    title: {
-        fontSize: 26,
+    headline: {
+        fontSize: 18,
         fontWeight: '700',
         color: Colors.text,
-        marginBottom: 8,
     },
-    subtitle: {
-        fontSize: 15,
+    subline: {
+        fontSize: 14,
         color: Colors.textLight,
+        marginTop: 4,
     },
     content: {
         flex: 1,
-        paddingHorizontal: 24,
-    },
-    selectedContainer: {
-        marginBottom: 16,
-    },
-    selectedScroll: {
-        gap: 8,
-    },
-    selectedChip: {
-        backgroundColor: Colors.primary,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: 20,
-    },
-    selectedChipText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#fff',
+        paddingHorizontal: 20,
     },
     searchInput: {
-        backgroundColor: '#fff',
+        backgroundColor: Colors.surface,
         borderRadius: 12,
-        borderWidth: 2,
-        borderColor: Colors.primary,
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-        fontSize: 16,
+        borderWidth: 1,
+        borderColor: Colors.border,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        fontSize: 15,
         color: Colors.text,
-        marginBottom: 16,
+        marginBottom: 10,
     },
-    languageList: {
+    list: {
         flex: 1,
     },
-    languageListContent: {
+    row: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 10,
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 12,
+        marginHorizontal: -4,
+        borderRadius: 14,
+        marginBottom: 4,
     },
-    languageChip: {
-        backgroundColor: '#f8f8f8',
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: '#e0e0e0',
+    rowSelected: {
+        backgroundColor: Colors.primary + '18',
     },
-    languageChipText: {
-        fontSize: 15,
-        fontWeight: '500',
+    rowPressed: {
+        opacity: 0.7,
+    },
+    avatarStack: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginRight: 12,
+    },
+    avatarStackItem: {
+        borderWidth: 2,
+        borderColor: Colors.background,
+        overflow: 'hidden',
+    },
+    avatarImg: {
+        width: '100%',
+        height: '100%',
+    },
+    avatarPlaceholder: {
+        backgroundColor: Colors.primary + '30',
+    },
+    rowText: {
+        fontSize: 16,
         color: Colors.text,
+        flex: 1,
+        marginRight: 8,
+    },
+    rowTextSelected: {
+        fontWeight: '700',
+        color: Colors.primary,
+    },
+    countBadge: {
+        backgroundColor: Colors.accent + '20',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 10,
+        marginRight: 8,
+    },
+    countBadgeSelected: {
+        backgroundColor: Colors.accent + '35',
+    },
+    countText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: Colors.accent,
+    },
+    countTextSelected: {
+        color: Colors.accent,
+    },
+    emptySearch: {
+        fontSize: 14,
+        color: Colors.textLight,
+        paddingVertical: 24,
+        textAlign: 'center',
     },
     footer: {
         padding: 24,
@@ -267,5 +436,15 @@ const styles = StyleSheet.create({
     skipText: {
         fontSize: 16,
         color: Colors.textLight,
+    },
+    backRow: {
+        paddingHorizontal: 24,
+        paddingTop: 8,
+        paddingBottom: 4,
+    },
+    backText: {
+        fontSize: 16,
+        color: Colors.primary,
+        fontWeight: '600',
     },
 });

@@ -6,14 +6,22 @@ Update status as you go: New → In progress → Done.
 
 IN PROGRESS
 
-• Today tab redesign — one hero action, clear path to record daily challenge  
-  Who: Noah / team
+• **Onboarding flow + getting users to send their first voice memo**  
+  First-challenge is now inline on Today (ChallengeQueueCard, no welcome modal). Next: double-check full onboarding flow end-to-end and confirm new users reliably get to first voice.  
+  Who: Noah
 
 • Initial onboarding "record one word"  
   Who: Team
 
 • Onboarding pipeline audit: how they find us → first voice memo  
   Who: Noah
+
+---
+
+## 👋 When you ask "what should we work on?"
+
+**→ Double-check the onboarding flow and getting users to send their first voice memo.**  
+Audit the path from signup → first challenge (inline on Today) → first send. Test with a fresh account; fix any gaps so new users reliably hit "send" once.
 
 ---
 
@@ -58,12 +66,18 @@ NEW
 • Transcripts for voice memos / challenge replies (so users can read what was said)  
   Who: Noah
 
+• Language creator economy videos — get creators paid, help learners  
+  Who: Noah
+
 • After the challenge (countdown): surface podcast mode — e.g. "great, you did it — want to hear how others did it today?" Keep podcast mode always accessible (no unlock gate); also a place to listen if they just want to listen that day  
   Who: Noah
 
 ---
 
 DONE
+
+• Today tab redesign — one hero action, clear path to record daily challenge — DONE!!!!  
+  Who: Noah / team
 
 • Listen back to voice memos before sending — Aurelia, Johnny  
 • Voice memo shows "00 seconds" / duration — Ruby  
