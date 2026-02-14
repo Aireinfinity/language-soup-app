@@ -103,8 +103,8 @@ export function UserPreviewModal({ visible, user: targetUser, onClose }) {
         }
     };
 
-    const learningLanguages = user.learning_languages || [];
-    const fluentLanguages = user.fluent_languages || [];
+    const learningLanguages = targetUser.learning_languages || [];
+    const fluentLanguages = targetUser.fluent_languages || [];
     const allLanguages = [...new Set([...learningLanguages, ...fluentLanguages])];
 
     return (

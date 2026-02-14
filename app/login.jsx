@@ -25,7 +25,7 @@ export default function LoginScreen() {
 
     const handleNameSubmit = async () => {
         if (!name.trim()) {
-            Alert.alert('Hey! 👋', 'We need to know what to call you');
+            Alert.alert('Hey! 👋🏿', 'We need to know what to call you');
             return;
         }
         setStep('password');
@@ -133,7 +133,7 @@ export default function LoginScreen() {
                     </Pressable>
 
                     <Text style={styles.disclaimer}>
-                        {loading ? "searching for your soup profile..." : "choose wisely—it's case sensitive ✨"}
+                        {loading ? "searching for your soup profile..." : "choose wisely, it's case sensitive ✨"}
                     </Text>
                 </KeyboardAvoidingView>
             </SafeAreaView>
@@ -175,7 +175,7 @@ export default function LoginScreen() {
                 </View>
 
                 <Pressable
-                    style={[styles.button, (password.length !== 3 || loading) && styles.buttonDisabled]}
+                    style={({ pressed }) => [styles.button, (password.length !== 3 || loading) && styles.buttonDisabled, pressed && !loading && { opacity: 0.9 }]}
                     onPress={handlePasswordSubmit}
                     disabled={password.length !== 3 || loading}
                 >

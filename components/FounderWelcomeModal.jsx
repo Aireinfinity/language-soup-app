@@ -85,12 +85,12 @@ export default function FounderWelcomeModal({ visible, onClose }) {
                             <Crown size={48} color={SOUP_COLORS.pink} fill={SOUP_COLORS.pink} />
                         </View>
 
-                        <Text style={styles.title}>Welcome back,</Text>
-                        <Text style={styles.highlightTitle}>FOUNDER DADDY 🥣✨</Text>
+                        <Text style={styles.title}>welcome back 👋🏿</Text>
+                        <Text style={styles.highlightTitle}>founder daddy 🥣✨</Text>
 
                         <Text style={styles.subtitle}>
-                            The soup is simmering perfectly today.
-                            Ready to serve some fresh features?
+                            the soup is simmering perfectly today.
+                            ready to serve some fresh features?
                         </Text>
 
                         <View style={styles.divider} />
@@ -115,7 +115,7 @@ export default function FounderWelcomeModal({ visible, onClose }) {
                                 end={{ x: 1, y: 0 }}
                                 style={styles.gradientBtn}
                             >
-                                <Text style={styles.btnText}>Let's Cook</Text>
+                                <Text style={styles.btnText}>let's cook</Text>
                                 <Heart size={16} color="#fff" fill="#fff" />
                             </LinearGradient>
                         </Pressable>

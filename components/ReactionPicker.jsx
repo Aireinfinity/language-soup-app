@@ -10,12 +10,12 @@ const SOUP_COLORS = {
     cream: '#FDF5E6',
 };
 
-// Expanded curated list of popular reactions
+// Expanded curated list of popular reactions (default black/dark skin tone, never yellow)
 const DEFAULT_REACTIONS = [
     '❤️', '😂', '🔥', '😮', '😢', '😍',
-    '👍', '👎', '🎉', '👏', '🙏', '👀',
+    '👍🏿', '👎🏿', '🎉', '👏🏿', '🙏🏿', '👀',
     '💯', '🤔', '😡', '🤢', '🤮', '🤯',
-    '👋', '🤝', '💪', '🧠', '💩', '👻'
+    '👋🏿', '🤝🏿', '💪🏿', '🧠', '💩', '👻'
 ];
 
 /**

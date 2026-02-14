@@ -56,12 +56,10 @@ export default function LanguageRequestModal({ visible, onClose, onSubmit }) {
                         keyboardShouldPersistTaps="handled"
                         showsVerticalScrollIndicator={false}
                     >
-                        {/* Instructions */}
                         <Text style={styles.instructions}>
-                            What language group would you like to see? Let us know the language and level (e.g., "Spanish Intermediate" or "Korean Beginners")
+                            Language and level, e.g. Spanish Intermediate or Korean Beginners.
                         </Text>
 
-                        {/* Request Input */}
                         <Text style={styles.label}>
                             What language(s) do you want groups for?
                         </Text>
@@ -100,7 +98,7 @@ export default function LanguageRequestModal({ visible, onClose, onSubmit }) {
                             {submitting ? (
                                 <ActivityIndicator color="#fff" />
                             ) : (
-                                <Text style={styles.submitText}>Submit Request</Text>
+                                <Text style={styles.submitText}>submit</Text>
                             )}
                         </Pressable>
                     </View>

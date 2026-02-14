@@ -12,7 +12,7 @@ export const QUESTS = [
     { id: 'first_text', title: 'Send a Text', emoji: '💬', description: 'Send your first text message' },
     { id: 'first_audio', title: 'Send Audio', emoji: '🎙️', description: 'Send your first voice memo' },
     { id: 'reply_challenge', title: 'Reply to Challenge', emoji: '🎯', description: 'Respond to a daily challenge' },
-    { id: 'community_chat', title: 'Say Hi in Community', emoji: '👋', description: 'Send a message in the community chat' },
+    { id: 'community_chat', title: 'Say Hi in Community', emoji: '👋🏿', description: 'Send a message in the community chat' },
     { id: 'view_profile', title: 'Check Your Profile', emoji: '👤', description: 'Visit your profile page' },
     { id: 'peek_active_groups', title: 'Peek at Active Groups', emoji: '👀', description: 'Check out the most active groups' },
     { id: 'send_bug', title: 'Report a Bug', emoji: '🐛', description: 'Send a message to Noah in support' },

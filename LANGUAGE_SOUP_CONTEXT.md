@@ -1,6 +1,6 @@
 # Language Soup - Founder Context
 
-> Last updated: 2026-02-11 (Daily challenge UX, playback, chat tap fix)
+> Last updated: 2026-02-14 (Today tab focus; Ashton incentive idea in backlog)
 
 ## 🍲 What is Language Soup?
 
@@ -95,6 +95,16 @@
 
 **Core value prop (users' words):**
 > "A low-pressure community where I can practice speaking without feeling judged"
+
+**Future ideas (backlog, not current focus):**
+- **Ashton (2/14/26):** Incentive/progression — "the more you speak you unlock new soups or something cool." Long-term implementation (small ticket in TICKET_BLITZ).
+
+**Today tab vision (Feb 2026):**
+- **Single primary job:** Get users to do their daily challenge — show the challenge, let them read/hear it (beginner phrases, vocab), record, send. Easy path: what's the challenge? what do I say? read it → hear it → record → send.
+- **Primary:** Recording today's challenge (one hero action so they think "I'm getting challenged, I need to send a voice memo now"); next challenge countdown; do another; your groups live on **Community** tab, not Today.
+- **Secondary:** See who replied; yesterday/today/tomorrow timeline (show more things — right now Today feels underwhelming vs Community's numbers, faces, voice memos, colors).
+- **Today vs Community:** Today = daily challenges, where you go every day. Community = pulse, social proof, "what is everybody else doing today," motivation.
+- **Design gap:** Today = a lot of words, no one hero action, don't really know what to do. Goal: one clear hero so first impression is "oh my gosh, I'm getting challenged — I need to send a voice memo now."
 
 ---
  
@@ -240,10 +250,13 @@
 - **Fri @ 10am:** YC Weekly Update
 - **Daily @ 11am:** Post TikTok/IG (Batch created previously)
 
-**Daily Flow (Protecting Deep Work):**
-1. **Admin Sunrise (30m):** Emails, Support, Discord. Then CLOSE TABS.
-2. **Deep Work (4-5h):** Build ONE thing. Phone away.
-3. **Admin Sunset (30m):** Inbox zero, plan tomorrow's "One Thing".
+**Daily Flow (current):**
+- **Build** — jump in and ship. Random tasks and catch-up while things are loading (no separate admin sunrise/sunset blocks).
+
+**Deep-dive day (once a week):** One full day for long-form input — podcasts, videos, reading, emails. No shipping pressure; absorb, think, catch up. **When:** e.g. **Wednesday** (mid-week reset) or **Monday** (set the week after the weekend). Pick one and treat it as the non-build day.
+
+**What would Tyler Denk say? (prioritization lens)**  
+You have a lot to do and could build all day — so the question is order, not effort. Your own top three: **talk to customers**, **build**, **post once a day**. Treat that as the stack: **customers first** (support, DMs, feedback, calls). That's the highest-leverage thing for a solo founder. Then **build** with the rest of the day; if you're waiting on loads, that's when you do random tasks. **Post once a day** is a habit — batch it (e.g. 11am) so it doesn't fragment the day. Everything else (emails, deep-dive day, weekly anchors) fits around those three. Revisit next week and see how it feels.
 
 ---
 

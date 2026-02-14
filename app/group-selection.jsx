@@ -133,7 +133,7 @@ export default function GroupSelectionScreen() {
         return (
             <Animated.View entering={FadeInDown.delay(index * 100).springify()}>
                 <Pressable
-                    style={[styles.groupCard, isSelected && styles.groupCardSelected]}
+                    style={({ pressed }) => [styles.groupCard, isSelected && styles.groupCardSelected, pressed && { opacity: 0.9 }]}
                     onPress={() => {
                         toggleGroup(item.id);
                     }}
@@ -202,7 +202,7 @@ export default function GroupSelectionScreen() {
             <View style={styles.footer}>
                 <Pressable
                     onPress={handleContinue}
-                    style={[styles.button, selectedGroups.length === 0 && styles.buttonDisabled]}
+                    style={({ pressed }) => [styles.button, selectedGroups.length === 0 && styles.buttonDisabled, pressed && !submitting && selectedGroups.length > 0 && { opacity: 0.9 }]}
                     disabled={submitting || selectedGroups.length === 0}
                 >
                     {submitting ? (
@@ -214,7 +214,7 @@ export default function GroupSelectionScreen() {
                     )}
                 </Pressable>
 
-                <Pressable onPress={() => setShowRequestModal(true)} style={styles.requestButton}>
+                <Pressable onPress={() => setShowRequestModal(true)} style={({ pressed }) => [styles.requestButton, pressed && { opacity: 0.9 }]}>
                     <ThemedText style={styles.requestText}>don't see your language? 🌍</ThemedText>
                 </Pressable>
             </View>

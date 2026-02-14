@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { useQuests } from '../contexts/QuestContext';
+import { pickRandom, JOINING_LABELS } from '../constants/CopyPhilosophy';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -23,6 +24,7 @@ export default function BrowseGroups() {
     const [groups, setGroups] = useState([]);
     const [myGroupIds, setMyGroupIds] = useState([]);
     const [actionLoading, setActionLoading] = useState({}); // Track loading state per group
+    const [joinLoadingLabel, setJoinLoadingLabel] = useState('joining…');
 
     useEffect(() => {
         loadGroups();
@@ -56,6 +58,7 @@ export default function BrowseGroups() {
     };
 
     const joinGroup = async (groupId) => {
+        setJoinLoadingLabel(pickRandom(JOINING_LABELS));
         setActionLoading(prev => ({ ...prev, [groupId]: true }));
         try {
             const { error } = await supabase
@@ -139,13 +142,13 @@ export default function BrowseGroups() {
                     {isMember ? (
                         <View style={styles.memberActions}>
                             <Pressable
-                                style={[styles.button, styles.viewButton]}
+                                style={({ pressed }) => [styles.button, styles.viewButton, pressed && { opacity: 0.9 }]}
                                 onPress={() => router.push(`/chat/${item.id}`)}
                             >
                                 <Text style={styles.viewButtonText}>peek 👀</Text>
                             </Pressable>
                             <Pressable
-                                style={[styles.button, styles.leaveButton]}
+                                style={({ pressed }) => [styles.button, styles.leaveButton, pressed && { opacity: 0.9 }]}
                                 onPress={() => leaveGroup(item.id)}
                             >
                                 <LogOut size={14} color={SOUP_COLORS.pink} />
@@ -153,16 +156,19 @@ export default function BrowseGroups() {
                         </View>
                     ) : (
                         <Pressable
-                            style={[styles.button, styles.joinButton]}
+                            style={({ pressed }) => [styles.button, styles.joinButton, pressed && !isLoading && { opacity: 0.9 }]}
                             onPress={() => joinGroup(item.id)}
                             disabled={isLoading}
                         >
                             {isLoading ? (
-                                <ActivityIndicator size="small" color="#fff" />
+                                <>
+                                    <ActivityIndicator size="small" color="#fff" />
+                                    <Text style={styles.joinButtonText}>{joinLoadingLabel}</Text>
+                                </>
                             ) : (
                                 <>
                                     <Plus size={16} color="#fff" />
-                                    <Text style={styles.joinButtonText}>Join</Text>
+                                    <Text style={styles.joinButtonText}>join</Text>
                                 </>
                             )}
                         </Pressable>
@@ -183,7 +189,7 @@ export default function BrowseGroups() {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <Pressable onPress={() => router.back()} style={styles.backButton}>
+                <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.9 }]}>
                     <ArrowLeft size={24} color="#000" />
                 </Pressable>
                 <View>

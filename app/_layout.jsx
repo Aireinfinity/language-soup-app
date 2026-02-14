@@ -10,9 +10,12 @@ import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { AudioPlayerProvider } from '../contexts/AudioPlayerContext';
 import { MiniAudioPlayer } from '../components/MiniAudioPlayer';
+import { PodcastPlayerExpanded } from '../components/PodcastPlayerExpanded';
+import { PodcastEndSummary } from '../components/PodcastEndSummary';
 import { Colors } from '../constants/Colors';
 import { QuestProvider } from '../contexts/QuestContext';
 import WhatsNewModal from '../components/WhatsNewModal';
+import { AppErrorBoundary } from '../components/AppErrorBoundary';
 import { shouldShowWhatsNew, markWhatsNewAsSeen } from '../utils/versionTracking';
 
 
@@ -69,6 +72,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="profile-creation" />
                 <Stack.Screen name="group-selection" />
                 <Stack.Screen name="browse-groups" />
+                <Stack.Screen name="your-groups" />
                 <Stack.Screen name="group-info" />
                 <Stack.Screen name="native-speakers" />
                 <Stack.Screen name="add-native-speaker" />
@@ -83,6 +87,8 @@ function RootLayoutNav() {
                 <Stack.Screen name="onboarding/notifications" />
             </Stack>
             <MiniAudioPlayer />
+            <PodcastPlayerExpanded />
+            <PodcastEndSummary />
             <WhatsNewModal visible={showWhatsNew} onClose={handleCloseWhatsNew} />
         </>
     );
@@ -90,14 +96,16 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
     return (
-        <AuthProvider>
-            <NotificationProvider>
-                <AudioPlayerProvider>
-                    <QuestProvider>
-                        <RootLayoutNav />
-                    </QuestProvider>
-                </AudioPlayerProvider>
-            </NotificationProvider>
-        </AuthProvider>
+        <AppErrorBoundary>
+            <AuthProvider>
+                <NotificationProvider>
+                    <AudioPlayerProvider>
+                        <QuestProvider>
+                            <RootLayoutNav />
+                        </QuestProvider>
+                    </AudioPlayerProvider>
+                </NotificationProvider>
+            </AuthProvider>
+        </AppErrorBoundary>
     );
 }

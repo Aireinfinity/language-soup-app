@@ -82,11 +82,13 @@ export function SharedChatUI({
     inverted = true,
     reactions = {},
     onReact,
+    groupId = null,
     groupName = null,
     groupLanguage = null,
     currentChallenge = null, // New Prop: Full challenge object for context
     onAvatarPress,
     onShowInspiration, // New Prop
+    onGetTranscript, // (messageId) => Promise<transcript> for voice messages without transcript
     // Voice Preview Props (listen before send)
     previewAudio = null,
     isPlayingPreview = false,
@@ -339,10 +341,12 @@ export function SharedChatUI({
                 onReply={handleReply}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
+                groupId={groupId}
                 groupName={groupName}
                 groupLanguage={groupLanguage}
                 onAvatarPress={onAvatarPress}
                 onShowInspiration={onShowInspiration}
+                onGetTranscript={onGetTranscript}
                 currentChallenge={currentChallenge} // Propagate Context
             />
         );
@@ -402,6 +406,16 @@ export function SharedChatUI({
             )}
 
             {/* Input Area */}
+            {(() => {
+                const lastMsg = messages?.find(m => m.type !== 'date_separator');
+                const isFromOther = chatType === 'support' ? lastMsg?.from_admin : (lastMsg?.sender_id !== userId && lastMsg?.user_id !== userId);
+                const showVoiceNudge = lastMsg?.message_type === 'voice' && isFromOther && !isRecording && !previewAudio;
+                return showVoiceNudge ? (
+                    <View style={styles.voiceNudgeWrap}>
+                        <Text style={styles.voiceNudgeText}>Reply with voice?</Text>
+                    </View>
+                ) : null;
+            })()}
             <View style={[
                 ChatStyles.inputContainer,
                 (replyTo || editingMessage) && ChatStyles.inputContainerWithPreview,
@@ -635,6 +649,17 @@ const styles = StyleSheet.create({
         backgroundColor: '#00adef',
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    voiceNudgeWrap: {
+        paddingHorizontal: 12,
+        paddingTop: 4,
+        paddingBottom: 2,
+    },
+    voiceNudgeText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: Colors.textLight,
+        fontStyle: 'italic',
     },
 });
 

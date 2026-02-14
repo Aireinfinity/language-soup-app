@@ -35,11 +35,13 @@ export function MessageBubble({
     onEdit,
     onDelete,
     onAvatarPress,
+    groupId = null,
     groupName = null,
     groupLanguage = null,
     isSpotlight = false,
     currentChallenge = null, // Fix: Add prop
-    onShowInspiration // New Prop
+    onShowInspiration, // New Prop
+    onGetTranscript, // (messageId) => Promise<transcript> for "Get transcript" on voice messages
 }) {
     const [showActionMenu, setShowActionMenu] = useState(false);
     const [showSharePreview, setShowSharePreview] = useState(false);
@@ -204,6 +206,9 @@ export function MessageBubble({
                         senderAvatar={sender?.avatar_url}
                         senderStatus={sender?.status_text}
                         groupName={groupName}
+                        groupId={groupId}
+                        transcript={message.transcript}
+                        onGetTranscript={onGetTranscript}
                     />
 
                     {/* Action Buttons Row - Only for voice messages */}

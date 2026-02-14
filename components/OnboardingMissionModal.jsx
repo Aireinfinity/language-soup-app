@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, Pressable, ActivityIndicator, Alert, Dimensions, Image } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet, Modal, Pressable, ActivityIndicator, Alert, Dimensions, Image, SafeAreaView, TextInput } from 'react-native';
 import { Audio } from 'expo-av';
 import { Mic, Check, X, Lightbulb } from 'lucide-react-native';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -10,6 +10,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { haptics } from '../utils/haptics';
 import ConfettiCannon from 'react-native-confetti-cannon';
 import { InspirationModal } from './InspirationModal';
+import { getAvatarSource } from '../utils/soupUtils';
+import { ChallengeQueueCard } from './ChallengeQueueCard';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -21,6 +23,28 @@ const SOUP_COLORS = {
 
 const { width, height } = Dimensions.get('window');
 
+const getGroupColor = (groupName) => {
+    if (!groupName) return '#00ADEF';
+    const name = String(groupName).toLowerCase();
+    if (name.includes('spanish')) return '#FF6B6B';
+    if (name.includes('french')) return '#4DA6FF';
+    if (name.includes('hungarian')) return '#2ECC71';
+    if (name.includes('german')) return '#F39C12';
+    if (name.includes('japanese')) return '#E91E63';
+    if (name.includes('italian')) return '#00B894';
+    if (name.includes('portuguese')) return '#E17055';
+    return '#00ADEF';
+};
+
+const ONBOARDING_PROMPT = "what's ur favorite word in this language? curse words count 😏 this isn't a classroom.";
+
+// Fun, lowercase options for users who don't want to send a voice memo yet
+const ONBOARDING_TEXT_OPTIONS = [
+    'hey everyone 👋🏿',
+    'hi from the lurking corner 😅',
+    'first voice memo coming soon… for now: hi! 🍜',
+    'just saying hi before i get brave',
+];
 
 // Mission: "Record Your First Word"
 // Unlocks the Kitchen (Feed)
@@ -32,9 +56,13 @@ export default function OnboardingMissionModal({ visible, groups, onComplete }) 
     const [showConfetti, setShowConfetti] = useState(false);
     const [showInspiration, setShowInspiration] = useState(false);
     const [step, setStep] = useState('loading'); // 'loading' | 'listening' | 'recording'
+    const [welcomePool, setWelcomePool] = useState([]); // up to 3 played from this pool
+    const [welcomeIndex, setWelcomeIndex] = useState(0);
     const [welcomeMsg, setWelcomeMsg] = useState(null);
     const [isPlayingWelcome, setIsPlayingWelcome] = useState(false);
     const [welcomeSound, setWelcomeSound] = useState(null);
+    const [isSendingText, setIsSendingText] = useState(false);
+    const [customHiText, setCustomHiText] = useState('');
 
     // 1. Fetch "Welcome" Message from Group
     useEffect(() => {
@@ -45,53 +73,26 @@ export default function OnboardingMissionModal({ visible, groups, onComplete }) 
 
     const fetchWelcomeMessage = async () => {
         try {
-            // 1. Try to fetch from the specific "Global Welcome" pool
-            const { data: globalWelcomes, error: globalError } = await supabase
-                .from('app_messages')
-                .select('*, sender:app_users(display_name, avatar_url)')
-                .eq('challenge_id', 'global-welcome')
-                .eq('message_type', 'voice')
-                .order('created_at', { ascending: false })
-                .limit(5); // Fetch a few to randomize
-
-            if (globalWelcomes && globalWelcomes.length > 0) {
-                // Randomly pick one from the global pool
-                const randomWelcome = globalWelcomes[Math.floor(Math.random() * globalWelcomes.length)];
-                setWelcomeMsg(randomWelcome);
-                setStep('listening');
-                return;
-            }
-
-            // 2. Fallback: Fetch any recent voice message from the groups the user joined
+            // Play "most recent challenge" voice memos from the group(s) — not "say hi" welcomes, just recent activity
             const groupIds = groups.map(g => g.id);
-            const { data: fallbackMessages, error: fallbackError } = await supabase
+            const { data: recentVoices, error } = await supabase
                 .from('app_messages')
                 .select('*, sender:app_users(display_name, avatar_url)')
                 .in('group_id', groupIds)
                 .eq('message_type', 'voice')
                 .order('created_at', { ascending: false })
-                .limit(1);
+                .limit(5);
 
-            if (fallbackMessages && fallbackMessages.length > 0) {
-                setWelcomeMsg(fallbackMessages[0]);
+            if (recentVoices && recentVoices.length > 0) {
+                setWelcomePool(recentVoices);
+                setWelcomeMsg(recentVoices[0]);
+                setWelcomeIndex(0);
                 setStep('listening');
-            } else {
-                // 3. Last Resort Fallback: Any voice message in the entire app
-                const { data: appWideMessages } = await supabase
-                    .from('app_messages')
-                    .select('*, sender:app_users(display_name, avatar_url)')
-                    .eq('message_type', 'voice')
-                    .order('created_at', { ascending: false })
-                    .limit(1);
-
-                if (appWideMessages && appWideMessages.length > 0) {
-                    setWelcomeMsg(appWideMessages[0]);
-                    setStep('listening');
-                } else {
-                    // No messages yet anywhere, skip to recording
-                    setStep('recording');
-                }
+                return;
             }
+
+            // No voice messages in user's groups yet, skip straight to first challenge
+            setStep('recording');
         } catch (e) {
             console.error('Error fetching welcome message:', e);
             setStep('recording');
@@ -121,8 +122,7 @@ export default function OnboardingMissionModal({ visible, groups, onComplete }) 
                 (status) => {
                     if (status.didJustFinish) {
                         setIsPlayingWelcome(false);
-                        // Optional: Small delay before transitioning
-                        setTimeout(() => setStep('recording'), 1000);
+                        // Don't auto-advance; user taps "more" or "skip"
                     }
                 }
             );
@@ -218,7 +218,7 @@ export default function OnboardingMissionModal({ visible, groups, onComplete }) 
                         sender_id: user.id,
                         group_id: group.id,
                         message_type: 'voice',
-                        content: `Your First Word! 🌍 (Challenge Complete)`,
+                        content: `ur first word 🎙️`,
                         metadata: {
                             type: 'voice',
                             duration: 2,
@@ -266,7 +266,6 @@ export default function OnboardingMissionModal({ visible, groups, onComplete }) 
     };
 
     const sendWelcomeAlert = async () => {
-        // Trigger Edge Function to notify existing members
         try {
             await supabase.functions.invoke('send-welcome-alert', {
                 body: {
@@ -280,29 +279,109 @@ export default function OnboardingMissionModal({ visible, groups, onComplete }) 
         }
     };
 
+    // Same flow as daily challenge: card calls onSend with { uri, duration }
+    const handleOnboardingSend = async (audioResult) => {
+        if (!audioResult?.uri) return;
+        const { uri, duration } = audioResult;
+        setIsUploading(true);
+        try {
+            const { data: fileData, error: uploadError } = await uploadAudio(uri);
+            if (uploadError) throw uploadError;
+            const path = fileData?.path;
+            const { data: { publicUrl } } = supabase.storage.from('voice-memos').getPublicUrl(path);
+            const durationSec = Math.max(1, Math.floor((duration || 2000) / 1000));
+            const messagePromises = groups.map(group =>
+                supabase.from('app_messages').insert({
+                    sender_id: user.id,
+                    group_id: group.id,
+                    message_type: 'voice',
+                    content: 'ur first word 🎙️',
+                    media_url: publicUrl,
+                    metadata: {
+                        type: 'voice',
+                        duration: durationSec,
+                        path,
+                        challenge_id: 'onboarding-icebreaker',
+                        is_first_word: true
+                    }
+                })
+            );
+            await Promise.all(messagePromises);
+            await sendWelcomeAlert();
+            setShowConfetti(true);
+            haptics.success();
+            setTimeout(() => onComplete(), 2500);
+        } catch (err) {
+            console.error('Onboarding send failed', err);
+            Alert.alert('Error', 'Failed to upload. Please try again!');
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    // Text fallback: send a fun "hi" to all groups and complete onboarding
+    const handleOnboardingTextSend = async (text) => {
+        const msg = (text || customHiText || '').trim();
+        if (!msg || groups.length === 0) return;
+        setIsSendingText(true);
+        try {
+            const messagePromises = groups.map(group =>
+                supabase.from('app_messages').insert({
+                    sender_id: user.id,
+                    group_id: group.id,
+                    message_type: 'text',
+                    content: msg,
+                    metadata: { onboarding_hi: true }
+                })
+            );
+            await Promise.all(messagePromises);
+            await sendWelcomeAlert();
+            setShowConfetti(true);
+            haptics.success();
+            setTimeout(() => onComplete(), 2500);
+        } catch (err) {
+            console.error('Onboarding text send failed', err);
+            Alert.alert('Error', 'Couldn\'t send. Try again or send a voice note!');
+        } finally {
+            setIsSendingText(false);
+        }
+    };
+
+    const onboardingChallenge = useMemo(() => ({
+        id: 'onboarding-icebreaker',
+        prompt_text: ONBOARDING_PROMPT,
+        group_id: groups[0]?.id,
+        group_name: groups[0]?.name || 'Soup',
+        metadata: null
+    }), [groups]);
+
     if (!visible) return null;
 
     return (
-        <Modal visible={visible} animationType="slide" transparent>
-            <View style={styles.container}>
-                <View style={styles.content}>
-                    <Text style={styles.emoji}>🍲</Text>
-                    <Text style={styles.title}>Welcome to the Soup!</Text>
-                    <Text style={styles.subtitle}>
-                        This kitchen is for chefs only. To join, you must add <Text style={styles.highlight}>one ingredient</Text>.
-                    </Text>
+        <Modal visible={visible} animationType="slide" transparent={step !== 'recording'}>
+            <View style={[styles.container, step === 'recording' && styles.containerRecording]}>
+                <View style={[styles.content, step === 'recording' && styles.contentRecording]}>
+                    {step !== 'recording' && (
+                        <>
+                            <Text style={styles.emoji}>🍲</Text>
+                            <Text style={styles.title}>welcome to the soup!</Text>
+                            <Text style={styles.subtitle}>
+                                everyone here sends voice memos. add <Text style={styles.highlight}>one ingredient</Text> and ur in 🍜
+                            </Text>
+                        </>
+                    )}
 
                     {step === 'loading' && (
                         <View style={styles.loadingContainer}>
                             <ActivityIndicator size="large" color={SOUP_COLORS.blue} />
-                            <Text style={styles.loadingText}>Preparing your soup...</Text>
+                            <Text style={styles.loadingText}>preparing ur soup...</Text>
                         </View>
                     )}
 
                     {step === 'listening' && (
                         <View style={styles.listeningContainer}>
                             <View style={styles.cardHeader}>
-                                <Text style={styles.missionLabel}>HEAR FROM THE GROUP 🎧</Text>
+                                <Text style={styles.missionLabel}>hear from the group 🎧</Text>
                             </View>
 
                             <View style={styles.avatarPulsingContainer}>
@@ -314,96 +393,110 @@ export default function OnboardingMissionModal({ visible, groups, onComplete }) 
                             </View>
 
                             <Text style={styles.welcomeTitle}>
-                                {welcomeMsg?.sender?.display_name || 'Someone'} is saying hello!
+                                this is someone from the group
                             </Text>
                             <Text style={styles.welcomeSubtitle}>
-                                This is a real message from your new community. Listen to their welcome, then it's your turn.
+                                their most recent challenge 👋🏿 listen to a few, then it's ur turn
                             </Text>
 
-                            <Pressable
-                                style={styles.skipButton}
-                                onPress={() => {
-                                    if (welcomeSound) welcomeSound.stopAsync();
-                                    setStep('recording');
-                                }}
-                            >
-                                <Text style={styles.skipText}>Skip to Challenge ➡️</Text>
-                            </Pressable>
+                            <View style={styles.welcomeActions}>
+                                {!isPlayingWelcome && welcomeIndex < 2 && welcomeIndex + 1 < welcomePool.length && (
+                                    <Pressable
+                                        style={styles.moreButton}
+                                        onPress={() => {
+                                            const next = welcomeIndex + 1;
+                                            setWelcomeMsg(welcomePool[next]);
+                                            setWelcomeIndex(next);
+                                            playWelcome(welcomePool[next].media_url);
+                                        }}
+                                    >
+                                        <Text style={styles.moreButtonText}>more 👋🏿</Text>
+                                    </Pressable>
+                                )}
+                                <Pressable
+                                    style={styles.skipButton}
+                                    onPress={() => {
+                                        if (welcomeSound) welcomeSound.stopAsync();
+                                        setStep('recording');
+                                    }}
+                                >
+                                    <Text style={styles.skipText}>skip to challenge ➡️</Text>
+                                </Pressable>
+                            </View>
                         </View>
                     )}
 
                     {step === 'recording' && (
-                        <View style={styles.missionCard}>
-                            <View style={styles.cardHeader}>
-                                <Text style={styles.missionLabel}>FIRST CHALLENGE 🥣</Text>
-                                <View style={styles.timeBadge}>
-                                    <Text style={styles.timeBadgeText}>ACTIVE</Text>
-                                </View>
-                            </View>
-                            <Text style={styles.missionTitle}>
-                                Your First Word 🎙️
-                            </Text>
-                            <Text style={styles.missionPrompt}>
-                                What is your <Text style={styles.highlight}>favorite word</Text> in this language?
-                            </Text>
-                            <Text style={styles.missionSubPrompt}>
-                                (Curse words count too, this isn't a classroom!)
-                            </Text>
-
-                            <Pressable
-                                style={styles.inspirationButton}
-                                onPress={() => setShowInspiration(true)}
-                            >
-                                <Lightbulb size={16} color="#ec008b" />
-                                <Text style={styles.inspirationText}>Need ideas?</Text>
-                            </Pressable>
-
-                            <View style={styles.audioControls}>
-                                {isUploading ? (
-                                    <ActivityIndicator size="large" color={Colors.light.tint} />
-                                ) : recording ? (
-                                    <View style={styles.recordingRow}>
-                                        <View style={styles.recordingIndicator}>
-                                            <View style={styles.recordingDot} />
-                                            <Text style={styles.recordingTime}>Recording...</Text>
-                                        </View>
-                                        <Pressable style={styles.stopButton} onPress={stopRecordingAndSend}>
-                                            <Check size={28} color="white" />
+                        <View style={[styles.recordingStepContainer, { backgroundColor: getGroupColor(groups[0]?.name) }]}>
+                            <SafeAreaView style={styles.recordingStepSafe}>
+                                <Text style={styles.transitionCopyOverCard}>
+                                    that's the community 👋🏿 daily challenge, u send a voice reply. here's ur first one 🥣
+                                </Text>
+                                <ChallengeQueueCard
+                                    key="onboarding-icebreaker"
+                                    challenge={onboardingChallenge}
+                                    groupName={groups[0]?.name || 'Soup'}
+                                    onSend={handleOnboardingSend}
+                                    loading={isUploading}
+                                />
+                                <Pressable onPress={() => onComplete()} style={styles.skipForNowButton}>
+                                    <Text style={styles.skipForNowText}>skip for now</Text>
+                                </Pressable>
+                                <View style={styles.textFallbackBlock}>
+                                    <Text style={styles.textFallbackLabel}>still scared? just say something in the chat 👋🏿</Text>
+                                    <View style={styles.textFallbackOptions}>
+                                        {ONBOARDING_TEXT_OPTIONS.map((option, idx) => (
+                                            <Pressable
+                                                key={idx}
+                                                style={({ pressed }) => [styles.textFallbackOption, pressed && { opacity: 0.8 }]}
+                                                onPress={() => handleOnboardingTextSend(option)}
+                                                disabled={isSendingText}
+                                            >
+                                                <Text style={styles.textFallbackOptionText}>{option}</Text>
+                                            </Pressable>
+                                        ))}
+                                    </View>
+                                    <View style={styles.textFallbackCustomRow}>
+                                        <TextInput
+                                            style={styles.textFallbackInput}
+                                            placeholder="or type your own…"
+                                            placeholderTextColor="rgba(255,255,255,0.5)"
+                                            value={customHiText}
+                                            onChangeText={setCustomHiText}
+                                            editable={!isSendingText}
+                                        />
+                                        <Pressable
+                                            style={[styles.textFallbackSendBtn, (!customHiText.trim() || isSendingText) && styles.textFallbackSendBtnDisabled]}
+                                            onPress={() => handleOnboardingTextSend(customHiText)}
+                                            disabled={!customHiText.trim() || isSendingText}
+                                        >
+                                            {isSendingText ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.textFallbackSendBtnText}>send</Text>}
                                         </Pressable>
                                     </View>
-                                ) : (
-                                    <Pressable style={styles.recordButton} onPress={startRecording}>
-                                        <Mic size={32} color="white" />
-                                    </Pressable>
-                                )}
-
-                                <Text style={styles.hint}>
-                                    {recording ? 'Tap check to send' : 'Tap to start recording'}
-                                </Text>
-                            </View>
-                            <Text style={styles.broadcastInfo}>
-                                📢 Your message will be sent to all {groups.length} groups.
-                            </Text>
+                                </View>
+                            </SafeAreaView>
                         </View>
                     )}
                 </View>
 
                 {showConfetti && <ConfettiCannon count={200} origin={{ x: width / 2, y: 0 }} />}
 
-                <InspirationModal
-                    visible={showInspiration}
-                    onClose={() => setShowInspiration(false)}
-                    prompt="What is your favorite word in this language?"
-                    language={groups?.[0]?.language || 'Target Language'}
-                    metadata={{
-                        starter_phrase: "My favorite word is...",
-                        vocab_bank: [
-                            { word: "Laughter", translation: "La risa" },
-                            { word: "Beautiful", translation: "Hermoso" },
-                            { word: "Freedom", translation: "La libertad" }
-                        ]
-                    }}
-                />
+                {step !== 'recording' && (
+                    <InspirationModal
+                        visible={showInspiration}
+                        onClose={() => setShowInspiration(false)}
+                        prompt="what's ur favorite word in this language? curse words count 😏"
+                        language={groups?.[0]?.language || 'Target Language'}
+                        metadata={{
+                            starter_phrase: "My favorite word is...",
+                            vocab_bank: [
+                                { word: "Laughter", translation: "La risa" },
+                                { word: "Beautiful", translation: "Hermoso" },
+                                { word: "Freedom", translation: "La libertad" }
+                            ]
+                        }}
+                    />
+                )}
             </View>
         </Modal>
     );
@@ -412,16 +505,23 @@ export default function OnboardingMissionModal({ visible, groups, onComplete }) 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: Colors.primary, // #ec008b (Pink) or Blue? Let's use Pink for "Soup" brand.
-        // Or maybe a translucent overlay?
-        // User said "forced-focus", so opaque is better.
         backgroundColor: '#ec008b',
         justifyContent: 'center',
         padding: 24,
     },
+    containerRecording: {
+        justifyContent: 'flex-start',
+        padding: 0,
+        backgroundColor: 'transparent',
+    },
     content: {
         alignItems: 'center',
         gap: 24,
+    },
+    contentRecording: {
+        flex: 1,
+        width: '100%',
+        gap: 0,
     },
     emoji: {
         fontSize: 64,
@@ -611,6 +711,116 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         lineHeight: 22,
         marginBottom: 24,
+    },
+    welcomeActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 12,
+        flexWrap: 'wrap',
+    },
+    moreButton: {
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 24,
+        backgroundColor: 'rgba(0, 173, 239, 0.15)',
+        borderWidth: 1,
+        borderColor: 'rgba(0, 173, 239, 0.3)',
+    },
+    moreButtonText: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#00adef',
+    },
+    transitionCopy: {
+        fontSize: 14,
+        color: '#636e72',
+        textAlign: 'center',
+        lineHeight: 20,
+        marginBottom: 16,
+    },
+    recordingStepContainer: {
+        flex: 1,
+        width: '100%',
+    },
+    recordingStepSafe: {
+        flex: 1,
+    },
+    transitionCopyOverCard: {
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.95)',
+        textAlign: 'center',
+        marginTop: 12,
+        marginBottom: 8,
+        paddingHorizontal: 16,
+    },
+    skipForNowButton: {
+        paddingVertical: 14,
+        paddingHorizontal: 24,
+        alignSelf: 'center',
+        marginBottom: 24,
+    },
+    skipForNowText: {
+        fontSize: 15,
+        color: 'rgba(255,255,255,0.9)',
+        fontWeight: '600',
+    },
+    textFallbackBlock: {
+        marginTop: 8,
+        marginBottom: 24,
+        paddingHorizontal: 16,
+        width: '100%',
+    },
+    textFallbackLabel: {
+        fontSize: 14,
+        color: 'rgba(255,255,255,0.9)',
+        marginBottom: 10,
+        textAlign: 'center',
+    },
+    textFallbackOptions: {
+        gap: 8,
+        marginBottom: 12,
+    },
+    textFallbackOption: {
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 14,
+    },
+    textFallbackOptionText: {
+        fontSize: 15,
+        color: '#fff',
+        textAlign: 'center',
+    },
+    textFallbackCustomRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    textFallbackInput: {
+        flex: 1,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        borderRadius: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        fontSize: 15,
+        color: '#fff',
+    },
+    textFallbackSendBtn: {
+        backgroundColor: 'rgba(255,255,255,0.35)',
+        paddingVertical: 10,
+        paddingHorizontal: 18,
+        borderRadius: 12,
+        justifyContent: 'center',
+        minWidth: 56,
+    },
+    textFallbackSendBtnDisabled: {
+        opacity: 0.5,
+    },
+    textFallbackSendBtnText: {
+        fontSize: 15,
+        color: '#fff',
+        fontWeight: '700',
     },
     skipButton: {
         paddingHorizontal: 16,

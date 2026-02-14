@@ -6,7 +6,7 @@ import { MessageCircle, Copy, Share2, Trash2, Edit2 } from 'lucide-react-native'
 // Removed circular import of MessageBubble. It will be required lazily inside the component.
 
 
-const REACTIONS = ['\u2764\uFE0F', '😂', '😮', '😢', '🙏', '👍', '➕'];
+const REACTIONS = ['\u2764\uFE0F', '😂', '😮', '😢', '🙏🏿', '👍🏿', '➕'];
 
 export function MessageActionMenu({
     visible,

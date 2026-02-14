@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import Animated, { FadeIn, SlideInDown, SlideOutDown } from 'react-native-reanimated';
-import { Play, Pause, X } from 'lucide-react-native';
+import { Play, Pause, X, MessageCircle, SkipBack, SkipForward, ChevronUp } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useAudioPlayer } from '../contexts/AudioPlayerContext';
-// import Slider from '@react-native-community/slider';
 import * as Haptics from 'expo-haptics';
 import { getAvatarSource } from '../utils/soupUtils';
 
@@ -20,17 +20,24 @@ const SOUP_COLORS = {
  */
 export function MiniAudioPlayer() {
     const insets = useSafeAreaInsets();
+    const router = useRouter();
     const {
         currentAudio,
         isPlaying,
         position,
         duration,
         playbackSpeed,
+        fullQueue,
+        currentIndex,
+        isPlayerExpanded,
+        setIsPlayerExpanded,
         pauseAudio,
         resumeAudio,
         stopAudio,
         seekTo,
-        changeSpeed
+        changeSpeed,
+        skipNext,
+        skipPrevious
     } = useAudioPlayer();
 
     const [isScrubbing, setIsScrubbing] = useState(false);
@@ -73,15 +80,26 @@ export function MiniAudioPlayer() {
         seekTo(value);
     };
 
-    const speedLabel = playbackSpeed === 0.5 ? '0.5x' : playbackSpeed === 2.0 ? '2x' : '1x';
+    const speedLabel = playbackSpeed === 0.75 ? '0.75×' : playbackSpeed === 1.5 ? '1.5×' : playbackSpeed === 2.0 ? '2×' : '1×';
+    const progress = duration > 0 ? Math.min(1, position / duration) : 0;
+    const hasQueue = fullQueue && fullQueue.length > 0;
+    const canSkipNext = hasQueue && currentIndex < fullQueue.length - 1;
+    const canSkipPrev = hasQueue && currentIndex > 0;
 
     return (
         <Animated.View
             entering={SlideInDown.duration(200)}
             exiting={SlideOutDown.duration(180)}
-            style={[styles.container, { bottom: insets.bottom + 48 }]} // Above tab bar
+            style={[styles.container, { bottom: insets.bottom + 48 }]}
         >
-            <View style={styles.card}>
+            <Pressable
+                style={styles.card}
+                onPress={() => {
+                    if (isPlayerExpanded) return;
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setIsPlayerExpanded(true);
+                }}
+            >
                 <View style={styles.content}>
                     {/* Avatar */}
                     <View style={styles.avatarContainer}>
@@ -127,23 +145,17 @@ export function MiniAudioPlayer() {
 
                     {/* Controls */}
                     <View style={styles.controlsContainer}>
-                        {/* Speed Button */}
-                        <Pressable
-                            onPress={handleSpeedChange}
-                            style={styles.speedButton}
-                            hitSlop={8}
-                        >
-                            <Animated.Text
-                                key={playbackSpeed}
-                                entering={FadeIn.duration(100)}
-                                style={styles.speedText}
+                        {hasQueue && (
+                            <Pressable
+                                onPress={(e) => { e.stopPropagation(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); skipPrevious(); }}
+                                style={styles.skipIconBtn}
+                                disabled={!canSkipPrev}
                             >
-                                {speedLabel}
-                            </Animated.Text>
-                        </Pressable>
+                                <SkipBack size={22} color={canSkipPrev ? SOUP_COLORS.blue : '#ccc'} fill={canSkipPrev ? SOUP_COLORS.blue : 'transparent'} />
+                            </Pressable>
+                        )}
 
-                        {/* Play/Pause Button */}
-                        <Pressable onPress={handleTogglePlay} style={styles.playButton} hitSlop={8}>
+                        <Pressable onPress={(e) => { e.stopPropagation(); handleTogglePlay(); }} style={styles.playButton} hitSlop={8}>
                             {isPlaying ? (
                                 <Pause size={22} color="#fff" fill="#fff" />
                             ) : (
@@ -151,26 +163,63 @@ export function MiniAudioPlayer() {
                             )}
                         </Pressable>
 
-                        {/* Close Button - No background, just icon */}
-                        <Pressable onPress={handleClose} style={styles.iconButton} hitSlop={10}>
+                        {hasQueue && (
+                            <Pressable
+                                onPress={(e) => { e.stopPropagation(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); skipNext(); }}
+                                style={styles.skipIconBtn}
+                                disabled={!canSkipNext}
+                            >
+                                <SkipForward size={22} color={canSkipNext ? SOUP_COLORS.blue : '#ccc'} fill={canSkipNext ? SOUP_COLORS.blue : 'transparent'} />
+                            </Pressable>
+                        )}
+
+                        <Pressable onPress={(e) => { e.stopPropagation(); handleSpeedChange(); }} style={styles.speedButton} hitSlop={8}>
+                            <Animated.Text key={playbackSpeed} entering={FadeIn.duration(100)} style={styles.speedText}>
+                                {speedLabel}
+                            </Animated.Text>
+                        </Pressable>
+
+                        {currentAudio?.groupId ? (
+                            <Pressable
+                                onPress={(e) => {
+                                    e.stopPropagation();
+                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                    const query = currentAudio.messageId ? `?messageId=${currentAudio.messageId}` : '';
+                                    router.push(`/chat/${currentAudio.groupId}${query}`);
+                                }}
+                                style={styles.reactButton}
+                                hitSlop={8}
+                            >
+                                <MessageCircle size={18} color={SOUP_COLORS.blue} />
+                            </Pressable>
+                        ) : null}
+
+                        <Pressable
+                            onPress={(e) => {
+                                e.stopPropagation();
+                                handleClose();
+                            }}
+                            style={styles.iconButton}
+                            hitSlop={10}
+                        >
                             <X size={20} color="#666" strokeWidth={2.5} />
                         </Pressable>
                     </View>
                 </View>
 
-                {/* Progress Bar - Bottom Edge */}
-                {/* <Slider
-                    style={styles.slider}
-                    minimumValue={0}
-                    maximumValue={duration || 1}
-                    value={position}
-                    onSlidingStart={handleSlidingStart}
-                    onSlidingComplete={handleSlidingComplete}
-                    minimumTrackTintColor={SOUP_COLORS.pink}
-                    maximumTrackTintColor="rgba(0,0,0,0.08)"
-                    thumbTintColor="transparent" // Invisible thumb
-                /> */}
-            </View>
+                {/* Progress bar */}
+                <View style={styles.progressBarWrap}>
+                    <View style={[styles.progressBarFill, { width: `${progress * 100}%` }]} />
+                </View>
+
+                {/* Expand hint when in podcast mode */}
+                {hasQueue && (
+                    <View style={styles.expandHint}>
+                        <ChevronUp size={14} color="#999" />
+                        <Text style={styles.expandHintText}>tap to open player</Text>
+                    </View>
+                )}
+            </Pressable>
         </Animated.View>
     );
 }
@@ -184,13 +233,13 @@ const styles = StyleSheet.create({
     },
     card: {
         backgroundColor: '#fff',
-        borderRadius: 12,
+        borderRadius: 14,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 5,
-        overflow: 'hidden', // For progress bar at bottom edge
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+        elevation: 6,
+        overflow: 'hidden',
     },
     content: {
         flexDirection: 'row',
@@ -278,13 +327,36 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    skipIconBtn: {
+        padding: 4,
+    },
+    reactButton: {
+        padding: 6,
+        backgroundColor: 'rgba(0, 173, 239, 0.12)',
+        borderRadius: 8,
+    },
     iconButton: {
         padding: 4,
     },
-    slider: {
+    progressBarWrap: {
+        height: 3,
+        backgroundColor: 'rgba(0,0,0,0.06)',
         width: '100%',
-        height: 6,
-        marginTop: -2,
-        marginBottom: -3,
+    },
+    progressBarFill: {
+        height: '100%',
+        backgroundColor: SOUP_COLORS.blue,
+    },
+    expandHint: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        paddingVertical: 6,
+    },
+    expandHintText: {
+        fontSize: 11,
+        color: '#999',
+        fontWeight: '500',
     },
 });

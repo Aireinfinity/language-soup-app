@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, SafeAreaView, Platform, LayoutAnimation, UIManager, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform, LayoutAnimation, UIManager, ActivityIndicator } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Linking from 'expo-linking';
 import { LifeBuoy, ChevronDown, ChevronUp, Mail, MessageSquare, Bug, ExternalLink, MessageCircle } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { pickRandom, OPENING_CHAT_LABELS } from '../../constants/CopyPhilosophy';
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -44,9 +46,11 @@ const FAQS = [
 
 export default function SupportScreen() {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const { user } = useAuth();
     const [expandedIndex, setExpandedIndex] = useState(null);
     const [chatLoading, setChatLoading] = useState(false);
+    const [chatLoadingLabel, setChatLoadingLabel] = useState('opening chat…');
 
     const toggleExpand = (index) => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -63,6 +67,7 @@ export default function SupportScreen() {
 
     const handleSupportChat = async () => {
         if (!user || chatLoading) return;
+        setChatLoadingLabel(pickRandom(OPENING_CHAT_LABELS));
         setChatLoading(true);
 
         try {
@@ -122,7 +127,7 @@ export default function SupportScreen() {
                     challenge_id: challenge.id,
                     sender_id: user.id,
                     message_type: 'system',
-                    content: 'Welcome to your private support channel! 🥣 An admin will be with you shortly.'
+                    content: 'welcome to ur private support channel! 🥣 an admin will be with u shortly.'
                 });
             }
 
@@ -137,14 +142,14 @@ export default function SupportScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.safeArea}>
-            <View style={styles.header}>
+        <SafeAreaView style={styles.safeArea} edges={['bottom']}>
+            <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
                 <View style={styles.iconCircle}>
                     <LifeBuoy size={28} color="#fff" />
                 </View>
                 <View>
                     <Text style={styles.headerTitle}>Help Center</Text>
-                    <Text style={styles.headerSubtitle}>We're here to help you cook.</Text>
+                    <Text style={styles.headerSubtitle}>we're here to help u cook.</Text>
                 </View>
             </View>
 
@@ -162,7 +167,7 @@ export default function SupportScreen() {
                         </View>
                         <View style={styles.chatInfo}>
                             <Text style={styles.chatTitle}>24/7 Live Support Chat</Text>
-                            <Text style={styles.chatSubtitle}>Talk directly with our admins.</Text>
+                            <Text style={styles.chatSubtitle}>{chatLoading ? chatLoadingLabel : 'chat with admins'}</Text>
                         </View>
                         {chatLoading ? (
                             <ActivityIndicator color="#fff" />
@@ -181,7 +186,7 @@ export default function SupportScreen() {
                         return (
                             <Pressable
                                 key={index}
-                                style={[styles.faqCard, isExpanded && styles.faqCardExpanded]}
+                                style={({ pressed }) => [styles.faqCard, isExpanded && styles.faqCardExpanded, pressed && { opacity: 0.9 }]}
                                 onPress={() => toggleExpand(index)}
                             >
                                 <View style={styles.faqHeader}>
@@ -205,35 +210,35 @@ export default function SupportScreen() {
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Get in Touch 📬</Text>
 
-                    <Pressable style={styles.actionCard} onPress={() => handleEmail('Bug Report 🐛')}>
+                    <Pressable style={({ pressed }) => [styles.actionCard, pressed && { opacity: 0.9 }]} onPress={() => handleEmail('Bug Report 🐛')}>
                         <View style={[styles.actionIcon, { backgroundColor: 'rgba(236,0,139,0.1)' }]}>
                             <Bug size={24} color={SOUP_COLORS.pink} />
                         </View>
                         <View style={styles.actionInfo}>
                             <Text style={styles.actionTitle}>Report a Bug</Text>
-                            <Text style={styles.actionSubtitle}>Something broken in the kitchen?</Text>
+                            <Text style={styles.actionSubtitle}>something broken in the kitchen?</Text>
                         </View>
                         <ExternalLink size={16} color={SOUP_COLORS.subtext} />
                     </Pressable>
 
-                    <Pressable style={styles.actionCard} onPress={() => handleEmail('Feature Request 💡')}>
+                    <Pressable style={({ pressed }) => [styles.actionCard, pressed && { opacity: 0.9 }]} onPress={() => handleEmail('Feature Request 💡')}>
                         <View style={[styles.actionIcon, { backgroundColor: 'rgba(0,173,239,0.1)' }]}>
                             <MessageSquare size={24} color={SOUP_COLORS.blue} />
                         </View>
                         <View style={styles.actionInfo}>
                             <Text style={styles.actionTitle}>Suggest a Feature</Text>
-                            <Text style={styles.actionSubtitle}>Tell us what you want to see.</Text>
+                            <Text style={styles.actionSubtitle}>tell us what u want to see.</Text>
                         </View>
                         <ExternalLink size={16} color={SOUP_COLORS.subtext} />
                     </Pressable>
 
-                    <Pressable style={styles.actionCard} onPress={() => handleEmail('General Inquiry 💬')}>
+                    <Pressable style={({ pressed }) => [styles.actionCard, pressed && { opacity: 0.9 }]} onPress={() => handleEmail('General Inquiry 💬')}>
                         <View style={[styles.actionIcon, { backgroundColor: 'rgba(25,176,145,0.1)' }]}>
                             <Mail size={24} color={SOUP_COLORS.green} />
                         </View>
                         <View style={styles.actionInfo}>
                             <Text style={styles.actionTitle}>Contact Support</Text>
-                            <Text style={styles.actionSubtitle}>Questions, love letters, or recipes.</Text>
+                            <Text style={styles.actionSubtitle}>questions, love letters, or recipes.</Text>
                         </View>
                         <ExternalLink size={16} color={SOUP_COLORS.subtext} />
                     </Pressable>
@@ -260,8 +265,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 24,
-        paddingTop: Platform.OS === 'android' ? 40 : 20,
-        paddingBottom: 24,
+        paddingBottom: 14,
         gap: 16,
     },
     iconCircle: {

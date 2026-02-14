@@ -254,7 +254,7 @@ export default function GoalsTab() {
                                     </div>
                                 ) : (
                                     <div className="px-3 py-2 bg-blue-50 text-blue-700 rounded-xl text-sm font-bold">
-                                        💪 Keep building! You got this!
+                                        💪🏿 Keep building! You got this!
                                     </div>
                                 )}
 

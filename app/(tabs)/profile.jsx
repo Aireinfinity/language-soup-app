@@ -1,21 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator, TextInput, Alert, Text, Switch, Modal, Dimensions, KeyboardAvoidingView, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { Camera, Edit2, LogOut, MapPin, Globe, Award, Share2, Sparkles, Flag, Clock, Crown, X, Download, ArrowRight, MessageCircle, Bell } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Camera, Edit2, LogOut, MapPin, Globe, Award, Sparkles, Flag, Clock, Crown, Download, MessageCircle, Bell } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { decode } from 'base64-arraybuffer';
-import ViewShot from 'react-native-view-shot';
-import * as Sharing from 'expo-sharing';
 import { Asset } from 'expo-asset';
 import { useQuests } from '../../contexts/QuestContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import GroupAvatar from '../../components/GroupAvatar';
 import { getAvatarSource } from '../../utils/soupUtils';
+import { TAB_BAR_HEIGHT } from '../../components/QuestStrip';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -56,6 +54,8 @@ export default function ProfileScreen() {
     const { user: authUser, signOut } = useAuth();
     const { permissionStatus, openSettings, checkPermissions } = useNotifications();
     const router = useRouter();
+    const insets = useSafeAreaInsets();
+    const [scrollContentHeight, setScrollContentHeight] = useState(SCREEN_HEIGHT - TAB_BAR_HEIGHT);
     const [user, setUser] = useState(null);
     const [groups, setGroups] = useState([]);
     const [stats, setStats] = useState(null);
@@ -74,7 +74,6 @@ export default function ProfileScreen() {
     const [learningSearch, setLearningSearch] = useState('');
     const [timezoneSearch, setTimezoneSearch] = useState('');
     const [uploading, setUploading] = useState(false);
-    const [showWrappedModal, setShowWrappedModal] = useState(false);
     const [newSoupFlavor, setNewSoupFlavor] = useState('');
     const [statsTab, setStatsTab] = useState('input'); // 'input' | 'output'
     const [showLevelsInfo, setShowLevelsInfo] = useState(false);
@@ -83,7 +82,6 @@ export default function ProfileScreen() {
     const [selectedSoupId, setSelectedSoupId] = useState(null);
     const [learningExpanded, setLearningExpanded] = useState(false);
     const [fluentExpanded, setFluentExpanded] = useState(false);
-    const wrappedRef = useRef();
     const { completeQuest } = useQuests();
 
     useEffect(() => {
@@ -362,6 +360,7 @@ export default function ProfileScreen() {
 
     const renderIdentity = () => (
         <View style={styles.heroSection}>
+            <View style={styles.heroCard}>
             {/* Hero Layout: Flags | Photo | Flags */}
             <View style={styles.heroPhotoRow}>
                 {/* Left Column - Learning Languages */}
@@ -376,7 +375,7 @@ export default function ProfileScreen() {
                                     </Text>
                                 ))}
                                 {user.learning_languages.length > 3 && (
-                                    <Pressable onPress={() => setLearningExpanded(!learningExpanded)}>
+                                    <Pressable onPress={() => setLearningExpanded(!learningExpanded)} style={({ pressed }) => pressed && { opacity: 0.8 }}>
                                         <Text style={styles.expandButton}>
                                             {learningExpanded ? '- Less' : `+${user.learning_languages.length - 3} more`}
                                         </Text>
@@ -388,7 +387,7 @@ export default function ProfileScreen() {
                 </View>
 
                 {/* Center - Profile Photo */}
-                <Pressable onPress={showAvatarOptions} style={styles.heroAvatarContainer} disabled={uploading}>
+                <Pressable onPress={showAvatarOptions} style={({ pressed }) => [styles.heroAvatarContainer, !uploading && pressed && { opacity: 0.9 }]} disabled={uploading}>
                     {previewAvatar || user?.avatar_url ? (
                         <Image
                             source={getAvatarSource(previewAvatar || user.avatar_url)}
@@ -425,7 +424,7 @@ export default function ProfileScreen() {
                                     </Text>
                                 ))}
                                 {user.fluent_languages.length > 3 && (
-                                    <Pressable onPress={() => setFluentExpanded(!fluentExpanded)}>
+                                    <Pressable onPress={() => setFluentExpanded(!fluentExpanded)} style={({ pressed }) => pressed && { opacity: 0.8 }}>
                                         <Text style={styles.expandButton}>
                                             {fluentExpanded ? '- Less' : `+${user.fluent_languages.length - 3} more`}
                                         </Text>
@@ -440,7 +439,7 @@ export default function ProfileScreen() {
             {/* Name */}
             <View style={styles.heroNameRow}>
                 <Text style={styles.heroName}>{user?.display_name || 'Anonymous Souper'}</Text>
-                <Pressable onPress={() => setEditing(true)} hitSlop={10}>
+                <Pressable onPress={() => setEditing(true)} hitSlop={10} style={({ pressed }) => pressed && { opacity: 0.8 }}>
                     <Edit2 size={20} color={SOUP_COLORS.blue} />
                 </Pressable>
             </View>
@@ -449,6 +448,7 @@ export default function ProfileScreen() {
             {user?.status_text && (
                 <Text style={styles.heroTagline}>"{user.status_text}"</Text>
             )}
+            </View>
         </View>
     );
 
@@ -583,7 +583,7 @@ export default function ProfileScreen() {
         };
 
         const InputIcon = () => <Text style={{ fontSize: 14 }}>🧠</Text>;
-        const OutputIcon = () => <Text style={{ fontSize: 14 }}>🗣️</Text>;
+        const OutputIcon = () => <Text style={{ fontSize: 14 }}>🗣️🏿</Text>;
 
         const renderMetricItem = (lang, levelInfo, type) => {
             const isInput = type === 'input';
@@ -592,7 +592,7 @@ export default function ProfileScreen() {
 
             const clampedProgress = Math.min(Math.max(progressPercent, 5), 100);
             const barColor = isInput ? SOUP_COLORS.blue : SOUP_COLORS.pink;
-            const emoji = isInput ? '🧠' : '🗣️';
+            const emoji = isInput ? '🧠' : '🗣️🏿';
 
             return (
                 <View key={`${type}-${lang.language}`} style={styles.statItemCard}>
@@ -628,6 +628,11 @@ export default function ProfileScreen() {
 
         return (
             <View style={styles.statsSection}>
+                <View style={styles.sectionTitleRow}>
+                    <View style={styles.sectionTitleAccent} />
+                    <Text style={styles.profileSectionTitle}>stats</Text>
+                </View>
+                <View style={styles.statsCard}>
                 {/* Compact Stats Grid */}
                 <View style={styles.statsGrid}>
                     <View style={styles.statGridItem}>
@@ -682,7 +687,7 @@ export default function ProfileScreen() {
                             onPress={() => setStatsTab('output')}
                         >
                             <Text style={[styles.statsTabText, statsTab === 'output' && styles.statsTabTextActive]}>
-                                Out the Mouth 🗣️
+                                Out the Mouth 🗣️🏿
                             </Text>
                         </Pressable>
                     </View>
@@ -720,174 +725,8 @@ export default function ProfileScreen() {
                         )}
                     </View>
                 </View>
+                </View>
             </View>
-        );
-    };
-
-    const renderWrapped = () => {
-        return (
-            <Pressable onPress={() => setShowWrappedModal(true)}>
-                <View style={styles.wrappedContainer}>
-                    <LinearGradient
-                        colors={[SOUP_COLORS.blue, '#9C27B0']}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={styles.wrappedBanner}
-                    >
-                        {/* Decorative glow */}
-                        <View style={[styles.wrappedGlow, { top: -20, right: -20, width: 80, height: 80, backgroundColor: 'rgba(255,255,255,0.2)' }]} />
-
-                        <View style={styles.wrappedBannerContent}>
-                            <View style={styles.wrappedIcon}>
-                                <Text style={{ fontSize: 24 }}>🥣</Text>
-                            </View>
-                            <View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                                    <View style={styles.newBadge}>
-                                        <Text style={styles.newBadgeText}>NEW</Text>
-                                    </View>
-                                    <Text style={styles.wrappedTitleSmall}>Your 2025 Wrapped</Text>
-                                </View>
-                                <Text style={styles.wrappedSubtitleSmall}>Tap to see your soup stats! ✨</Text>
-                            </View>
-                        </View>
-                        <View style={styles.wrappedArrow}>
-                            <ArrowRight color="#fff" size={24} />
-                        </View>
-                    </LinearGradient>
-                </View>
-            </Pressable>
-        );
-    };
-
-    // Share function (replaces Save to Photos to avoid broad permissions)
-    const handleShareWrapped = async () => {
-        try {
-            const uri = await wrappedRef.current.capture();
-            await Sharing.shareAsync(uri, {
-                mimeType: 'image/png',
-                dialogTitle: 'Share your Language Soup Wrapped!'
-            });
-        } catch (error) {
-            console.error('Error sharing:', error);
-            Alert.alert('Error', 'Failed to share. Please try again.');
-        }
-    };
-
-    // Full-screen Wrapped Modal
-    const renderWrappedModal = () => {
-        const totalMinutes = Math.floor((stats?.total_speaking_seconds || 0) / 60);
-        const voiceMemoCount = Math.floor((stats?.total_speaking_seconds || 0) / 20);
-
-        return (
-            <Modal
-                visible={showWrappedModal}
-                animationType="fade"
-                transparent={true}
-                onRequestClose={() => setShowWrappedModal(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <ViewShot ref={wrappedRef} options={{ format: 'png', quality: 1 }}>
-                        <LinearGradient
-                            colors={['#0a0a1a', '#1a1a2e', '#16213e', '#0f3460']}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 1 }}
-                            style={styles.fullWrappedCard}
-                        >
-                            {/* Close Button - Inside Card */}
-                            <Pressable
-                                style={styles.closeButton}
-                                onPress={() => setShowWrappedModal(false)}
-                            >
-                                <X size={28} color="#fff" />
-                            </Pressable>
-
-                            {/* Decorative glowing orbs */}
-                            <View style={[styles.wrappedGlow, { top: -60, right: -60, backgroundColor: SOUP_COLORS.pink }]} />
-                            <View style={[styles.wrappedGlow, { bottom: 100, left: -40, backgroundColor: SOUP_COLORS.blue, width: 100, height: 100 }]} />
-                            <View style={[styles.wrappedGlow, { top: 200, right: -30, backgroundColor: SOUP_COLORS.green, width: 80, height: 80 }]} />
-
-                            {/* Header with logo */}
-                            <View style={styles.wrappedHeader}>
-                                <Image
-                                    source={require('../../assets/images/logo.png')}
-                                    style={styles.wrappedLogoImg}
-                                />
-                                <View>
-                                    <Text style={styles.wrappedBrandName}>LANGUAGE SOUP</Text>
-                                    <Text style={styles.wrappedYear}>WRAPPED 2025</Text>
-                                </View>
-                            </View>
-
-                            {/* User's name */}
-                            <Text style={styles.wrappedUserName}>{user?.display_name || 'Souper Star'}</Text>
-                            <Text style={styles.wrappedTagline}>{user?.status_text || 'Your year of slurping languages'}</Text>
-
-                            {/* Big Hero Stat */}
-                            <View style={styles.fullHeroStat}>
-                                <Text style={styles.fullHeroNumber}>{totalMinutes}</Text>
-                                <Text style={styles.heroLabel}>MINUTES OF SPEAKING PRACTICE</Text>
-                            </View>
-
-                            {/* Stats Grid */}
-                            <View style={styles.fullTrackList}>
-                                <View style={styles.trackRow}>
-                                    <View style={[styles.trackIcon, { backgroundColor: SOUP_COLORS.pink }]}>
-                                        <Text style={styles.trackEmoji}>🗣️</Text>
-                                    </View>
-                                    <View style={styles.trackInfo}>
-                                        <Text style={styles.trackTitle}>Top Language</Text>
-                                        <Text style={styles.trackSubtitle}>{stats?.monthly_top_language || 'None yet'}</Text>
-                                    </View>
-                                    <Text style={styles.trackStat}>{Math.floor((stats?.monthly_top_language_seconds || 0) / 60)}m</Text>
-                                </View>
-
-                                <View style={styles.trackRow}>
-                                    <View style={[styles.trackIcon, { backgroundColor: SOUP_COLORS.blue }]}>
-                                        <Text style={styles.trackEmoji}>🎙️</Text>
-                                    </View>
-                                    <View style={styles.trackInfo}>
-                                        <Text style={styles.trackTitle}>Voice Memos</Text>
-                                        <Text style={styles.trackSubtitle}>Total sent</Text>
-                                    </View>
-                                    <Text style={styles.trackStat}>{voiceMemoCount}</Text>
-                                </View>
-
-                                <View style={styles.trackRow}>
-                                    <View style={[styles.trackIcon, { backgroundColor: SOUP_COLORS.green }]}>
-                                        <Text style={styles.trackEmoji}>🔥</Text>
-                                    </View>
-                                    <View style={styles.trackInfo}>
-                                        <Text style={styles.trackTitle}>Vibe Check</Text>
-                                        <Text style={styles.trackSubtitle}>{stats?.consistency_label || 'New Souper'}</Text>
-                                    </View>
-                                    <Text style={styles.trackEmoji}>⚡</Text>
-                                </View>
-                            </View>
-
-                            {/* Footer with branding */}
-                            <View style={styles.wrappedFooterFull}>
-                                <View style={styles.soupEmojis}>
-                                    <Text style={styles.smallEmoji}>🍜</Text>
-                                    <Text style={styles.smallEmoji}>🥢</Text>
-                                    <Text style={styles.smallEmoji}>🌶️</Text>
-                                    <Text style={styles.smallEmoji}>🍵</Text>
-                                    <Text style={styles.smallEmoji}>🍜</Text>
-                                </View>
-                                <Text style={styles.wrappedHandle}>@languagesoup</Text>
-                                <Text style={styles.wrappedSlogan}>slurp your way to fluency ✨</Text>
-                            </View>
-                        </LinearGradient>
-                    </ViewShot>
-
-                    <View style={styles.shareButtons}>
-                        <Pressable style={styles.shareBtn} onPress={handleShareWrapped}>
-                            <Share2 size={20} color="#fff" />
-                            <Text style={styles.shareBtnText}>Share / Save ✨</Text>
-                        </Pressable>
-                    </View>
-                </View>
-            </Modal>
         );
     };
 
@@ -920,16 +759,9 @@ export default function ProfileScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
-            <View style={styles.header}>
-                {/* Wrapped Button (Left) */}
-                <Pressable
-                    style={styles.wrappedButton}
-                    onPress={() => setShowWrappedModal(true)}
-                >
-                    <Text style={styles.wrappedButtonText}>Wrapped</Text>
-                </Pressable>
-
+        <SafeAreaView style={styles.container} edges={['bottom']}>
+            <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+                <View style={{ flex: 1 }} />
                 {/* Right Side Icons */}
                 <View style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
                     {/* Logout Button */}
@@ -968,20 +800,17 @@ export default function ProfileScreen() {
 
             <ScrollView
                 style={styles.scrollView}
-                contentContainerStyle={styles.scrollContent}
+                onLayout={(e) => setScrollContentHeight(e.nativeEvent.layout.height)}
+                contentContainerStyle={[styles.scrollContent, { paddingBottom: 24, minHeight: scrollContentHeight }]}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
             >
                 {/* Content */}
 
                 {renderIdentity()}
-                {renderStats()}
-                {/* Wrapped Banner */}
-                {renderWrapped()}
 
-                <View style={{ height: 40 }} />
+                <View style={{ height: 16 }} />
             </ScrollView>
-            {renderWrappedModal()}
 
             {/* Edit Profile Modal */}
             <Modal
@@ -1363,19 +1192,12 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
-        paddingVertical: 10,
+        paddingTop: 16,
+        paddingBottom: 14,
         backgroundColor: SOUP_COLORS.cream,
-    },
-    wrappedButton: {
-        backgroundColor: SOUP_COLORS.blue,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-    },
-    wrappedButtonText: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#fff',
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.06)',
+        marginBottom: 12,
     },
     signOutBtn: {
         padding: 8,
@@ -1429,15 +1251,25 @@ const styles = StyleSheet.create({
         borderTopRightRadius: 24,
         paddingTop: 20,
         marginTop: -10,
-        paddingBottom: 120, // Extra padding to clear tab bar
     },
-    // HERO SECTION (Spotify-style)
+    // HERO SECTION — card on cream (Pinterest-style)
     heroSection: {
         alignItems: 'center',
-        paddingVertical: 20,
+        paddingVertical: 16,
         paddingHorizontal: 20,
-        paddingBottom: 30,
+        marginBottom: 8,
         backgroundColor: SOUP_COLORS.cream,
+    },
+    heroCard: {
+        width: '100%',
+        backgroundColor: SOUP_COLORS.cardBg,
+        borderRadius: 20,
+        padding: 24,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 10,
+        elevation: 2,
     },
     heroPhotoRow: {
         flexDirection: 'row',
@@ -1673,6 +1505,27 @@ const styles = StyleSheet.create({
     // STATS
     statsSection: {
         marginBottom: 24,
+        paddingHorizontal: 0,
+    },
+    sectionTitleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    sectionTitleAccent: {
+        width: 4,
+        height: 20,
+        borderRadius: 2,
+        backgroundColor: SOUP_COLORS.blue,
+        marginRight: 10,
+    },
+    profileSectionTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: SOUP_COLORS.text,
+    },
+    statsCard: {
+        marginTop: 4,
     },
     statsGrid: {
         flexDirection: 'row',
@@ -1866,65 +1719,6 @@ const styles = StyleSheet.create({
         backgroundColor: SOUP_COLORS.green,
         borderRadius: 6,
     },
-    // WRAPPED - Button Banner Style
-    wrappedContainer: {
-        marginTop: 24,
-        marginBottom: 40,
-        marginHorizontal: 4,
-    },
-    wrappedBanner: {
-        borderRadius: 24,
-        padding: 20,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        shadowColor: SOUP_COLORS.blue,
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
-        shadowRadius: 16,
-        elevation: 8,
-    },
-    newBadge: {
-        backgroundColor: '#fff',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 6,
-    },
-    newBadgeText: {
-        color: SOUP_COLORS.blue,
-        fontSize: 10,
-        fontWeight: '900',
-    },
-    wrappedArrow: {
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    wrappedBannerContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    wrappedIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    wrappedTitleSmall: {
-        fontSize: 16,
-        fontWeight: '800',
-        color: '#fff',
-    },
-    wrappedSubtitleSmall: {
-        fontSize: 12,
-        color: 'rgba(255,255,255,0.9)',
-    },
     // GROUPS SECTION
     groupsSection: {
         paddingHorizontal: 20,
@@ -1959,104 +1753,6 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: SOUP_COLORS.subtext,
         fontWeight: '500',
-    },
-    // Old styles kept for modal
-    wrappedCard: {
-        borderRadius: 24,
-        padding: 24,
-        minHeight: 280,
-    },
-    wrappedTitle: {
-        fontSize: 28,
-        fontWeight: '900',
-        color: '#fff',
-        marginBottom: 4,
-        letterSpacing: -1,
-    },
-    wrappedSubtitle: {
-        fontSize: 13,
-        color: 'rgba(255,255,255,0.5)',
-        fontWeight: '500',
-        marginBottom: 16,
-    },
-    wrappedGlow: {
-        position: 'absolute',
-        top: -50,
-        right: -50,
-        width: 150,
-        height: 150,
-        borderRadius: 75,
-        backgroundColor: SOUP_COLORS.pink,
-        opacity: 0.15,
-    },
-    heroStat: {
-        alignItems: 'center',
-        marginVertical: 20,
-    },
-    heroNumber: {
-        fontSize: 64,
-        fontWeight: '900',
-        color: '#fff',
-        letterSpacing: -2,
-    },
-    heroLabel: {
-        fontSize: 14,
-        color: 'rgba(255,255,255,0.6)',
-        fontWeight: '500',
-        marginTop: -4,
-    },
-    trackList: {
-        gap: 16,
-        marginBottom: 24,
-    },
-    trackRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    trackIcon: {
-        width: 36,
-        height: 36,
-        borderRadius: 10,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    trackEmoji: {
-        fontSize: 18,
-    },
-    trackInfo: {
-        flex: 1,
-        marginLeft: 12,
-    },
-    trackTitle: {
-        color: '#fff',
-        fontSize: 15,
-        fontWeight: '700',
-    },
-    trackSubtitle: {
-        color: 'rgba(255,255,255,0.5)',
-        fontSize: 12,
-        fontWeight: '500',
-    },
-    trackStat: {
-        color: '#fff',
-        fontSize: 14,
-        fontWeight: '700',
-    },
-    wrappedFooter: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginTop: 'auto',
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(255,255,255,0.1)',
-        paddingTop: 16,
-    },
-    wrappedBranding: {
-        fontSize: 10,
-        color: 'rgba(255,255,255, 0.5)',
-        fontWeight: '800',
-        letterSpacing: 2,
-        textTransform: 'uppercase',
     },
     // Editing styles...
     editForm: {
@@ -2108,153 +1804,11 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         gap: 12,
     },
-    // Full-screen Wrapped Modal styles
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.95)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
-    },
-    closeButton: {
-        position: 'absolute',
-        top: 16,
-        right: 16,
-        zIndex: 9999,
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(0,0,0,0.3)',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    closeButtonText: {
-        fontSize: 24,
-        color: SOUP_COLORS.text,
-        fontWeight: '400',
-    },
-    scrollContent: {
-        flex: 1,
-    },
     scrollPrompt: {
         fontSize: 12,
         color: SOUP_COLORS.subtext,
         textAlign: 'center',
         paddingVertical: 12,
-        fontStyle: 'italic',
-    },
-    fullWrappedCard: {
-        width: SCREEN_WIDTH - 40,
-        borderRadius: 24,
-        padding: 32,
-        overflow: 'hidden',
-    },
-    fullWrappedTitle: {
-        fontSize: 32,
-        fontWeight: '900',
-        color: '#fff',
-        marginBottom: 4,
-        letterSpacing: -1,
-    },
-    fullHeroStat: {
-        alignItems: 'center',
-        marginVertical: 32,
-    },
-    fullHeroNumber: {
-        fontSize: 80,
-        fontWeight: '900',
-        color: '#fff',
-        letterSpacing: -3,
-    },
-    fullTrackList: {
-        gap: 20,
-        marginBottom: 32,
-    },
-    shareButtons: {
-        flexDirection: 'row',
-        gap: 16,
-        marginTop: 24,
-    },
-    shareBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-        backgroundColor: 'rgba(255,255,255,0.15)',
-        paddingHorizontal: 20,
-        paddingVertical: 14,
-        borderRadius: 30,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.3)',
-    },
-    shareBtnText: {
-        color: '#fff',
-        fontSize: 15,
-        fontWeight: '600',
-    },
-    // Heavy branding styles
-    wrappedHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-        marginBottom: 24,
-    },
-    wrappedLogo: {
-        fontSize: 48,
-    },
-    wrappedLogoImg: {
-        width: 50,
-        height: 50,
-        borderRadius: 12,
-    },
-    wrappedBrandName: {
-        fontSize: 16,
-        fontWeight: '900',
-        color: '#fff',
-        letterSpacing: 3,
-    },
-    wrappedYear: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: SOUP_COLORS.pink,
-        letterSpacing: 2,
-    },
-    wrappedUserName: {
-        fontSize: 28,
-        fontWeight: '900',
-        color: '#fff',
-        marginBottom: 4,
-    },
-    wrappedTagline: {
-        fontSize: 14,
-        color: 'rgba(255,255,255,0.6)',
-        fontStyle: 'italic',
-        marginBottom: 16,
-    },
-    wrappedFooterFull: {
-        alignItems: 'center',
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(255,255,255,0.1)',
-        paddingTop: 20,
-        marginTop: 8,
-    },
-    soupEmojis: {
-        flexDirection: 'row',
-        gap: 8,
-        marginBottom: 12,
-    },
-    smallEmoji: {
-        fontSize: 20,
-    },
-    wrappedHandle: {
-        fontSize: 16,
-        fontWeight: '800',
-        color: SOUP_COLORS.blue,
-        letterSpacing: 1,
-    },
-    wrappedSlogan: {
-        fontSize: 12,
-        color: 'rgba(255,255,255,0.5)',
-        marginTop: 4,
         fontStyle: 'italic',
     },
     // Section Header Row with Info Button
@@ -2500,10 +2054,10 @@ const styles = StyleSheet.create({
     comprehensibleCard: {
         backgroundColor: '#fff',
         borderRadius: 24,
-        padding: 20,
+        padding: 24,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
+        shadowOpacity: 0.06,
         shadowRadius: 10,
         elevation: 2,
     },

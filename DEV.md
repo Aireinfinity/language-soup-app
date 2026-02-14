@@ -48,6 +48,18 @@ The **scheme** (`languagesoup`) is what ties the QR code and “Open in dev buil
 
 ---
 
+## Running SQL (Supabase CLI)
+
+From `code/dashboard` you can run SQL via the CLI:
+
+- **Apply migrations** (e.g. new RPCs, schema in `supabase/migrations/`):
+  ```bash
+  cd code/dashboard && npx supabase db push
+  ```
+- **One-off queries** (quest audit, counts): use **Supabase Dashboard → SQL Editor**, or `psql` with your DB connection string from `.env`.
+
+---
+
 ## If you still see “No dev servers found” (Option A)
 
 - **Same Wi‑Fi**, no VPN, phone not on cellular only.

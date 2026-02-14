@@ -75,7 +75,7 @@ export function LiveAudioWaveform({ metering, recordingDuration, isRecording, co
 }
 
 const SilkyBar = ({ height, color }) => {
-    const animatedHeight = useSharedValue(3);
+    const animatedHeight = useSharedValue(4);
 
     const barPersonality = useRef({
         damping: 15,
@@ -84,7 +84,7 @@ const SilkyBar = ({ height, color }) => {
     }).current;
 
     useEffect(() => {
-        const targetHeight = Math.max(3, height * 22);
+        const targetHeight = Math.max(4, height * 28);
 
         animatedHeight.value = withSpring(targetHeight, {
             damping: barPersonality.damping,
@@ -105,14 +105,13 @@ const styles = StyleSheet.create({
         flexDirection: 'row-reverse', // Reverse so right side is the start
         alignItems: 'center',
         justifyContent: 'flex-start', // Start from right edge
-        height: 28,
+        height: 36,
         flex: 1,
-        gap: 1,
+        gap: 2,
         paddingHorizontal: 2,
     },
     bar: {
-        width: 2,
-        width: 2,
-        borderRadius: 1,
+        width: 3,
+        borderRadius: 2,
     },
 });

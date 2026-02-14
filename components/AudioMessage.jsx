@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, StyleSheet, Pressable, Text, ActivityIndicator } from 'react-native';
-import { Play, Pause } from 'lucide-react-native';
+import { Play, Pause, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { Colors } from '../constants/Colors';
 import Animated, {
     useSharedValue,
@@ -10,6 +10,7 @@ import Animated, {
 import { useAudioPlayer } from '../contexts/AudioPlayerContext';
 import * as LegacyFileSystem from 'expo-file-system/legacy';
 import { cacheDirectory } from 'expo-file-system';
+import { pickRandom, GET_TRANSCRIPT_LABELS, GETTING_TRANSCRIPT_LABELS } from '../constants/CopyPhilosophy';
 
 const WAVEFORM_BARS = 30;
 
@@ -28,8 +29,12 @@ const CACHE_DIR = `${LegacyFileSystem.cacheDirectory}voice_memos/`;
     }
 })();
 
-export function AudioMessage({ audioUrl, duration, senderName, isMe, messageId, senderAvatar, senderStatus, groupName }) {
+const TRANSCRIPT_PREVIEW_LINES = 2;
+
+export function AudioMessage({ audioUrl, duration, senderName, isMe, messageId, senderAvatar, senderStatus, groupName, groupId = null, transcript = null, onGetTranscript = null }) {
     const [loading, setLoading] = useState(false);
+    const [transcriptLoading, setTranscriptLoading] = useState(false);
+    const [transcriptExpanded, setTranscriptExpanded] = useState(false);
     const [localUri, setLocalUri] = useState(null);
     const { currentAudio, isPlaying, position, duration: contextDuration, playAudio } = useAudioPlayer();
 
@@ -94,7 +99,7 @@ export function AudioMessage({ audioUrl, duration, senderName, isMe, messageId, 
 
         setLoading(true);
         try {
-            await playAudio(localUri, duration, messageId, senderName, senderAvatar, senderStatus, groupName);
+            await playAudio(localUri, duration, messageId, senderName, senderAvatar, senderStatus, groupName, groupId);
         } catch (error) {
             console.error('[AudioMessage] Error playing:', error);
         } finally {
@@ -113,45 +118,106 @@ export function AudioMessage({ audioUrl, duration, senderName, isMe, messageId, 
         transform: [{ scale: scale.value }]
     }));
 
+    const transcriptTrimmed = transcript?.trim();
+    const hasTranscript = !!transcriptTrimmed;
+
+    const transcriptCopy = useMemo(
+        () => ({
+            idle: pickRandom(GET_TRANSCRIPT_LABELS),
+            loading: pickRandom(GETTING_TRANSCRIPT_LABELS),
+        }),
+        [messageId]
+    );
+
+    const handleGetTranscript = async () => {
+        if (!onGetTranscript || transcriptLoading) return;
+        setTranscriptLoading(true);
+        try {
+            await onGetTranscript(messageId);
+        } catch (e) {
+            console.warn('[AudioMessage] Get transcript failed:', e);
+        } finally {
+            setTranscriptLoading(false);
+        }
+    };
+
     return (
         <Animated.View style={[
-            styles.container,
-            isMe && styles.containerMe,
-            animatedContainerStyle
+            styles.outerWrap,
+            isMe && styles.outerWrapMe,
         ]}>
-            <Pressable
-                onPress={handlePlayPress}
-                style={styles.playButton}
-                disabled={loading}
-                onPressIn={() => { scale.value = withSpring(0.95); }}
-                onPressOut={() => { scale.value = withSpring(1); }}
-            >
-                {loading ? (
-                    <ActivityIndicator size="small" color={isMe ? '#fff' : Colors.primary} />
-                ) : isThisPlaying ? (
-                    <Pause size={22} color={isMe ? '#fff' : Colors.primary} fill={isMe ? '#fff' : Colors.primary} />
-                ) : (
-                    <Play size={22} color={isMe ? '#fff' : Colors.primary} fill={isMe ? '#fff' : Colors.primary} />
-                )}
-            </Pressable>
+            <View style={[
+                styles.container,
+                isMe && styles.containerMe,
+                animatedContainerStyle
+            ]}>
+                <Pressable
+                    onPress={handlePlayPress}
+                    style={styles.playButton}
+                    disabled={loading}
+                    onPressIn={() => { scale.value = withSpring(0.95); }}
+                    onPressOut={() => { scale.value = withSpring(1); }}
+                >
+                    {loading ? (
+                        <ActivityIndicator size="small" color={isMe ? '#fff' : Colors.primary} />
+                    ) : isThisPlaying ? (
+                        <Pause size={22} color={isMe ? '#fff' : Colors.primary} fill={isMe ? '#fff' : Colors.primary} />
+                    ) : (
+                        <Play size={22} color={isMe ? '#fff' : Colors.primary} fill={isMe ? '#fff' : Colors.primary} />
+                    )}
+                </Pressable>
 
-            <View style={styles.waveformContainer}>
-                <View style={styles.waveform}>
-                    {waveformHeights.map((height, index) => (
-                        <WaveformBar
-                            key={index}
-                            index={index}
-                            totalBars={WAVEFORM_BARS}
-                            height={height}
-                            progress={progress}
-                            isMe={isMe}
-                        />
-                    ))}
+                <View style={styles.waveformContainer}>
+                    <View style={styles.waveform}>
+                        {waveformHeights.map((height, index) => (
+                            <WaveformBar
+                                key={index}
+                                index={index}
+                                totalBars={WAVEFORM_BARS}
+                                height={height}
+                                progress={progress}
+                                isMe={isMe}
+                            />
+                        ))}
+                    </View>
+                    <Text style={[styles.duration, isMe && styles.durationMe]}>
+                        {formatDuration(duration)}
+                    </Text>
                 </View>
-                <Text style={[styles.duration, isMe && styles.durationMe]}>
-                    {formatDuration(duration)}
-                </Text>
             </View>
+
+            {hasTranscript && (
+                <Pressable
+                    style={({ pressed }) => [styles.transcriptWrap, isMe && styles.transcriptWrapMe, pressed && { opacity: 0.85 }]}
+                    onPress={() => setTranscriptExpanded(!transcriptExpanded)}
+                >
+                    <Text
+                        style={[styles.transcriptText, isMe && styles.transcriptTextMe]}
+                        numberOfLines={transcriptExpanded ? undefined : TRANSCRIPT_PREVIEW_LINES}
+                    >
+                        {transcriptTrimmed}
+                    </Text>
+                    {transcriptExpanded ? (
+                        <ChevronUp size={16} color={isMe ? 'rgba(255,255,255,0.8)' : Colors.textLight} style={styles.transcriptChevron} />
+                    ) : (
+                        <ChevronDown size={16} color={isMe ? 'rgba(255,255,255,0.8)' : Colors.textLight} style={styles.transcriptChevron} />
+                    )}
+                </Pressable>
+            )}
+            {!hasTranscript && onGetTranscript && (
+                <Pressable
+                    style={({ pressed }) => [styles.transcriptWrap, styles.getTranscriptWrap, isMe && styles.transcriptWrapMe, pressed && { opacity: 0.85 }]}
+                    onPress={handleGetTranscript}
+                    disabled={transcriptLoading}
+                >
+                    {transcriptLoading ? (
+                        <ActivityIndicator size="small" color={isMe ? 'rgba(255,255,255,0.9)' : Colors.primary} style={{ marginRight: 6 }} />
+                    ) : null}
+                    <Text style={[styles.transcriptText, styles.getTranscriptText, isMe && styles.transcriptTextMe]}>
+                        {transcriptLoading ? transcriptCopy.loading : transcriptCopy.idle}
+                    </Text>
+                </Pressable>
+            )}
         </Animated.View>
     );
 }
@@ -179,6 +245,10 @@ const WaveformBar = ({ index, totalBars, height, progress, isMe }) => {
 };
 
 const styles = StyleSheet.create({
+    outerWrap: {
+        width: '100%',
+    },
+    outerWrapMe: {},
     container: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -191,6 +261,36 @@ const styles = StyleSheet.create({
     },
     containerMe: {
         // Parent bubble handles background
+    },
+    transcriptWrap: {
+        marginTop: 6,
+        paddingTop: 8,
+        paddingBottom: 4,
+        paddingHorizontal: 4,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(0,0,0,0.06)',
+    },
+    transcriptWrapMe: {
+        borderTopColor: 'rgba(255,255,255,0.25)',
+    },
+    getTranscriptWrap: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    getTranscriptText: {
+        flex: 1,
+    },
+    transcriptText: {
+        fontSize: 13,
+        color: Colors.text,
+        lineHeight: 18,
+        marginBottom: 2,
+    },
+    transcriptTextMe: {
+        color: 'rgba(255,255,255,0.95)',
+    },
+    transcriptChevron: {
+        alignSelf: 'flex-start',
     },
     playButton: {
         width: 36,

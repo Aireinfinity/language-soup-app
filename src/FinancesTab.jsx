@@ -106,17 +106,13 @@ export default function FinancesTab() {
     const totalMonthly = monthlyRecurring + (annualRecurring / 12);
     const totalSpent = expenses.reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
-    // Burn Rate Calculation
-    const burnRatePercentage = Math.min((totalMonthly / 500) * 100, 100); // Assuming $500 monthly budget
-    const runwayMonths = 2000 / (totalMonthly || 1); // Assuming $2000 cash in bank
-
     if (loading) {
         return <div className="text-[var(--soup-dark)] font-bold italic animate-pulse p-8">Loading finances... 💸</div>;
     }
 
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-8">
-            {/* Header with Burn Rate Meter */}
+            {/* Header: burn rate only (no budget or cash reserves) */}
             <div className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm relative overflow-hidden">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
                     <div>
@@ -124,29 +120,10 @@ export default function FinancesTab() {
                             Finances 💸
                         </h2>
                         <div className="flex items-center gap-2">
-                            <span className="text-gray-500 font-bold">Monthly Burn:</span>
-                            <span className="text-2xl font-black text-red-500">${totalMonthly.toFixed(2)}</span>
+                            <span className="text-gray-500 font-bold">Monthly burn:</span>
+                            <span className="text-2xl font-black text-[var(--soup-dark)]">${totalMonthly.toFixed(2)}</span>
                         </div>
-                    </div>
-
-                    <div className="flex-1 max-w-md">
-                        <div className="flex justify-between text-xs font-bold mb-2">
-                            <span className="text-gray-400">Budget Usage ($500/mo limit)</span>
-                            <span className={burnRatePercentage > 80 ? 'text-red-500' : 'text-green-500'}>
-                                {burnRatePercentage.toFixed(1)}%
-                            </span>
-                        </div>
-                        <div className="h-4 bg-gray-100 rounded-full overflow-hidden border border-black/5">
-                            <div
-                                className={`h-full transition-all duration-1000 ${burnRatePercentage > 80 ? 'bg-red-500' :
-                                        burnRatePercentage > 50 ? 'bg-orange-500' : 'bg-green-500'
-                                    }`}
-                                style={{ width: `${burnRatePercentage}%` }}
-                            />
-                        </div>
-                        <div className="text-[10px] font-bold text-gray-400 mt-2 text-right">
-                            {runwayMonths > 12 ? '12+' : runwayMonths.toFixed(1)} months runway (with $2k cash)
-                        </div>
+                        <p className="text-xs text-gray-400 font-bold mt-1">Recurring (monthly + annual/12) from expenses below</p>
                     </div>
 
                     <button

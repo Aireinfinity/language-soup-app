@@ -20,6 +20,7 @@ const AVAILABLE_LANGUAGES = ['All', 'French', 'Spanish', 'Japanese', 'German', '
 export default function NativeSpeakersScreen() {
     const router = useRouter();
     const { user } = useAuth();
+    const [dmLoading, setDmLoading] = useState(false);
     const params = useLocalSearchParams();
     const preselectedLanguage = params.language || 'All';
 
@@ -149,6 +150,24 @@ export default function NativeSpeakersScreen() {
         router.push('/add-native-speaker');
     };
 
+    const handleMessage = async (speaker) => {
+        if (!user?.id || !speaker?.user_id || speaker.user_id === user.id) return;
+        setDmLoading(true);
+        try {
+            const { data: groupId, error } = await supabase.rpc('get_or_create_dm', {
+                uid_a: user.id,
+                uid_b: speaker.user_id,
+            });
+            if (error) throw error;
+            if (groupId) router.push(`/chat/${groupId}`);
+        } catch (e) {
+            console.error('Error starting DM:', e);
+            Alert.alert('Couldn’t start chat', 'Please try again or pull to refresh.');
+        } finally {
+            setDmLoading(false);
+        }
+    };
+
     const handleDeleteProfile = async (speakerId) => {
         Alert.alert(
             'Delete Profile',
@@ -200,6 +219,7 @@ export default function NativeSpeakersScreen() {
                 isOwner={isOwner}
                 onEdit={() => handleEditProfile(item.id)}
                 onDelete={() => handleDeleteProfile(item.id)}
+                onMessage={handleMessage}
             />
         );
     };

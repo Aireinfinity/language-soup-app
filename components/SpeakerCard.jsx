@@ -24,7 +24,7 @@ const LANGUAGE_FLAGS = {
     'Korean': '🇰🇷',
 };
 
-export default function SpeakerCard({ speaker, isOwner = false, onEdit, onDelete }) {
+export default function SpeakerCard({ speaker, isOwner = false, onEdit, onDelete, onMessage }) {
     const handleEmail = () => {
         if (speaker.contact_email) {
             Linking.openURL(`mailto:${speaker.contact_email}?subject=Language Practice Session`);
@@ -95,15 +95,26 @@ export default function SpeakerCard({ speaker, isOwner = false, onEdit, onDelete
                         </Pressable>
                     </>
                 ) : (
-                    speaker.whatsapp_number && (
-                        <Pressable
-                            style={[styles.button, styles.whatsappButton]}
-                            onPress={handleWhatsApp}
-                        >
-                            <MessageCircle size={18} color="#fff" />
-                            <Text style={styles.buttonText}>Chat on WhatsApp</Text>
-                        </Pressable>
-                    )
+                    <View style={styles.actionRow}>
+                        {speaker.user_id && onMessage && (
+                            <Pressable
+                                style={[styles.button, styles.dmButton]}
+                                onPress={() => onMessage(speaker)}
+                            >
+                                <MessageCircle size={18} color="#fff" />
+                                <Text style={styles.buttonText}>Message</Text>
+                            </Pressable>
+                        )}
+                        {speaker.whatsapp_number && (
+                            <Pressable
+                                style={[styles.button, styles.whatsappButton]}
+                                onPress={handleWhatsApp}
+                            >
+                                <MessageCircle size={18} color="#fff" />
+                                <Text style={styles.buttonText}>WhatsApp</Text>
+                            </Pressable>
+                        )}
+                    </View>
                 )}
             </View>
         </View>
@@ -180,6 +191,14 @@ const styles = StyleSheet.create({
     actions: {
         flexDirection: 'row',
         gap: 12,
+    },
+    actionRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 12,
+    },
+    dmButton: {
+        backgroundColor: SOUP_COLORS.blue,
     },
     button: {
         flexDirection: 'row',

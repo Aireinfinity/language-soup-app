@@ -388,7 +388,7 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage,
                                                             onPress={() => submitFeedback(true)}
                                                             style={[styles.feedbackBtn, styles.feedbackBtnGreen, feedbackStatus === 'positive' && styles.feedbackBtnActive]}
                                                         >
-                                                            <Text style={styles.feedbackEmoji}>👍</Text>
+                                                            <Text style={styles.feedbackEmoji}>👍🏿</Text>
                                                         </Pressable>
                                                     </View>
                                                 </>

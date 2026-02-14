@@ -108,7 +108,7 @@ export default function WelcomeMissionModal({ visible, onClose, groups }) {
                         sender_id: user.id,
                         group_id: group.id,
                         message_type: 'voice',
-                        content: `Welcome to Language Soup! 👋`,
+                        content: `welcome to language soup! 👋🏿`,
                         media_url: publicUrl,
                         challenge_id: 'global-welcome',
                         metadata: {
@@ -150,18 +150,18 @@ export default function WelcomeMissionModal({ visible, onClose, groups }) {
 
                     <View style={styles.header}>
                         <Globe size={40} color={SOUP_COLORS.pink} />
-                        <Text style={styles.title}>Welcome the World!</Text>
+                        <Text style={styles.title}>welcome the world! 🌍</Text>
                         <Text style={styles.subtitle}>
-                            Record a short "Welcome to Language Soup!" in your target or native language. 🌍
+                            record a short "welcome to language soup!" in ur target or native language 🌍
                         </Text>
                     </View>
 
                     <View style={styles.missionCard}>
                         <Text style={styles.missionText}>
-                            "Hola, bienvenidos a Language Soup!" 🥣
+                            "hola, bienvenidos a language soup!" 🥣
                         </Text>
                         <Text style={styles.hintText}>
-                            Your voice will be played to new users when they join!
+                            ur voice gets played when new people join 🥣
                         </Text>
                     </View>
 
@@ -181,7 +181,7 @@ export default function WelcomeMissionModal({ visible, onClose, groups }) {
                                     <Mic size={40} color="#fff" />
                                 </Pressable>
                                 <Text style={styles.instruction}>
-                                    {isRecording ? 'Release to Send' : 'Hold to Record'}
+                                    {isRecording ? 'release to send' : 'hold to record'}
                                 </Text>
                             </View>
                         )}

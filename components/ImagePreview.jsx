@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Image, StyleSheet, Pressable, Text, Modal, ActivityIndicator, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { Video } from 'expo-av';
 import { X, Send } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
+import { pickRandom, SEND_BUTTON_LABELS, SENDING_LABELS } from '../constants/CopyPhilosophy';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -12,6 +13,10 @@ const SOUP_COLORS = {
 export function ImagePreview({ visible, imageUri, mediaType = 'image', onSend, onCancel }) {
     const [isSending, setIsSending] = useState(false);
     const [caption, setCaption] = useState('');
+    const sendCopy = useMemo(
+        () => ({ idle: pickRandom(SEND_BUTTON_LABELS), sending: pickRandom(SENDING_LABELS) }),
+        [visible]
+    );
 
     if (!visible || !imageUri) return null;
 
@@ -95,12 +100,12 @@ export function ImagePreview({ visible, imageUri, mediaType = 'image', onSend, o
                             {isSending ? (
                                 <>
                                     <ActivityIndicator size="small" color="#fff" />
-                                    <Text style={styles.sendText}>Sending...</Text>
+                                    <Text style={styles.sendText}>{sendCopy.sending}</Text>
                                 </>
                             ) : (
                                 <>
                                     <Send size={24} color="#fff" />
-                                    <Text style={styles.sendText}>Send</Text>
+                                    <Text style={styles.sendText}>{sendCopy.idle}</Text>
                                 </>
                             )}
                         </Pressable>

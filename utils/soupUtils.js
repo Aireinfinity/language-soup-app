@@ -8,6 +8,17 @@ export const SOUP_ASSETS = {
     'bathtub': require('../assets/images/avatars/bathtub_soup.png'),
 };
 
+const SOUP_IDS = Object.keys(SOUP_ASSETS);
+
+// Stable default soup avatar per user id (for "who replied" when they have no photo)
+export const getDefaultSoupAvatarForId = (userId) => {
+    if (!userId) return 'soup://cereal';
+    let h = 0;
+    for (let i = 0; i < userId.length; i++) h = ((h << 5) - h) + userId.charCodeAt(i) | 0;
+    const id = SOUP_IDS[Math.abs(h) % SOUP_IDS.length];
+    return `soup://${id}`;
+};
+
 export const getAvatarSource = (avatarUrl) => {
     if (!avatarUrl) return null;
 

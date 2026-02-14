@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 
-const QUICK_REACTIONS = ['❤️', '😂', '😮', '😢', '🙏', '🎉'];
+const QUICK_REACTIONS = ['❤️', '😂', '😮', '😢', '🙏🏿', '🎉'];
 
 /**
  * InlineReactionBar - WhatsApp-style quick reaction picker

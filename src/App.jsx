@@ -684,7 +684,7 @@ function UsersTab() {
                           <span key={i} className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">{lang}</span>
                         ))}
                       </div>
-                    ) : '—'}
+                    ) : '·'}
                   </td>
                   <td className="px-6 py-4 text-gray-600 text-sm">
                     {user.fluent_languages ? (
@@ -693,7 +693,7 @@ function UsersTab() {
                           <span key={i} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">{lang}</span>
                         ))}
                       </div>
-                    ) : '—'}
+                    ) : '·'}
                   </td>
                   <td className="px-6 py-4 text-gray-600 text-sm">
                     <button

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { UserPreviewModal } from '../../components/UserPreviewModal';
 import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Text, TextInput, KeyboardAvoidingView, Platform, StatusBar, Image, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { ArrowLeft, Send, Mic, X, Trash2, Square, ChevronLeft, ChevronRight, MoreVertical, Check, Clock, Globe, Lightbulb, Play, Pause } from 'lucide-react-native';
 import { InspirationModal } from '../../components/InspirationModal';
@@ -25,6 +25,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { haptics } from '../../utils/haptics';
 import { useQuests } from '../../contexts/QuestContext';
+import { useAudioPlayer } from '../../contexts/AudioPlayerContext';
 import { getAvatarSource } from '../../utils/soupUtils';
 
 const SOUP_COLORS = {
@@ -61,13 +62,20 @@ export default function ChatScreen() {
     const { user } = useAuth();
     const { clearNotifications, clearGroupNotifications } = useNotifications();
     const router = useRouter();
-    const { id: groupId } = useLocalSearchParams();
+    const { id: groupId, messageId: scrollToMessageId } = useLocalSearchParams();
     const flatListRef = useRef(null);
     const insets = useSafeAreaInsets();
     const channelRef = useRef(null);
     const lastTypingSent = useRef(0);
     const { completeQuest } = useQuests();
+    const { stopAudio } = useAudioPlayer();
     const { permissionStatus, openSettings } = useNotifications();
+
+    useFocusEffect(
+        React.useCallback(() => {
+            return () => { stopAudio(); };
+        }, [stopAudio])
+    );
 
     const [showInspiration, setShowInspiration] = useState(false);
     const [inspirationMetadata, setInspirationMetadata] = useState(null);
@@ -414,21 +422,24 @@ export default function ChatScreen() {
     // Load reactions for current messages
     const loadReactions = async (messageIds) => {
         if (!messageIds || messageIds.length === 0) return;
+        try {
+            const { data: reactionsData } = await supabase
+                .from('app_message_reactions')
+                .select('id, message_id, user_id, emoji, created_at')
+                .in('message_id', messageIds);
 
-        const { data: reactionsData } = await supabase
-            .from('app_message_reactions')
-            .select('id, message_id, user_id, emoji, created_at')
-            .in('message_id', messageIds);
-
-        if (reactionsData) {
-            const reactionsMap = {};
-            reactionsData.forEach(reaction => {
-                if (!reactionsMap[reaction.message_id]) {
-                    reactionsMap[reaction.message_id] = [];
-                }
-                reactionsMap[reaction.message_id].push(reaction);
-            });
-            setReactions(reactionsMap);
+            if (reactionsData) {
+                const reactionsMap = {};
+                reactionsData.forEach(reaction => {
+                    if (!reactionsMap[reaction.message_id]) {
+                        reactionsMap[reaction.message_id] = [];
+                    }
+                    reactionsMap[reaction.message_id].push(reaction);
+                });
+                setReactions(reactionsMap);
+            }
+        } catch (e) {
+            console.warn('loadReactions:', e);
         }
     };
 
@@ -721,6 +732,15 @@ export default function ChatScreen() {
             setMessages((prev) => prev.map((msg) => (msg.id === tempId ? { ...data, sender: optimisticMessage.sender } : msg)));
             console.log('🎉 [VOICE] Voice memo sent successfully!');
 
+            // Fire-and-forget: transcribe voice memo for reading when you can't listen
+            supabase.functions.invoke('voice-feedback', { body: { task: 'transcribe_message', messageId: data.id } })
+                .then(({ data: resData }) => {
+                    if (resData?.transcript) {
+                        setMessages((prev) => prev.map((m) => m.id === data.id ? { ...m, transcript: resData.transcript } : m));
+                    }
+                })
+                .catch((err) => console.warn('[VOICE] Transcript request failed:', err));
+
             // Complete quest for first audio message
             await completeQuest('first_audio');
 
@@ -734,6 +754,16 @@ export default function ChatScreen() {
             Alert.alert('Voice Message Failed', 'Could not upload voice message. Please check your connection and try again.', [{ text: 'OK' }]);
             setMessages((prev) => prev.filter((msg) => msg.id !== tempId));
         }
+    };
+
+    const handleGetTranscript = async (messageId) => {
+        const { data, error } = await supabase.functions.invoke('voice-feedback', { body: { task: 'transcribe_message', messageId } });
+        if (error) throw error;
+        if (data?.transcript != null) {
+            setMessages((prev) => prev.map((m) => m.id === messageId ? { ...m, transcript: data.transcript } : m));
+            return data.transcript;
+        }
+        throw new Error(data?.error || 'No transcript');
     };
 
     const handleTextChange = (text) => {
@@ -877,13 +907,29 @@ export default function ChatScreen() {
 
     const messagesWithDates = [...addDateSeparators(messages)].reverse();
 
+    // Scroll to a specific message when opened from podcast "React" (e.g. ?messageId=xxx)
+    useEffect(() => {
+        if (!scrollToMessageId || !messagesWithDates.length || !flatListRef.current) return;
+        const idx = messagesWithDates.findIndex((m) => m.id === scrollToMessageId);
+        if (idx < 0) return;
+        const t = setTimeout(() => {
+            try {
+                flatListRef.current?.scrollToIndex({ index: idx, animated: true });
+            } catch (_) {
+                const approxOffset = Math.max(0, idx * 100);
+                flatListRef.current?.scrollToOffset({ offset: approxOffset, animated: true });
+            }
+        }, 300);
+        return () => clearTimeout(t);
+    }, [messagesWithDates, scrollToMessageId]);
+
     if (!groupId) {
         return (
             <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 24 }]}>
                 <Text style={{ fontSize: 16, color: Colors.text, textAlign: 'center', marginBottom: 16 }}>
                     This chat couldn&apos;t be loaded. The group may be invalid or you may need to refresh.
                 </Text>
-                <Pressable onPress={() => router.back()} style={{ paddingVertical: 12, paddingHorizontal: 24, backgroundColor: Colors.primary, borderRadius: 12 }}>
+                <Pressable onPress={() => router.back()} style={({ pressed }) => [{ paddingVertical: 12, paddingHorizontal: 24, backgroundColor: Colors.primary, borderRadius: 12 }, pressed && { opacity: 0.9 }]}>
                     <Text style={{ color: '#fff', fontWeight: '600' }}>Go back</Text>
                 </Pressable>
             </SafeAreaView>
@@ -906,6 +952,7 @@ export default function ChatScreen() {
                 tableName="app_messages"
                 reactionsTable="app_message_reactions"
                 userId={user?.id}
+                groupId={groupId}
                 groupName={groupName}
                 messages={messagesWithDates}
                 loading={loading}
@@ -914,6 +961,7 @@ export default function ChatScreen() {
                 reactions={reactions}
                 onReact={handleReact}
                 onAvatarPress={handleAvatarPress}
+                onGetTranscript={handleGetTranscript}
                 onSendText={sendMessage}
                 onSendVoice={handleSendVoice}
                 onPickImage={sendImageMessage}
@@ -961,7 +1009,7 @@ export default function ChatScreen() {
                     Platform.OS === 'ios' ? (
                         <BlurView intensity={95} tint="light" style={[styles.header, { paddingTop: insets.top }]}>
                             <View style={styles.headerContent}>
-                                <Pressable onPress={() => router.back()} style={styles.backButton}>
+                                <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.9 }]}>
                                     <ChevronLeft size={30} color={Colors.primary} />
                                 </Pressable>
                                 {groupAvatar && (
@@ -972,14 +1020,8 @@ export default function ChatScreen() {
                                 <View style={styles.headerInfo}>
                                     <Text style={styles.headerTitle}>{groupName}</Text>
                                     {!isDM && <Text style={styles.headerSubtitle}>{memberCount} members</Text>}
-
                                 </View>
-                                {groupLanguage?.toLowerCase() === 'french' && (
-                                    <Pressable style={styles.nativeButton} onPress={() => router.push('/native-speakers?language=French')}>
-                                        <Text style={styles.nativeButtonText}>💬 Chat with a Native</Text>
-                                    </Pressable>
-                                )}
-                                <Pressable style={styles.headerAction} onPress={() => router.push(`/group-info?id=${groupId}`)}>
+                                <Pressable style={({ pressed }) => [styles.headerAction, pressed && { opacity: 0.9 }]} onPress={() => router.push(`/group-info?id=${groupId}`)}>
                                     <MoreVertical size={24} color={Colors.primary} />
                                 </Pressable>
                             </View>
@@ -987,7 +1029,7 @@ export default function ChatScreen() {
                     ) : (
                         <View style={[styles.header, { paddingTop: insets.top, backgroundColor: '#fff' }]}>
                             <View style={styles.headerContent}>
-                                <Pressable onPress={() => router.back()} style={styles.backButton}>
+                                <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.9 }]}>
                                     <ChevronLeft size={30} color={Colors.primary} />
                                 </Pressable>
                                 {groupAvatar && (
@@ -999,12 +1041,7 @@ export default function ChatScreen() {
                                     <Text style={styles.headerTitle}>{groupName}</Text>
                                     {!isDM && <Text style={styles.headerSubtitle}>{memberCount} members</Text>}
                                 </View>
-                                {groupLanguage?.toLowerCase() === 'french' && (
-                                    <Pressable style={styles.nativeButton} onPress={() => router.push('/native-speakers?language=French')}>
-                                        <Text style={styles.nativeButtonText}>💬 Chat with a Native</Text>
-                                    </Pressable>
-                                )}
-                                <Pressable style={styles.headerAction} onPress={() => router.push(`/group-info?id=${groupId}`)}>
+                                <Pressable style={({ pressed }) => [styles.headerAction, pressed && { opacity: 0.9 }]} onPress={() => router.push(`/group-info?id=${groupId}`)}>
                                     <MoreVertical size={24} color={Colors.primary} />
                                 </Pressable>
                             </View>
@@ -1143,20 +1180,6 @@ const styles = StyleSheet.create({
     headerAction: {
         padding: 8,
         marginRight: -8,
-    },
-    nativeButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: SOUP_COLORS.blue,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
-        borderRadius: 16,
-        marginRight: 8,
-    },
-    nativeButtonText: {
-        color: '#666',
-        fontSize: 12,
-        fontWeight: '600',
     },
     inspirationButton: {
         flexDirection: 'row',
