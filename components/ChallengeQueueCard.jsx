@@ -1,23 +1,132 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator, Dimensions, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, Dimensions, Image, Animated } from 'react-native';
 import { Audio } from 'expo-av';
+import { BlurView } from 'expo-blur';
 import { Mic, Play, Pause, Trash2, Send, Volume2 } from 'lucide-react-native';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
 import { LiveAudioWaveform } from './LiveAudioWaveform';
+import { AnimatedIdleWaveform } from './AnimatedIdleWaveform';
+import AnimatedReanimated, { FadeIn, ZoomIn, useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { supabase } from '../lib/supabase';
+
+const BOWL_ICON = require('../assets/ls-icon-bowl.png');
+
+// Wrapper so the question pops in when challenge changes and "breathes" so it feels dynamic
+function TodayQuestionPulseWrapper({ embedInSection, challengeId, isTodayLayout, promptContainerStyle, children }) {
+    const scale = useSharedValue(1);
+    useEffect(() => {
+        if (!embedInSection) return;
+        scale.value = withRepeat(
+            withSequence(
+                withTiming(1.02, { duration: 1400 }),
+                withTiming(1, { duration: 1400 })
+            ),
+            -1,
+            false
+        );
+    }, [embedInSection]);
+    const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+    if (!embedInSection) {
+        return <View style={promptContainerStyle}>{children}</View>;
+    }
+    return (
+        <AnimatedReanimated.View
+            key={challengeId}
+            entering={ZoomIn.duration(550).springify().damping(18)}
+            style={[promptContainerStyle, animatedStyle]}
+        >
+            {children}
+        </AnimatedReanimated.View>
+    );
+}
+
+// Bowl accents — no dark box; pop via opacity + shadow + soft white glow on colored backgrounds.
+const BOWL_ACCENTS = [
+    { key: 'tl', top: '8%', left: '5%', size: 72, opacity: 0.58 },
+    { key: 'tr', top: '22%', right: '4%', size: 72, opacity: 0.54 },
+    { key: 'bl', bottom: '26%', left: '8%', size: 72, opacity: 0.56 },
+    { key: 'br', bottom: '10%', right: '10%', size: 72, opacity: 0.6 },
+];
 
 const SOUP_COLORS = {
     cream: '#FDF5E6',
     turquoise: '#00ADEF',
+    blue: '#00ADEF',
     pink: '#EC008B',
     dark: '#2A2A2A',
+    subtext: '#6B7280',
 };
 
 const WAVEFORM_BARS = 30;
 
+// Rotating silly messages while TTS loads (no "voice gods")
+const TTS_LOADING_MESSAGES = [
+    'how do u pronounce that again…',
+    'wait what was the word',
+    'what language is this',
+    'trying our best here',
+    'ok don\'t look at me I\'m nervous',
+    'one sec, finding the right accent',
+    'buffering confidence',
+    'almost… almost…',
+    'this is fine everything is fine',
+    'heating up the vocal cords',
+    'loading the correct pronunciation (we hope)',
+];
 
+// Fill-up bar: fills at a steady pace (0→100% over 3s); when load completes, finishes to 100%
+function TtsLoadingFillBar({ isLightBackground, complete }) {
+    const widthAnim = useRef(new Animated.Value(0)).current;
+    const steadyAnimRef = useRef(null);
 
-export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
+    useEffect(() => {
+        if (complete) {
+            if (steadyAnimRef.current) steadyAnimRef.current.stop();
+            Animated.timing(widthAnim, { toValue: 1, useNativeDriver: false, duration: 200 }).start();
+            return;
+        }
+        widthAnim.setValue(0);
+        const anim = Animated.timing(widthAnim, {
+            toValue: 1,
+            useNativeDriver: false,
+            duration: 3000,
+        });
+        steadyAnimRef.current = anim;
+        anim.start();
+        return () => {
+            anim.stop();
+            steadyAnimRef.current = null;
+        };
+    }, [complete]);
+
+    const widthInterp = widthAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
+    const trackColor = isLightBackground ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.25)';
+    const fillColor = isLightBackground ? '#141414' : '#fff';
+
+    return (
+        <View style={[styles.ttsFillBarTrack, { backgroundColor: trackColor }]}>
+            <Animated.View style={[styles.ttsFillBarFill, { backgroundColor: fillColor, width: widthInterp }]} />
+        </View>
+    );
+}
+
+// Random silly message while TTS loads (new random every 1.8s, not same sequence)
+function TtsLoadingMessage({ isLightBackground }) {
+    const [messageIndex, setMessageIndex] = useState(() => Math.floor(Math.random() * TTS_LOADING_MESSAGES.length));
+    useEffect(() => {
+        const id = setInterval(() => {
+            setMessageIndex(Math.floor(Math.random() * TTS_LOADING_MESSAGES.length));
+        }, 1800);
+        return () => clearInterval(id);
+    }, []);
+    return (
+        <Text style={[styles.ttsLoadingMessage, isLightBackground && styles.textOnLight]} numberOfLines={1}>
+            {TTS_LOADING_MESSAGES[messageIndex]}
+        </Text>
+    );
+}
+
+export function ChallengeQueueCard({ challenge, onSend, loading, groupName, isLightBackground = false, currentCardIdRef, isCompact = false, embedInSection = false, minimal = false }) {
     const {
         isRecording,
         recordingDuration,
@@ -32,12 +141,22 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
     const [isPlaying, setIsPlaying] = useState(false);
 
     const ttsSoundRef = useRef(null); // Ref to track TTS sound for cleanup
+    const lastTtsRequestRef = useRef(null); // Only play sound if fetch completed for the last tapped phrase (ignore stale)
+    const currentChallengeIdRef = useRef(challenge?.id); // So async hint load can skip if user switched challenge
+    currentChallengeIdRef.current = challenge?.id;
 
     // Audio Cache for TTS (Vocab & Phrases)
     const [audioCache, setAudioCache] = useState({});
 
-    // Inline ingredients state
-    const [hints, setHints] = useState(challenge?.metadata || null);
+    // Inline ingredients state. If cached phrase is too long, treat as missing so we regenerate (fixed edge function returns max 8 words).
+    const initialHints = (() => {
+        const meta = challenge?.metadata;
+        if (!meta?.starter_phrase) return null;
+        const wordCount = (meta.starter_phrase || '').trim().split(/\s+/).length;
+        if (wordCount > 10) return null; // bad cache from before we enforced length
+        return meta;
+    })();
+    const [hints, setHints] = useState(initialHints);
     const [hintsLoading, setHintsLoading] = useState(false);
 
     // Prefetch Helper (Speeds up loading)
@@ -55,44 +174,47 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
         }
     };
 
-    // Auto-generate hints on mount & Save to DB
+    // Auto-generate hints on mount & Save to DB. Guard so we never apply results for a stale challenge (e.g. tap Farsi then Spanish).
     useEffect(() => {
-        // If we already have hints, prefetch their audio immediately
-        if (hints?.starter_phrase) {
-            prefetchAudio(hints.starter_phrase);
-            hints.vocab_bank?.forEach(v => prefetchAudio(v.word));
+        const challengeId = challenge?.id;
+        const meta = challenge?.metadata;
+        const hasCachedHints = meta?.starter_phrase && (meta.starter_phrase || '').trim().split(/\s+/).length <= 10;
+        if (hasCachedHints) {
+            setHints(meta);
+            setHintsLoading(false);
+            prefetchAudio(meta.starter_phrase);
             return;
         }
 
-        const generate = async () => {
-            setHintsLoading(true);
-            try {
-                const promptText = challenge?.prompt_text;
-                if (!promptText) return;
+        setHints(null);
+        setHintsLoading(true);
 
+        const generate = async () => {
+            const promptText = challenge?.prompt_text;
+            if (!promptText) {
+                if (currentChallengeIdRef.current === challengeId) setHintsLoading(false);
+                return;
+            }
+            try {
                 const { data, error } = await supabase.functions.invoke('voice-feedback', {
-                    body: { task: 'generate_hints', prompt: promptText, language: groupName || 'Target Language', challengeId: challenge?.id }
+                    body: { task: 'generate_hints', prompt: promptText, language: groupName || 'Target Language', challengeId }
                 });
 
                 if (error) throw error;
 
+                // Only apply if user hasn't switched to another challenge (avoid Farsi then Spanish flash)
+                if (currentChallengeIdRef.current !== challengeId) return;
                 if (data?.starter_phrase) {
                     setHints(data);
-
-                    // SAVE TO SUPABASE (Persistence)
-                    // This prevents "reloading" next time
-                    await supabase.from('challenges')
+                    await supabase.from('app_challenges')
                         .update({ metadata: data })
-                        .eq('id', challenge.id);
-
-                    // PREFETCH AUDIO (Speed)
+                        .eq('id', challengeId);
                     prefetchAudio(data.starter_phrase);
-                    data.vocab_bank?.forEach(v => prefetchAudio(v.word));
                 }
             } catch (e) {
-                console.error('Hint generation error:', e);
+                if (currentChallengeIdRef.current === challengeId) console.error('Hint generation error:', e);
             } finally {
-                setHintsLoading(false);
+                if (currentChallengeIdRef.current === challengeId) setHintsLoading(false);
             }
         };
         generate();
@@ -100,17 +222,24 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
 
     // TTS pronunciation via OpenAI (Phrases only)
     const [speakingWord, setSpeakingWord] = useState(null);
+    const [ttsLoadComplete, setTtsLoadComplete] = useState(false); // so fill bar only reaches 100% when load is done
+    const [minimalPhrasesExpanded, setMinimalPhrasesExpanded] = useState(false);
 
-    // Unified TTS Handler (OpenAI with Cache)
+    // Unified TTS Handler (OpenAI with Cache). Only the last tapped phrase plays; rapid taps don't queue stale audio.
     const playTts = async (text) => {
         if (!text) return;
 
-        // Stop any previous audio
+        // Stop any previous playback immediately so only one thing plays
         if (ttsSoundRef.current) {
-            await ttsSoundRef.current.unloadAsync();
+            try {
+                await ttsSoundRef.current.stopAsync();
+                await ttsSoundRef.current.unloadAsync();
+            } catch (_) {}
             ttsSoundRef.current = null;
         }
 
+        lastTtsRequestRef.current = text;
+        setTtsLoadComplete(false);
         setSpeakingWord(text);
 
         try {
@@ -128,17 +257,45 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
                 setAudioCache(prev => ({ ...prev, [text]: audioUrl }));
             }
 
-            // Critical: switch directly to playback mode
+            // User tapped another phrase while we were loading — don't play this one
+            if (lastTtsRequestRef.current !== text) {
+                setSpeakingWord(null);
+                return;
+            }
+            // User went to next card while we were loading — don't play (avoids both cards playing)
+            if (currentCardIdRef && currentCardIdRef.current !== challenge?.id) {
+                setSpeakingWord(null);
+                return;
+            }
+
+            // Ensure playback mode so sentence audio actually plays (e.g. after recording mode)
             await Audio.setAudioModeAsync({
                 allowsRecordingIOS: false,
                 playsInSilentModeIOS: true,
+                staysActiveInBackground: false,
+                interruptionModeIOS: 1,
+                shouldDuckAndroid: true,
             });
 
             const { sound: ttsSound } = await Audio.Sound.createAsync(
                 { uri: audioUrl },
-                { shouldPlay: true, volume: 1.0 }
+                { shouldPlay: false, volume: 1.0, rate: 0.9 }
             );
+
+            // Another tap happened while we were creating the sound — don't play
+            if (lastTtsRequestRef.current !== text) {
+                ttsSound.unloadAsync().catch(() => {});
+                setSpeakingWord(null);
+                return;
+            }
+            // User went to next card — don't play (avoids old card + new card both playing)
+            if (currentCardIdRef && currentCardIdRef.current !== challenge?.id) {
+                ttsSound.unloadAsync().catch(() => {});
+                setSpeakingWord(null);
+                return;
+            }
             ttsSoundRef.current = ttsSound;
+            setTtsLoadComplete(true); // bar fills to 100% once, then we play
 
             ttsSound.setOnPlaybackStatusUpdate((status) => {
                 if (status.didJustFinish) {
@@ -148,9 +305,12 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
                 }
             });
 
+            await ttsSound.playAsync();
         } catch (e) {
-            console.error('TTS error:', e);
-            setSpeakingWord(null);
+            if (lastTtsRequestRef.current === text) {
+                console.error('TTS error:', e);
+                setSpeakingWord(null);
+            }
         }
     };
 
@@ -172,6 +332,18 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
             }
         };
     }, [sound]);
+
+    // Stop TTS when leaving this card (back/skip/close) so nothing keeps playing
+    useEffect(() => {
+        return () => {
+            const tts = ttsSoundRef.current;
+            if (tts) {
+                tts.unloadAsync().catch(() => {});
+                ttsSoundRef.current = null;
+            }
+            lastTtsRequestRef.current = null;
+        };
+    }, []);
 
     // Community Bubbles Logic
     const [communityBubbles, setCommunityBubbles] = useState([]);
@@ -320,13 +492,70 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
         waveformLayout.current = event.nativeEvent.layout;
     };
 
-    return (
-        <View style={styles.card}>
-            {/* Challenge Prompt */}
-            <View style={styles.promptContainer}>
-                <Text style={styles.groupName}>{groupName || 'Soup Group'}</Text>
+    const cardStyle = isCompact ? [styles.card, stylesCompact.card, embedInSection && { width: '100%' }] : [styles.card, embedInSection && { width: '100%' }];
+    const promptContainerStyle = isCompact ? [styles.promptContainer, stylesCompact.promptContainer] : styles.promptContainer;
+    const groupNameStyle = isCompact ? [styles.groupName, isLightBackground && styles.textOnLight, stylesCompact.groupName] : [styles.groupName, isLightBackground && styles.textOnLight];
+    const promptTextStyle = isCompact ? [styles.promptText, isLightBackground && styles.textOnLight, stylesCompact.promptText] : [styles.promptText, isLightBackground && styles.textOnLight];
+    const secondaryPromptStyle = isCompact ? [styles.promptText, styles.secondaryPrompt, isLightBackground && styles.secondaryTextOnLight, stylesCompact.secondaryPrompt] : [styles.promptText, styles.secondaryPrompt, isLightBackground && styles.secondaryTextOnLight];
+    const hintsContainerStyle = isCompact ? [styles.hintsContainer, stylesCompact.hintsContainer] : styles.hintsContainer;
+    const hintsLabelStyle = isCompact ? [styles.hintsLabel, stylesCompact.hintsLabel] : styles.hintsLabel;
+    const starterPhraseCardStyle = isCompact ? [styles.starterPhraseCard, stylesCompact.starterPhraseCard] : styles.starterPhraseCard;
+    const starterPhraseStyle = isCompact ? [styles.starterPhrase, stylesCompact.starterPhrase] : [styles.starterPhrase];
+    const actionContainerStyle = isCompact ? [styles.actionContainer, stylesCompact.actionContainer] : styles.actionContainer;
+    const recordContainerStyle = isCompact ? [styles.recordContainer, stylesCompact.recordContainer] : styles.recordContainer;
+    const recordButtonStyle = isCompact ? [styles.recordButton, isLightBackground && styles.recordButtonOnLight, stylesCompact.recordButton] : [styles.recordButton, isLightBackground && styles.recordButtonOnLight];
+    const hintTextStyle = isCompact ? [styles.hintText, stylesCompact.hintText] : styles.hintText;
+    const reviewContainerStyle = isCompact ? [styles.reviewContainer, stylesCompact.reviewContainer] : styles.reviewContainer;
+    const controlButtonStyle = isCompact ? [styles.controlButton, stylesCompact.controlButton] : styles.controlButton;
+    const playButtonStyle = isCompact ? [styles.playButton, stylesCompact.playButton] : styles.playButton;
+    const scrubberContainerStyle = isCompact ? [styles.scrubberContainer, stylesCompact.scrubberContainer] : styles.scrubberContainer;
+    const waveformContainerStyle = isCompact ? [styles.waveformContainer, stylesCompact.waveformContainer] : styles.waveformContainer;
+    const vocabBlockStyle = isCompact ? [styles.vocabBlock, stylesCompact.vocabBlock] : styles.vocabBlock;
 
-                <View style={{ alignItems: 'center' }}>
+    // Today layout: thread-style (ask → phrases → reply). No bowls.
+    const isTodayLayout = isCompact && isLightBackground;
+
+    return (
+        <View style={cardStyle}>
+            {!isTodayLayout && (
+            <View style={styles.bowlBackground} pointerEvents="none">
+                {BOWL_ACCENTS.map(({ key, size, opacity, ...pos }) => (
+                    <View
+                        key={key}
+                        style={[
+                            styles.bowlBgIconAccent,
+                            { width: size, height: size, ...pos },
+                            isLightBackground ? styles.bowlAccentShadow : styles.bowlAccentShadowWithGlow
+                        ]}
+                    >
+                        {!isLightBackground && (
+                            <Image
+                                source={BOWL_ICON}
+                                style={[StyleSheet.absoluteFill, { width: size, height: size, opacity: 0.22 }]}
+                                resizeMode="contain"
+                            />
+                        )}
+                        <Image
+                            source={BOWL_ICON}
+                            style={[StyleSheet.absoluteFill, { width: size, height: size, opacity }]}
+                            resizeMode="contain"
+                        />
+                    </View>
+                ))}
+            </View>
+            )}
+            {/* Challenge Prompt — message-style when Today layout */}
+            <View style={[promptContainerStyle, isTodayLayout && styles.todayPromptWrap]}>
+                {!isTodayLayout && <Text style={[groupNameStyle, styles.todayGroupName]}>{groupName || 'Soup Group'}</Text>}
+                {embedInSection && (
+                    <Text style={[styles.todayPromptLabel, isLightBackground && styles.textOnLight]} numberOfLines={1}>today's question</Text>
+                )}
+                <TodayQuestionPulseWrapper
+                    embedInSection={embedInSection}
+                    challengeId={challenge?.id}
+                    isTodayLayout={isTodayLayout}
+                    promptContainerStyle={isTodayLayout ? styles.todayPromptBubble : { alignItems: 'center' }}
+                >
                     {(() => {
                         const rawText = challenge?.prompt_text || "Ready to Soup?";
                         // Split by newline to separate multiple languages if present
@@ -335,10 +564,10 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
                         if (parts.length > 1) {
                             return (
                                 <>
-                                    <Text style={styles.promptText}>
+                                    <Text style={promptTextStyle} numberOfLines={isCompact ? 2 : undefined}>
                                         {parts[0]}
                                     </Text>
-                                    <Text style={[styles.promptText, styles.secondaryPrompt]}>
+                                    <Text style={secondaryPromptStyle} numberOfLines={isCompact ? 1 : undefined}>
                                         {parts.slice(1).join('\n')}
                                     </Text>
                                 </>
@@ -347,77 +576,108 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
 
                         // Single line case
                         return (
-                            <Text style={styles.promptText}>
+                            <Text style={promptTextStyle} numberOfLines={isCompact ? 2 : undefined}>
                                 {rawText}
                             </Text>
                         );
                     })()}
-                </View>
+                </TodayQuestionPulseWrapper>
 
-                {/* Inline Ingredients */}
-                {hintsLoading && (
-                    <View style={styles.hintsLoading}>
-                        <ActivityIndicator size="small" color="rgba(255,255,255,0.8)" />
-                        <Text style={styles.hintsLoadingText}>Grabbing ingredients...</Text>
-                    </View>
-                )}
-                {!hintsLoading && hints?.starter_phrase && (
-                    <View style={styles.hintsContainer}>
-                        <Text style={styles.hintsLabel}>BEGINNER PHRASE:</Text>
+                {/* Inline Ingredients — minimal: one "see phrases" toggle; otherwise full hints */}
+                {minimal ? (
+                    (hintsLoading || hints?.starter_phrase) && (
                         <Pressable
-                            style={[styles.starterPhraseCard, speakingWord === hints.starter_phrase && styles.speakingActive]}
-                            onPress={() => playTts(hints.starter_phrase)}
+                            style={({ pressed }) => [styles.minimalPhrasesToggle, pressed && { opacity: 0.8 }]}
+                            onPress={() => setMinimalPhrasesExpanded(!minimalPhrasesExpanded)}
                         >
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.starterPhrase}>"{hints.starter_phrase}"</Text>
-                                <Text style={styles.starterTranslation}>
-                                    {hints.starter_phrase_translation || 'Tap to hear it'}
-                                </Text>
+                            <Text style={[styles.minimalPhrasesToggleText, isLightBackground && styles.textOnLight]}>
+                                {minimalPhrasesExpanded ? 'hide phrases' : 'see phrases'}
+                            </Text>
+                        </Pressable>
+                    )
+                ) : null}
+                {minimal && !minimalPhrasesExpanded ? null : (
+                    <>
+                        {hintsLoading && (
+                            <View style={styles.hintsLoading}>
+                                <ActivityIndicator size="small" color={isLightBackground ? '#141414' : 'rgba(255,255,255,0.8)'} />
+                                <Text style={[styles.hintsLoadingText, isLightBackground && styles.textOnLight]}>{isTodayLayout ? 'loading…' : 'loading hints…'}</Text>
                             </View>
-                            <View style={styles.playCircle}>
-                                {speakingWord === hints.starter_phrase ? (
-                                    <ActivityIndicator size="small" color="#fff" />
-                                ) : (
-                                    <Volume2 size={20} color="#fff" />
+                        )}
+                        {!hintsLoading && hints?.starter_phrase && (
+                            <View style={[hintsContainerStyle, isTodayLayout && styles.todayPhraseSection]}>
+                                {!isTodayLayout && (
+                                    <Text style={[hintsLabelStyle, isLightBackground && styles.textOnLight, styles.todaySectionLabel]}>beginner phrase:</Text>
+                                )}
+                                <Pressable
+                                    style={[starterPhraseCardStyle, speakingWord === hints.starter_phrase && styles.speakingActive, isLightBackground && styles.starterCardOnLight, isTodayLayout && styles.todayStarterPhraseCard]}
+                                    onPress={() => playTts(hints.starter_phrase)}
+                                    accessibilityLabel={isTodayLayout ? 'Tap to hear pronunciation' : 'Tap to hear it'}
+                                    accessibilityRole="button"
+                                >
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={[starterPhraseStyle, isLightBackground && styles.textOnLight]}>"{hints.starter_phrase}"</Text>
+                                        {hints.starter_phrase_translation ? (
+                                            <Text style={[styles.starterTranslation, isLightBackground && styles.secondaryTextOnLight]}>
+                                                {hints.starter_phrase_translation}
+                                            </Text>
+                                        ) : null}
+                                        {isTodayLayout && (
+                                            <View style={styles.todayHearRow}>
+                                                <Volume2 size={14} color={SOUP_COLORS.subtext} />
+                                                <Text style={styles.todayHearHint}>tap to hear</Text>
+                                            </View>
+                                        )}
+                                        {!isTodayLayout && !hints.starter_phrase_translation && (
+                                            <Text style={[styles.starterTranslation, isLightBackground && styles.secondaryTextOnLight]}>Tap to hear it</Text>
+                                        )}
+                                    </View>
+                                    <View style={[styles.playCircle, isLightBackground && styles.playCircleOnLight, isTodayLayout && styles.todayPlayCircle]}>
+                                        {speakingWord === hints.starter_phrase ? (
+                                            <ActivityIndicator size="small" color={isLightBackground ? '#141414' : '#fff'} />
+                                        ) : (
+                                            <Volume2 size={isTodayLayout ? 24 : 20} color={isTodayLayout ? SOUP_COLORS.turquoise : (isLightBackground ? '#141414' : '#fff')} />
+                                        )}
+                                    </View>
+                                </Pressable>
+                                {speakingWord === hints.starter_phrase && (
+                                    <>
+                                        <TtsLoadingMessage isLightBackground={isLightBackground} />
+                                        <TtsLoadingFillBar isLightBackground={isLightBackground} complete={ttsLoadComplete} />
+                                    </>
+                                )}
+                                {!hintsLoading && hints?.vocab_bank && hints.vocab_bank.length > 0 && (
+                                    <View style={[vocabBlockStyle, isTodayLayout && styles.todayVocabSection]}>
+                                        {!isTodayLayout && <Text style={[styles.vocabBlockLabel, isLightBackground && styles.textOnLight]}>{'vocab'}</Text>}
+                                        <View style={[styles.vocabRow, isTodayLayout && styles.todayVocabRow]}>
+                                            {(hints.vocab_bank.slice(0, isTodayLayout ? 5 : 10)).map((item, idx) => {
+                                                const word = (item.word ?? item.target_term ?? '').trim();
+                                                const translation = (item.translation ?? item.english ?? '').trim();
+                                                if (!word) return null;
+                                                return (
+                                                    <View key={idx} style={[styles.vocabPill, isLightBackground && styles.vocabPillOnLight, isTodayLayout && styles.todayVocabPill]}>
+                                                        <Text style={[styles.vocabWord, isLightBackground && styles.textOnLight, isTodayLayout && styles.todayVocabWord]} numberOfLines={1}>{word}</Text>
+                                                        {translation ? <Text style={[styles.vocabTranslation, isLightBackground && styles.secondaryTextOnLight, isTodayLayout && styles.todayVocabTranslation]} numberOfLines={1}> · {translation}</Text> : null}
+                                                    </View>
+                                                );
+                                            })}
+                                        </View>
+                                    </View>
                                 )}
                             </View>
-                        </Pressable>
-                        {hints.vocab_bank?.length > 0 && (
-                            <>
-                                <Text style={[styles.hintsLabel, { marginTop: 10 }]}>ADVANCED VOCAB:</Text>
-                                <View style={styles.vocabRow}>
-                                    {hints.vocab_bank.map((item, i) => (
-                                        <Pressable
-                                            key={i}
-                                            style={[styles.vocabPill, speakingWord === item.word && styles.speakingActive]}
-                                            onPress={() => playTts(item.word)}
-                                        >
-                                            <View style={styles.vocabIconContainer}>
-                                                {speakingWord === item.word ? (
-                                                    <ActivityIndicator size="small" color="#fff" />
-                                                ) : (
-                                                    <Volume2 size={14} color="rgba(255,255,255,0.6)" />
-                                                )}
-                                            </View>
-                                            <Text style={styles.vocabWord}>{item.word}</Text>
-                                            <Text style={styles.vocabTranslation}>{item.translation}</Text>
-                                        </Pressable>
-                                    ))}
-                                </View>
-                            </>
                         )}
-                    </View>
+                    </>
                 )}
             </View>
 
             {/* Interaction Area */}
-            <View style={styles.actionContainer}>
+            <View style={actionContainerStyle}>
                 {recordedUri ? (
                     // REVIEW MODE
-                    <View style={styles.reviewContainer}>
+                    <View style={reviewContainerStyle}>
                         {/* Playback Visualization (Scrubbable) */}
                         <Pressable
-                            style={styles.scrubberContainer}
+                            style={scrubberContainerStyle}
                             onPress={handleSeek}
                             onLayout={onWaveformLayout}
                         >
@@ -426,6 +686,9 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
                                     const progress = playbackDuration > 0 ? playbackPosition / playbackDuration : 0;
                                     const barPos = i / WAVEFORM_BARS;
                                     const isPlayed = progress > barPos;
+                                    const barColor = isLightBackground
+                                        ? (isPlayed ? '#141414' : 'rgba(20, 20, 20, 0.4)')
+                                        : (isPlayed ? 'white' : 'rgba(255, 255, 255, 0.4)');
 
                                     return (
                                         <View
@@ -433,8 +696,8 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
                                             style={[
                                                 styles.waveBar,
                                                 {
-                                                    height: 16 + (height * 32), // Dynamic height based on random mock
-                                                    backgroundColor: isPlayed ? 'white' : 'rgba(255, 255, 255, 0.4)', // White waveforms
+                                                    height: 16 + (height * 32),
+                                                    backgroundColor: barColor,
                                                     opacity: 1
                                                 }
                                             ]}
@@ -442,7 +705,7 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
                                     );
                                 })}
                             </View>
-                            <Text style={styles.timerText}>
+                            <Text style={[styles.timerText, isLightBackground && styles.textOnLight]}>
                                 {loadTime(playbackPosition / 1000)} / {loadTime(finalDuration)}
                             </Text>
                         </Pressable>
@@ -450,81 +713,103 @@ export function ChallengeQueueCard({ challenge, onSend, loading, groupName }) {
                         <View style={styles.playbackControls}>
                             <Pressable
                                 onPress={handleDelete}
-                                style={[styles.controlButton, styles.deleteButton]}
+                                style={[controlButtonStyle, styles.deleteButton]}
                             >
-                                <Trash2 size={24} color="#FF3B30" />
+                                <Trash2 size={isCompact ? 18 : 24} color="#FF3B30" />
                             </Pressable>
 
                             <Pressable
                                 onPress={handlePlayPause}
-                                style={[styles.controlButton, styles.playButton]}
+                                style={[playButtonStyle]}
                             >
                                 {isPlaying ? (
-                                    <Pause size={32} color={SOUP_COLORS.turquoise} fill={SOUP_COLORS.turquoise} />
+                                    <Pause size={isCompact ? 24 : 32} color={SOUP_COLORS.turquoise} fill={SOUP_COLORS.turquoise} />
                                 ) : (
-                                    <Play size={32} color={SOUP_COLORS.turquoise} fill={SOUP_COLORS.turquoise} style={{ marginLeft: 4 }} />
+                                    <Play size={isCompact ? 24 : 32} color={SOUP_COLORS.turquoise} fill={SOUP_COLORS.turquoise} style={{ marginLeft: 4 }} />
                                 )}
                             </Pressable>
 
                             <Pressable
                                 onPress={handleSendPress}
                                 disabled={loading}
-                                style={[styles.controlButton, styles.sendButton]}
+                                style={[controlButtonStyle, styles.sendButton]}
                             >
                                 {loading ? (
-                                    <ActivityIndicator color="white" />
+                                    <ActivityIndicator color="white" size={isCompact ? 'small' : 'small'} />
                                 ) : (
-                                    <Send size={28} color="white" />
+                                    <Send size={isCompact ? 20 : 28} color="white" />
                                 )}
                             </Pressable>
                         </View>
-                        <Text style={styles.reviewText}>
-                            Ready to send?
+                        <Text style={[styles.reviewText, isLightBackground && styles.secondaryTextOnLight]}>
+                            {isTodayLayout ? 'lock it in?' : 'Ready to send?'}
                         </Text>
                     </View>
                 ) : (
-                    // RECORD MODE
-                    <View style={styles.recordContainer}>
-                        {/* Peeking Community Row */}
-                        {!isRecording && communityBubbles.length > 0 && (
-                            <View style={styles.peekingRow} pointerEvents="none">
+                    // RECORD MODE — Today layout: "record your reply" hero
+                    <View style={[recordContainerStyle, isTodayLayout && styles.todayReplyZone]}>
+                        {isTodayLayout && (
+                            <Text style={[styles.todayRecordLabel, isLightBackground && styles.textOnLight]}>record</Text>
+                        )}
+                        {!isTodayLayout && !isRecording && communityBubbles.length > 0 && (
+                            <View style={[styles.peekingRow, isCompact && stylesCompact.peekingRow]} pointerEvents="none">
                                 {communityBubbles.map((user, i) => (
-                                    <Image
-                                        key={i}
-                                        source={{ uri: user.avatar_url }}
-                                        style={[styles.peekingAvatar, { zIndex: i }]}
-                                    />
+                                    <View key={i} style={[styles.peekingAvatar, styles.peekingAvatarWrap, isCompact && stylesCompact.peekingAvatar, { zIndex: i }]}>
+                                        <Image source={{ uri: user.avatar_url }} style={[StyleSheet.absoluteFill, { borderRadius: 18 }]} />
+                                        <BlurView intensity={4} tint="dark" style={StyleSheet.absoluteFill} />
+                                    </View>
                                 ))}
                             </View>
                         )}
 
-                        {isRecording && (
-                            <View style={styles.waveformContainer}>
+                        {isRecording ? (
+                            <View style={[waveformContainerStyle, isTodayLayout && styles.todayWaveformWrap]}>
                                 <LiveAudioWaveform
                                     metering={metering}
                                     recordingDuration={recordingDuration}
                                     isRecording={isRecording}
-                                    color="white" // Pass white color prop if supported, or handled via styles
+                                    color={isLightBackground ? SOUP_COLORS.turquoise : 'white'}
                                 />
-                                <Text style={styles.timerText}>{loadTime(recordingDuration)}</Text>
+                                <Text style={[styles.timerText, isLightBackground && styles.textOnLight]}>{loadTime(recordingDuration)}</Text>
                             </View>
-                        )}
+                        ) : embedInSection && !recordedUri && !isTodayLayout ? (
+                            <View style={[styles.idleWaveformWrap, styles.idleWaveformWrapSilky]}>
+                                <AnimatedIdleWaveform
+                                    variant="silky"
+                                    color={isLightBackground ? SOUP_COLORS.turquoise : 'rgba(255,255,255,0.95)'}
+                                    barCount={32}
+                                    barWidth={4}
+                                    maxHeight={36}
+                                />
+                            </View>
+                        ) : null}
 
                         <Pressable
                             onPress={handleRecordPress}
                             style={[
-                                styles.recordButton,
-                                isRecording && styles.recordingActive
+                                recordButtonStyle,
+                                isTodayLayout && styles.todayRecordButton,
+                                isTodayLayout && !isRecording && styles.todayRecordButtonWaveform,
+                                isRecording && styles.recordingActive,
+                                isLightBackground && isRecording && styles.recordingActiveOnLight
                             ]}
                         >
                             {isRecording ? (
-                                <View style={[styles.stopIcon, { backgroundColor: SOUP_COLORS.turquoise }]} />
+                                <View style={[styles.stopIcon, isCompact && stylesCompact.stopIcon, isLightBackground ? { backgroundColor: '#fff' } : { backgroundColor: SOUP_COLORS.turquoise }]} />
+                            ) : isTodayLayout ? (
+                                <AnimatedIdleWaveform
+                                    variant="silky"
+                                    color={SOUP_COLORS.turquoise}
+                                    barCount={28}
+                                    barWidth={3}
+                                    maxHeight={32}
+                                />
                             ) : (
-                                <Mic size={40} color={SOUP_COLORS.turquoise} />
+                                <Mic size={isCompact ? 28 : 40} color={isLightBackground ? '#fff' : SOUP_COLORS.turquoise} />
                             )}
                         </Pressable>
-                        <Text style={styles.hintText}>
-                            {isRecording ? "Tap to finish" : "Tap to record"}
+                        <Text style={[hintTextStyle, isTodayLayout && !isRecording && styles.todayRecordHint, isLightBackground && styles.textOnLight]}>
+                            {isRecording ? "Tap to finish" : "tap to record"}
                         </Text>
                     </View>
                 )}
@@ -544,10 +829,33 @@ const styles = StyleSheet.create({
     card: {
         flex: 1,
         justifyContent: 'space-between',
-        padding: 16, // Reduced from 24
-        paddingBottom: 40, // Reduced from 60
+        padding: 16,
+        paddingBottom: 40,
         width: Dimensions.get('window').width,
         backgroundColor: 'transparent',
+    },
+    bowlBackground: {
+        ...StyleSheet.absoluteFillObject,
+    },
+    bowlBgIconAccent: {
+        position: 'absolute',
+    },
+    bowlAccentShadow: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.4,
+        shadowRadius: 6,
+        elevation: 8,
+    },
+    bowlAccentShadowWithGlow: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.4,
+        shadowRadius: 10,
+        elevation: 10,
+    },
+    peekingAvatarWrap: {
+        overflow: 'hidden',
     },
     promptContainer: {
         flex: 1,
@@ -561,6 +869,31 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
         letterSpacing: 2,
         marginBottom: 16, // Reduced from 32
+    },
+    // Cream background: warm black for readability + color theory (cream is warm, so warm dark text matches).
+    textOnLight: {
+        color: '#141414',
+        textShadowColor: 'transparent',
+    },
+    secondaryTextOnLight: {
+        color: '#4a4a4a',
+        textShadowColor: 'transparent',
+    },
+    starterCardOnLight: {
+        backgroundColor: 'rgba(0,0,0,0.06)',
+    },
+    playCircleOnLight: {
+        backgroundColor: 'rgba(0,0,0,0.1)',
+    },
+    recordButtonOnLight: {
+        backgroundColor: '#141414',
+        shadowColor: '#000',
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+    },
+    recordingActiveOnLight: {
+        backgroundColor: '#141414',
+        transform: [{ scale: 1.05 }],
     },
     inspirationButton: {
         flexDirection: 'row',
@@ -639,6 +972,25 @@ const styles = StyleSheet.create({
     waveformContainer: {
         height: 32, // Reduced from 40
         marginBottom: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    idleWaveformWrap: {
+        height: 36,
+        marginBottom: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+    },
+    idleWaveformWrapHero: {
+        height: 56,
+        marginBottom: 12,
+        minHeight: 56,
+    },
+    idleWaveformWrapSilky: {
+        height: 44,
+        marginBottom: 12,
+        width: '100%',
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -726,6 +1078,25 @@ const styles = StyleSheet.create({
         width: '100%',
         alignItems: 'center',
     },
+    ttsFillBarTrack: {
+        width: '100%',
+        height: 6,
+        borderRadius: 3,
+        overflow: 'hidden',
+        marginTop: 6,
+        marginBottom: 2,
+    },
+    ttsFillBarFill: {
+        height: '100%',
+        borderRadius: 3,
+    },
+    ttsLoadingMessage: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.75)',
+        fontStyle: 'italic',
+        marginBottom: 4,
+        maxWidth: '100%',
+    },
     starterPhraseCard: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -766,6 +1137,18 @@ const styles = StyleSheet.create({
         marginTop: 2,
         fontStyle: 'italic',
     },
+    vocabBlock: {
+        width: '100%',
+        marginTop: 10,
+        gap: 6,
+    },
+    vocabBlockLabel: {
+        fontSize: 10,
+        fontWeight: '700',
+        color: 'rgba(255,255,255,0.6)',
+        letterSpacing: 1,
+        marginBottom: 2,
+    },
     vocabRow: {
         flexDirection: 'row',
         flexWrap: 'wrap',
@@ -797,6 +1180,9 @@ const styles = StyleSheet.create({
         fontSize: 11,
         color: 'rgba(255,255,255,0.7)',
     },
+    vocabPillOnLight: {
+        backgroundColor: 'rgba(20,20,20,0.08)',
+    },
     // Peeking Row
     peekingRow: {
         position: 'absolute',
@@ -813,6 +1199,234 @@ const styles = StyleSheet.create({
         borderRadius: 18,
         borderWidth: 2,
         borderColor: 'rgba(255,255,255,0.2)',
-        marginLeft: -10, // Overlap
+        marginLeft: -10,
+    },
+});
+
+const stylesCompact = StyleSheet.create({
+    card: {
+        width: '100%',
+        maxWidth: '100%',
+        padding: 8,
+        paddingBottom: 12,
+    },
+    promptContainer: {
+        minHeight: 0,
+    },
+    groupName: {
+        fontSize: 10,
+        marginBottom: 6,
+        letterSpacing: 1,
+    },
+    promptText: {
+        fontSize: 16,
+        lineHeight: 20,
+    },
+    secondaryPrompt: {
+        fontSize: 12,
+        marginTop: 4,
+        lineHeight: 16,
+    },
+    hintsContainer: {
+        marginTop: 6,
+        marginBottom: 4,
+        gap: 4,
+    },
+    hintsLabel: {
+        fontSize: 9,
+        marginBottom: 2,
+    },
+    starterPhraseCard: {
+        padding: 8,
+        gap: 6,
+        borderRadius: 8,
+    },
+    starterPhrase: {
+        fontSize: 12,
+        lineHeight: 16,
+    },
+    actionContainer: {
+        minHeight: 80,
+    },
+    recordContainer: {
+        gap: 6,
+    },
+    recordButton: {
+        width: 52,
+        height: 52,
+        borderRadius: 26,
+    },
+    hintText: {
+        fontSize: 11,
+        marginTop: 2,
+    },
+    reviewContainer: {
+        gap: 8,
+    },
+    controlButton: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+    },
+    playButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+    },
+    scrubberContainer: {
+        paddingVertical: 4,
+    },
+    waveformContainer: {
+        height: 24,
+        marginBottom: 4,
+    },
+    vocabBlock: {
+        marginTop: 6,
+        gap: 4,
+    },
+    stopIcon: {
+        width: 16,
+        height: 16,
+        borderRadius: 2,
+    },
+    peekingRow: {
+        position: 'relative',
+        bottom: undefined,
+        height: 32,
+        marginBottom: 4,
+    },
+    peekingAvatar: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        marginLeft: -6,
+    },
+    // Today layout: thread-style (ask → phrases → reply)
+    todayPromptWrap: {
+        alignItems: 'stretch',
+    },
+    todayGroupName: {
+        fontSize: 11,
+        textTransform: 'lowercase',
+        letterSpacing: 0.5,
+        marginBottom: 6,
+    },
+    todayPromptLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        textTransform: 'lowercase',
+        letterSpacing: 0.5,
+        opacity: 0.85,
+        marginBottom: 6,
+        color: 'rgba(255,255,255,0.9)',
+    },
+    todayPromptBubble: {
+        alignSelf: 'stretch',
+        backgroundColor: 'rgba(0,0,0,0.04)',
+        borderLeftWidth: 3,
+        borderLeftColor: SOUP_COLORS.turquoise,
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        borderRadius: 0,
+        borderTopRightRadius: 14,
+        borderBottomRightRadius: 14,
+    },
+    todayReplyZone: {
+        marginTop: 28,
+        paddingTop: 24,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(0,0,0,0.06)',
+    },
+    todayWaveformWrap: {
+        width: '100%',
+        minHeight: 40,
+        marginBottom: 8,
+    },
+    todayRecordButton: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+    },
+    todayRecordButtonWaveform: {
+        backgroundColor: '#fff',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    todayRecordHint: {
+        fontSize: 12,
+        opacity: 0.9,
+        marginTop: 4,
+    },
+    todayPhraseSection: {
+        marginTop: 20,
+        marginBottom: 8,
+    },
+    todaySectionLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 0.8,
+        marginBottom: 6,
+        opacity: 0.9,
+    },
+    todayStarterPhraseCard: {
+        paddingVertical: 20,
+        paddingHorizontal: 20,
+        backgroundColor: 'rgba(0,0,0,0.03)',
+        borderRadius: 20,
+        borderWidth: 0,
+    },
+    todayHearRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 12,
+        gap: 6,
+    },
+    todayHearHint: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: SOUP_COLORS.subtext,
+        textTransform: 'lowercase',
+    },
+    todayPlayCircle: {
+        backgroundColor: 'rgba(0,174,239,0.12)',
+    },
+    todayVocabSection: {
+        marginTop: 24,
+        marginBottom: 4,
+    },
+    todayVocabRow: {
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    todayVocabPill: {
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+    },
+    todayVocabWord: {
+        fontSize: 13,
+    },
+    todayVocabTranslation: {
+        fontSize: 12,
+        color: SOUP_COLORS.subtext,
+    },
+    todayRecordLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 0.8,
+        marginBottom: 8,
+        opacity: 0.85,
+    },
+    minimalPhrasesToggle: {
+        marginTop: 12,
+        paddingVertical: 6,
+        paddingHorizontal: 4,
+    },
+    minimalPhrasesToggleText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: 'rgba(255,255,255,0.9)',
+        textTransform: 'lowercase',
     },
 });
