@@ -1,7 +1,7 @@
 # Onboarding audit: app download → first voice memo
 
 **Scope:** Path from "just downloaded the app" to "sent first voice memo."  
-**Combined with:** Ticket Blitz — "Initial onboarding record one word" + "Onboarding pipeline audit: how they find us → first voice memo."
+**Combined with:** Features & requests — "Initial onboarding record one word" + "Onboarding pipeline audit: how they find us → first voice memo."
 
 ---
 
@@ -18,12 +18,10 @@
 | 6 | **Avatar** | Photo or soup avatar. Continue → notifications. | onboarding/notifications |
 | 7 | **Notifications** | "Turn on notifications" or "Maybe later." Both → **group-selection**. | **group-selection** |
 | 8 | **Group selection** | Pick ≥1 language group → Join → **(tabs)**. | **(tabs)** |
-| 9 | **Today (tabs)** | Home loads; `checkOnboardingStatus()`: if **0 messages sent** → show **OnboardingMissionModal**. | (modal) |
-| 10 | **OnboardingMissionModal** | Loading → (optional) listen to 1–3 group voices → "Skip to challenge" or "More" → **Recording step**: today-style card, prompt "what's ur favorite word…", record voice **or** send text "hi" / skip. On success → confetti, `onComplete()`, modal closes. | First voice (or text) sent; user on Today |
+| 9 | **Today (tabs)** | Home loads; `checkOnboardingStatus()`: if **0 messages sent** → show **inline first challenge** on Today (same hero card as daily challenge). | (inline on Today) |
+| 10 | **First challenge (inline)** | Today shows the first-challenge card: prompt "what's ur favorite word…", record voice **or** skip. On success → confetti, state clears. No separate modal. | First voice sent; user on Today |
 
-**First voice memo** is sent either:
-- In the modal: record on the onboarding challenge card and send, or
-- Send a text "hi" (counts as participation; modal still completes).
+**First voice memo** is sent by recording on the **inline first-challenge card** on Today (or skipping; they can send later).
 
 So the **intended** path length is: **Boot → How-it-works (5 taps) → Login (name + 3 emoji) → Conversational → Learning → Tagline → Avatar → Notifications → Group selection → Today → Modal (listen optional) → Record or text → Done.**
 
@@ -67,7 +65,7 @@ So:
 
 ### 4. **Login: emoji password has no in-app explainer**
 
-- Ticket Blitz (Jon): "In-app emoji password explainer + set expectation 'practice in a way you're not used to'; optional help/landing so onboarding can stay short."
+- Features & requests (Jon): "In-app emoji password explainer + set expectation 'practice in a way you're not used to'; optional help/landing so onboarding can stay short."
 - Currently there’s no explanation in the UI for *why* 3 emojis or how to remember them; only "tap 3 emojis to log in."
 
 **Recommendation:** Add one short line (e.g. "your password is just 3 emojis — no email, easy to remember") and optionally a "why emojis?" or "help" that sets expectation without making the step long.
@@ -88,7 +86,7 @@ So:
 
 ### 6. **Group selection → Today: no explicit "now record" handoff**
 
-- After joining groups, they land on Today. The **OnboardingMissionModal** appears because `message count === 0`. So the handoff is correct, but the first thing they see is the main Today UI and then the modal.
+- After joining groups, they land on Today. The **inline first challenge** appears because `message count === 0`. So the handoff is correct; the first thing they see is the main Today UI with the first-challenge card in the hero.
 
 **Recommendation:** Small copy or state on first load: e.g. "You’re in! One more thing — send your first voice note below" so it’s clear the modal is the intended next step. (Already partially there with "add one ingredient and ur in.")
 
@@ -103,7 +101,7 @@ So:
 
 ---
 
-### 8. **Guard onboarding swipe (Ticket Blitz — Mattheos)**
+### 8. **Guard onboarding swipe (Features & requests — Mattheos)**
 
 - "Guard onboarding swipe so one accidental swipe doesn't kick them out."
 - If onboarding screens use the default stack gesture (swipe back), one swipe could exit the flow. Worth checking each onboarding screen and either disabling back swipe or confirming "are you sure?" on back.
@@ -114,7 +112,7 @@ So:
 
 ### 9. **Where "finding us on social" fits**
 
-- This audit is "download → first voice memo." The Ticket Blitz also asks: "Audit the full pipeline from **how they find us** → first voice memo."
+- This audit is "download → first voice memo." The Features & requests also asks: "Audit the full pipeline from **how they find us** → first voice memo."
 - Currently the app doesn’t track or change flow based on referrer (e.g. Instagram vs App Store). So "finding us" is only addressable by:
   - Landing page / link-in-bio messaging (set expectation: "daily voice challenges, small groups").
   - App Store / Play Store listing and screenshots (same promise).
@@ -134,7 +132,7 @@ So:
 | Medium | **Emoji password** | Add one-line explainer (+ optional "why emojis?") so it’s clear and sets expectation. |
 | Medium | **Steps before groups** | Consider "Learning" (or Learning + one group step) as the critical path; make the rest optional or merge. |
 | Low | **Boot** | Shorten or remove long delay before "tap to continue." |
-| Low | **Post-join** | One line of copy that the modal = "send your first voice note" so handoff is obvious. |
+| Low | **Post-join** | One line of copy that the card = "send your first voice note" so handoff is obvious. |
 | Low | **Skip for now** | Optional line: "You can send your first voice note anytime from Today or the group chat." |
 
 ---
@@ -146,10 +144,10 @@ Boot (tap) → how-it-works (5 steps, tap right) → login (name + 3 emoji)
   → [has groups?] (tabs)
   → [no groups] onboarding/conversational → learning → tagline → avatar → notifications
        → group-selection (join ≥1) → (tabs)
-         → Today loads → OnboardingMissionModal (0 messages)
-           → loading → [optional listen] → recording step
-             → record voice OR send text "hi" OR skip for now
-               → onComplete → modal closes → first voice memo done (or skipped)
+         → Today loads → inline first challenge (0 messages)
+           → first-challenge card in hero
+             → record voice OR skip for now
+               → state clears → first voice memo done (or skipped)
 ```
 
 ---
@@ -162,7 +160,7 @@ Boot (tap) → how-it-works (5 steps, tap right) → login (name + 3 emoji)
 - **How-it-works:** `app/how-it-works.jsx` (steps, notification step).
 - **Onboarding screens:** `app/onboarding/*.jsx` (back gesture, optional merge/order).
 - **Group selection:** `app/group-selection.jsx` (no flow change; handoff copy could live on Today).
-- **Today + modal:** `app/(tabs)/index.jsx`, `components/OnboardingMissionModal.jsx` (copy, skip message).
+- **Today + first challenge:** `app/(tabs)/index.jsx` (inline first-challenge card; copy, skip message).
 - **Stack options:** `app/_layout.jsx` or per-screen options (gestureEnabled: false on onboarding).
 
 Once you’ve walked through the flow and noted what you want to clean up, we can turn this into a concrete task list and implement.
@@ -186,7 +184,7 @@ Once you’ve walked through the flow and noted what you want to clean up, we ca
 
 4. **See first-voice-memo flow**  
    - Once in a group, open **Today** and trigger the challenge/recording flow.  
-   - Confirm the "first voice memo" / mission modal and copy feel right (and that skip/"hi" paths work if you use them).
+   - Confirm the "first voice memo" inline card and copy feel right (and that skip path works if you use it).
 
 5. **Quick reset (optional)**  
    - To re-test from a clean slate: log out, then clear app data or uninstall/reinstall so `bootScreenShown` and auth state are reset and you see Boot again.

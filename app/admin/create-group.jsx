@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { SUPPORTED_LANGUAGES } from '../../constants/SupportedLanguages';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -107,9 +108,9 @@ export default function CreateGroup() {
                     </View>
 
                     <View style={styles.section}>
-                        <Text style={styles.label}>Language *</Text>
-                        <View style={styles.languageOptions}>
-                            {['French', 'Spanish', 'German', 'Italian', 'Japanese', 'Korean'].map(lang => (
+                        <Text style={styles.label}>Language * ({SUPPORTED_LANGUAGES.length} supported)</Text>
+                        <ScrollView style={styles.languageScroll} nestedScrollEnabled maxHeight={200} showsVerticalScrollIndicator>
+                            {SUPPORTED_LANGUAGES.map(lang => (
                                 <Pressable
                                     key={lang}
                                     style={[
@@ -121,10 +122,10 @@ export default function CreateGroup() {
                                     <Text style={[
                                         styles.languageText,
                                         formData.language === lang && styles.languageTextActive
-                                    ]}>{lang}</Text>
+                                    ]} numberOfLines={1}>{lang}</Text>
                                 </Pressable>
                             ))}
-                        </View>
+                        </ScrollView>
                     </View>
 
                     <View style={styles.section}>
@@ -240,6 +241,9 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 8,
+    },
+    languageScroll: {
+        maxHeight: 200,
     },
     languageButton: {
         paddingHorizontal: 16,

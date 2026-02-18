@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator, Text
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { Camera, Edit2, LogOut, MapPin, Globe, Award, Sparkles, Flag, Clock, Crown, Download, MessageCircle, Bell } from 'lucide-react-native';
+import { Camera, Edit2, LogOut, MapPin, Globe, Award, Sparkles, Flag, Clock, Crown, Download, MessageCircle, Bell, HelpCircle, ChevronRight } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
@@ -11,18 +11,22 @@ import { decode } from 'base64-arraybuffer';
 import { useQuests } from '../../contexts/QuestContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import GroupAvatar from '../../components/GroupAvatar';
+import WhatsNewSheet from '../../components/WhatsNewSheet';
 import { getAvatarSource } from '../../utils/soupUtils';
 import { TAB_BAR_HEIGHT } from '../../constants/Layout';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// 🎨 SOUP PALETTE
+// 🎨 SOUP PALETTE (matches dashboard: turquoise, pink, green, linen)
 const SOUP_COLORS = {
     blue: '#00adef',
+    turquoise: '#00adef',
     pink: '#ec008b',
     green: '#19b091',
     cream: '#FDF5E6',
-    text: '#1C1C1E',
+    linen: '#FDF5E6',
+    text: '#1b1b2f',
+    dark: '#1b1b2f',
     subtext: '#8E8E93',
     cardBg: '#FFFFFF',
 };
@@ -80,6 +84,8 @@ export default function ProfileScreen() {
     const [selectedSoupId, setSelectedSoupId] = useState(null);
     const [learningExpanded, setLearningExpanded] = useState(false);
     const [fluentExpanded, setFluentExpanded] = useState(false);
+    const [showWhatsNewSheet, setShowWhatsNewSheet] = useState(false);
+    const [sharePreference, setSharePreference] = useState('private'); // 'public' | 'private'
     const { completeQuest } = useQuests();
 
     useEffect(() => {
@@ -105,6 +111,7 @@ export default function ProfileScreen() {
                 setNewTimezone(userData.timezone || '');
                 setNewLanguages(userData.fluent_languages || []);
                 setNewLearning(userData.learning_languages || []);
+                setSharePreference(userData.share_preference === 'public' ? 'public' : 'private');
             } else {
                 // FALLBACK FOR GUEST / MISSING PROFILE
                 const guestUser = {
@@ -201,7 +208,8 @@ export default function ProfileScreen() {
             status_text: (newTagline || '').trim(),
             timezone: (newTimezone || '').trim(),
             fluent_languages: newLanguages || [],
-            learning_languages: newLearning || []
+            learning_languages: newLearning || [],
+            share_preference: sharePreference || 'private'
         };
 
         // Update local user object immediately so UI reflects changes
@@ -770,15 +778,15 @@ export default function ProfileScreen() {
                         onPress={() => {
                             if (permissionStatus !== 'granted') {
                                 Alert.alert(
-                                    'Notifications Off 🔕',
-                                    'Turn on notifications to never miss a challenge! 🍜',
+                                    'notifications off 🔕',
+                                    'turn on notifications to never miss a challenge! 🍜',
                                     [
-                                        { text: 'Cancel', style: 'cancel' },
-                                        { text: 'Turn On ✨', onPress: openSettings }
+                                        { text: 'cancel', style: 'cancel' },
+                                        { text: 'turn on ✨', onPress: openSettings }
                                     ]
                                 );
                             } else {
-                                Alert.alert('Notifications ON ✅', "You're all set! We'll ping you when soup is served. 🍜💨");
+                                Alert.alert('already on ✅', "they're already on. we'll ping you when soup is served. 🍜");
                             }
                         }}
                         style={styles.bellButton}
@@ -802,8 +810,23 @@ export default function ProfileScreen() {
 
                 {renderIdentity()}
 
+                {/* What's new — tap to open, no forced tour */}
+                <Pressable
+                    style={({ pressed }) => [
+                        styles.whatsNewRow,
+                        pressed && { opacity: 0.85 },
+                    ]}
+                    onPress={() => setShowWhatsNewSheet(true)}
+                >
+                    <HelpCircle size={20} color={SOUP_COLORS.blue} />
+                    <Text style={styles.whatsNewLabel}>where things are / what's new</Text>
+                    <ChevronRight size={18} color={SOUP_COLORS.subtext} />
+                </Pressable>
+
                 <View style={{ height: 16 }} />
             </ScrollView>
+
+            <WhatsNewSheet visible={showWhatsNewSheet} onClose={() => setShowWhatsNewSheet(false)} />
 
             {/* Edit Profile Modal */}
             <Modal
@@ -1027,6 +1050,25 @@ export default function ProfileScreen() {
                                     })()}
                                 </View>
 
+                                <View style={styles.modalLabelRow}>
+                                    <Text style={styles.modalLabel}>Share my profile</Text>
+                                    <Text style={styles.modalShareHint}>Public = ok to feature on social. Private = only in app.</Text>
+                                </View>
+                                <View style={styles.shareRow}>
+                                    <Pressable
+                                        onPress={() => setSharePreference('private')}
+                                        style={[styles.shareOption, sharePreference === 'private' && styles.shareOptionSelected]}
+                                    >
+                                        <Text style={[styles.shareOptionText, sharePreference === 'private' && styles.shareOptionTextSelected]}>Private</Text>
+                                    </Pressable>
+                                    <Pressable
+                                        onPress={() => setSharePreference('public')}
+                                        style={[styles.shareOption, sharePreference === 'public' && styles.shareOptionSelected]}
+                                    >
+                                        <Text style={[styles.shareOptionText, sharePreference === 'public' && styles.shareOptionTextSelected]}>Public</Text>
+                                    </Pressable>
+                                </View>
+
                                 <View style={{ height: 100 }} />
                             </View>
                         </ScrollView>
@@ -1242,6 +1284,24 @@ const styles = StyleSheet.create({
         paddingTop: 20,
         marginTop: -10,
     },
+    whatsNewRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        backgroundColor: SOUP_COLORS.cardBg,
+        borderRadius: 20,
+        marginTop: 16,
+        borderWidth: 1,
+        borderColor: 'rgba(0, 173, 239, 0.12)',
+    },
+    whatsNewLabel: {
+        flex: 1,
+        fontSize: 15,
+        fontWeight: '600',
+        color: SOUP_COLORS.text,
+    },
     // HERO SECTION — card on cream (Pinterest-style)
     heroSection: {
         alignItems: 'center',
@@ -1253,12 +1313,14 @@ const styles = StyleSheet.create({
     heroCard: {
         width: '100%',
         backgroundColor: SOUP_COLORS.cardBg,
-        borderRadius: 20,
+        borderRadius: 24,
         padding: 24,
-        shadowColor: '#000',
+        borderWidth: 1,
+        borderColor: 'rgba(0, 173, 239, 0.12)',
+        shadowColor: SOUP_COLORS.blue,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.06,
-        shadowRadius: 10,
+        shadowRadius: 12,
         elevation: 2,
     },
     heroPhotoRow: {
@@ -1334,6 +1396,11 @@ const styles = StyleSheet.create({
         borderRadius: 75,
         borderWidth: 4,
         borderColor: SOUP_COLORS.blue,
+        shadowColor: SOUP_COLORS.blue,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 3,
     },
     heroAvatarPlaceholder: {
         width: 150,
@@ -1971,6 +2038,41 @@ const styles = StyleSheet.create({
         color: SOUP_COLORS.text,
         marginBottom: 8,
         marginTop: 16,
+    },
+    modalLabelRow: {
+        marginTop: 20,
+        marginBottom: 8,
+    },
+    modalShareHint: {
+        fontSize: 12,
+        color: SOUP_COLORS.subtext,
+        marginTop: 4,
+        marginBottom: 10,
+    },
+    shareRow: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    shareOption: {
+        paddingHorizontal: 20,
+        paddingVertical: 12,
+        borderRadius: 16,
+        backgroundColor: '#fff',
+        borderWidth: 2,
+        borderColor: 'rgba(0,0,0,0.1)',
+    },
+    shareOptionSelected: {
+        borderColor: SOUP_COLORS.blue,
+        backgroundColor: SOUP_COLORS.blue + '15',
+    },
+    shareOptionText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: SOUP_COLORS.text,
+    },
+    shareOptionTextSelected: {
+        color: SOUP_COLORS.blue,
+        fontWeight: '700',
     },
     modalInput: {
         backgroundColor: '#fff',

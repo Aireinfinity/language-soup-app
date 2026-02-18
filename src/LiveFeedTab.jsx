@@ -4,22 +4,51 @@ import { Play, Pause } from 'lucide-react';
 
 export default function LiveFeedTab() {
     const [responses, setResponses] = useState([]);
+    const [challengeOfTheDay, setChallengeOfTheDay] = useState(null);
     const [loading, setLoading] = useState(true);
     const [currentlyPlaying, setCurrentlyPlaying] = useState(null);
     const [feedbackStats, setFeedbackStats] = useState({ positive: 0, negative: 0, total: 0 });
     const audioRef = useRef(new Audio());
 
     useEffect(() => {
+        loadChallengeOfTheDay();
         loadResponses();
-        const interval = setInterval(loadResponses, 10000); // Refresh every 10s
+        const interval = setInterval(() => {
+            loadChallengeOfTheDay();
+            loadResponses();
+        }, 10000);
 
-        // Cleanup audio on unmount
         return () => {
             clearInterval(interval);
             audioRef.current.pause();
             audioRef.current.src = '';
         };
     }, []);
+
+    const loadChallengeOfTheDay = async () => {
+        try {
+            const startOfToday = new Date();
+            startOfToday.setHours(0, 0, 0, 0);
+            const { data } = await supabase
+                .from('app_challenges')
+                .select('id, prompt_text, created_at, app_groups(name)')
+                .gte('created_at', startOfToday.toISOString())
+                .order('created_at', { ascending: false })
+                .limit(1);
+            if (data && data[0]) {
+                setChallengeOfTheDay(data[0]);
+            } else {
+                const { data: latest } = await supabase
+                    .from('app_challenges')
+                    .select('id, prompt_text, created_at, app_groups(name)')
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+                setChallengeOfTheDay(latest?.[0] || null);
+            }
+        } catch (err) {
+            console.error('Error loading challenge of the day:', err);
+        }
+    };
 
     const handlePlayAudio = (url, id) => {
         if (currentlyPlaying === id) {
@@ -98,7 +127,7 @@ export default function LiveFeedTab() {
         <div className="space-y-4">
             {/* Voice Feedback Pulse Card */}
             <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden">
+                <div className="bg-gradient-to-br from-[var(--soup-turquoise)] to-[var(--soup-green)] rounded-2xl p-5 text-white shadow-lg relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-8 -mt-8 blur-xl"></div>
                     <div className="relative z-10">
                         <div className="flex items-center gap-2 mb-2 opacity-90">
@@ -121,7 +150,18 @@ export default function LiveFeedTab() {
                 </div>
             </div>
 
-            <div className="text-sm font-bold text-gray-400 mb-4">Latest responses across all groups</div>
+            {/* One challenge of the day, then focus on who's replying */}
+            {challengeOfTheDay && (
+                <div className="mb-6 p-4 rounded-2xl bg-[var(--soup-turquoise)]/10 border border-[var(--soup-turquoise)]/20">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-[var(--soup-turquoise)] mb-1">Challenge of the day</div>
+                    <p className="text-[var(--soup-dark)] font-bold">{challengeOfTheDay.prompt_text}</p>
+                    {(challengeOfTheDay.group?.name || challengeOfTheDay.app_groups?.name) && (
+                        <span className="text-xs text-gray-500 mt-1 inline-block">{challengeOfTheDay.group?.name || challengeOfTheDay.app_groups?.name}</span>
+                    )}
+                </div>
+            )}
+
+            <div className="text-sm font-bold text-[var(--soup-dark)]/70 mb-4">Who&apos;s replying</div>
             {responses.map((response) => (
                 <div key={response.id} className="bg-white p-4 rounded-xl border border-black/5 hover:shadow-sm transition-all">
                     <div className="flex items-start gap-3">

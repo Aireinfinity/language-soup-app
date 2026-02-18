@@ -1,6 +1,6 @@
 # Two Tabs: Design Hero & Plan
 
-Based on **user_interviews.md** and **LANGUAGE_SOUP_CONTEXT.md** — what users actually want, and how the two tabs should serve that.
+Based on **user_interviews.md** and **CONTEXT.md** — what users actually want, and how the two tabs should serve that.
 
 ---
 

@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
-import { Users, Share2, Target, Activity } from 'lucide-react';
+import { Users, Share2, Target, Activity, UserPlus, Zap } from 'lucide-react';
 
 export default function GrowthCharts() {
     const [metrics, setMetrics] = useState({
         dau: [],
         retention: [],
         shares: [],
+        signups: [],
+        activated: [],
         summary: {
             activeUsers: 0,
             week1Retention: 0,
@@ -57,6 +59,8 @@ export default function GrowthCharts() {
             const realShareLinks = shareLinks.filter(s => realUserIds.has(s.sharer_user_id));
             const dailyActive = processDailyActive(messages || []);
             const dailyShares = processDailyShares(realShareLinks || []);
+            const dailySignups = processDailySignups(realUsers || []);
+            const dailyActivated = processDailyActivated(realUsers || [], messages || []);
 
             const totalShares = realShareLinks.filter(s => s.created_at >= LAUNCH_DATE).length;
 
@@ -64,6 +68,8 @@ export default function GrowthCharts() {
                 dau: dailyActive,
                 retention: [],
                 shares: dailyShares,
+                signups: dailySignups,
+                activated: dailyActivated,
                 summary: {
                     activeUsers: dailyActive.length > 0 ? dailyActive[dailyActive.length - 1].value : 0,
                     week1Retention: week1Retention,
@@ -124,6 +130,41 @@ export default function GrowthCharts() {
         }));
     };
 
+    const processDailySignups = (users) => {
+        const daysMap = {};
+        const timeline = getLaunchTimeline();
+        timeline.forEach(d => daysMap[d] = 0);
+        users.forEach(u => {
+            const day = getDateKey(u.created_at);
+            if (daysMap[day] !== undefined) daysMap[day]++;
+        });
+        return timeline.map(day => ({
+            label: new Date(day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            value: daysMap[day]
+        }));
+    };
+
+    // Newly activated = users whose first message was on that day
+    const processDailyActivated = (users, msgs) => {
+        const firstMessageByUser = {};
+        msgs.forEach(m => {
+            const day = getDateKey(m.created_at);
+            if (!firstMessageByUser[m.sender_id] || day < firstMessageByUser[m.sender_id]) {
+                firstMessageByUser[m.sender_id] = day;
+            }
+        });
+        const daysMap = {};
+        const timeline = getLaunchTimeline();
+        timeline.forEach(d => daysMap[d] = 0);
+        Object.values(firstMessageByUser).forEach(day => {
+            if (daysMap[day] !== undefined) daysMap[day]++;
+        });
+        return timeline.map(day => ({
+            label: new Date(day).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            value: daysMap[day]
+        }));
+    };
+
     const processTopSharers = (links) => {
         const counts = {};
         links.forEach(l => {
@@ -146,7 +187,7 @@ export default function GrowthCharts() {
 
     return (
         <div className="space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6">
                 <MetricCard
                     title="Daily Active Users"
                     value={metrics.summary.activeUsers}
@@ -154,6 +195,22 @@ export default function GrowthCharts() {
                     type="bar"
                     color="turquoise"
                     icon={Users}
+                />
+                <MetricCard
+                    title="New Signups / Day"
+                    value={metrics.signups?.length ? metrics.signups.reduce((a, d) => a + d.value, 0) > 0 ? metrics.signups[metrics.signups.length - 1].value : 0 : 0}
+                    data={metrics.signups || []}
+                    type="bar"
+                    color="pink"
+                    icon={UserPlus}
+                />
+                <MetricCard
+                    title="Newly Activated / Day"
+                    value={metrics.activated?.length ? metrics.activated[metrics.activated.length - 1].value : 0}
+                    data={metrics.activated || []}
+                    type="bar"
+                    color="green"
+                    icon={Zap}
                 />
                 <MetricCard
                     title="Q1 Goal: Stable Launch"
@@ -214,6 +271,18 @@ function MetricCard({ title, value, data, type, color, icon: Icon, subtitle, tar
             bg: 'bg-[var(--soup-turquoise)]',
             light: 'bg-[var(--soup-turquoise)]/10',
             stroke: 'var(--soup-turquoise)'
+        },
+        pink: {
+            text: 'text-[var(--soup-pink)]',
+            bg: 'bg-[var(--soup-pink)]',
+            light: 'bg-[var(--soup-pink)]/10',
+            stroke: 'var(--soup-pink)'
+        },
+        green: {
+            text: 'text-[var(--soup-green)]',
+            bg: 'bg-[var(--soup-green)]',
+            light: 'bg-[var(--soup-green)]/10',
+            stroke: 'var(--soup-green)'
         },
         dark: {
             text: 'text-[var(--soup-dark)]',

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert, TextInput, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { X, Plus } from 'lucide-react-native';
 import { Colors } from '../../constants/Colors';
 import { supabase } from '../../lib/supabase';
@@ -10,6 +11,7 @@ import { OnboardingSwipeForward } from '../../components/OnboardingSwipeForward'
 import { groupLanguageMatchesPicker } from '../../utils/languageGroupMatch';
 import LanguageRequestModal from '../../components/LanguageRequestModal';
 import { getAvatarSource, getDefaultSoupAvatarForId, sortAvatarUrlsRealFirst } from '../../utils/soupUtils';
+import { getOrCreateGroupForLanguage } from '../../utils/getOrCreateGroupForLanguage';
 
 export default function OnboardingYourGroupsScreen() {
     const { user } = useAuth();
@@ -226,20 +228,27 @@ export default function OnboardingYourGroupsScreen() {
                     <Text style={styles.backText}>←</Text>
                 </Pressable>
 
-                <View style={styles.header}>
+                <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.header}>
                     <Text style={styles.title}>your groups</Text>
-                </View>
+                    <Text style={styles.subtitle}>we added you to some based on your languages. you can edit this list anytime</Text>
+                </Animated.View>
 
                 <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                     <View style={styles.mainCard}>
+                        <Text style={styles.eyebrow}>your groups ({myGroups.length})</Text>
                         {myGroups.length === 0 ? (
-                            <Text style={styles.emptySuggestionText}>no groups yet. pick below.</Text>
+                            <Text style={styles.emptySuggestionText}>no groups yet. pick from more groups below.</Text>
                         ) : (
                             myGroups.map((group) => (
                                 <View key={group.id} style={styles.groupRow}>
                                     {renderAvatarStack(group.id)}
                                     <View style={styles.groupInfo}>
-                                        <Text style={styles.groupName} numberOfLines={1}>{group.name}</Text>
+                                        <View style={styles.groupNameRow}>
+                                            <Text style={styles.groupName} numberOfLines={1}>{group.name}</Text>
+                                            {(group.member_count || 0) <= 1 && (
+                                                <View style={styles.newTag}><Text style={styles.newTagText}>new</Text></View>
+                                            )}
+                                        </View>
                                         <Text style={styles.groupLang} numberOfLines={1}>{group.language || group.name}</Text>
                                     </View>
                                     <Pressable
@@ -258,6 +267,7 @@ export default function OnboardingYourGroupsScreen() {
                         )}
                         {languagesNoGroup.length > 0 && (
                             <View style={styles.missingInline}>
+                                <Text style={styles.missingLabel}>no group yet for:</Text>
                                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll} contentContainerStyle={styles.chipScrollContent}>
                                     {languagesNoGroup.map((lang) => (
                                         <View key={lang} style={styles.missingChip}>
@@ -266,22 +276,24 @@ export default function OnboardingYourGroupsScreen() {
                                     ))}
                                 </ScrollView>
                                 <Pressable onPress={() => setShowRequestModal(true)} style={styles.requestLanguageBtn}>
-                                    <Text style={styles.requestLanguageBtnText}>request these</Text>
+                                    <Text style={styles.requestLanguageBtnText}>add a group for these</Text>
                                 </Pressable>
                             </View>
                         )}
                     </View>
 
                     <View style={styles.addSection}>
+                        <Text style={styles.sectionLabel}>more groups</Text>
+                        <Text style={styles.reassureCopy}>don't worry if you're alone in a group. others will join and you can start speaking from the start and challenge friends.</Text>
                         <TextInput
                             style={styles.searchInput}
-                            placeholder="…"
+                            placeholder="search groups..."
                             placeholderTextColor="#999"
                             value={search}
                             onChangeText={setSearch}
                         />
                         {filteredOther.length === 0 ? (
-                            <Text style={styles.hint}>{searchTerm ? '—' : 'no more.'}</Text>
+                            <Text style={styles.hint}>{searchTerm ? 'no matches' : 'no more groups to show.'}</Text>
                         ) : (
                             filteredOther.map((group) => (
                                 <Pressable
@@ -292,7 +304,12 @@ export default function OnboardingYourGroupsScreen() {
                                 >
                                     {renderAvatarStack(group.id)}
                                     <View style={styles.groupInfo}>
-                                        <Text style={styles.groupName} numberOfLines={1}>{group.name}</Text>
+                                        <View style={styles.groupNameRow}>
+                                            <Text style={styles.groupName} numberOfLines={1}>{group.name}</Text>
+                                            {(group.member_count || 0) <= 1 && (
+                                                <View style={styles.newTag}><Text style={styles.newTagText}>new</Text></View>
+                                            )}
+                                        </View>
                                         <Text style={styles.groupLang} numberOfLines={1}>{group.language || group.name}</Text>
                                     </View>
                                     {joiningId === group.id ? (
@@ -320,15 +337,18 @@ export default function OnboardingYourGroupsScreen() {
                     if (!user?.id || !requestText?.trim()) return;
                     try {
                         const languages = requestText.split(',').map((s) => s.trim()).filter(Boolean);
+                        for (const lang of languages) {
+                            await getOrCreateGroupForLanguage(supabase, user.id, lang);
+                        }
                         const rows = languages.map((language) => ({
                             user_id: user.id,
                             language,
                             status: 'pending',
                         }));
-                        const { error } = await supabase.from('app_language_requests').insert(rows);
-                        if (error) throw error;
+                        await supabase.from('app_language_requests').insert(rows);
+                        await loadUserAndGroups();
                         setShowRequestModal(false);
-                        Alert.alert('request sent', languages.length > 1 ? `thanks! we got your ${languages.length} requests.` : "thanks! we'll look into adding this.");
+                        Alert.alert('you\'re in!', languages.length > 1 ? `we made groups for ${languages.length} languages and added you. others will join as they sign up and you can start speaking from the start.` : "we made a group for that and added you. don't worry if you're alone for now. others will join and you can start speaking.");
                     } catch (e) {
                         console.error(e);
                         Alert.alert('oops', "couldn't submit. try again.");
@@ -369,6 +389,34 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: Colors.text,
         marginBottom: 4,
+    },
+    subtitle: {
+        fontSize: 14,
+        color: Colors.textLight,
+        lineHeight: 20,
+    },
+    groupNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    newTag: {
+        backgroundColor: Colors.primary + '30',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 8,
+    },
+    newTagText: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: Colors.primary,
+        textTransform: 'lowercase',
+    },
+    reassureCopy: {
+        fontSize: 13,
+        color: Colors.textLight,
+        lineHeight: 18,
+        marginBottom: 12,
     },
     scroll: {
         flex: 1,

@@ -9,6 +9,7 @@ const SOUP_COLORS = {
     pink: '#ec008b',
     blue: '#00adef',
     cream: '#FDF5E6',
+    text: '#2d3436',
 };
 
 export function InspirationInline({ metadata: initialMetadata, language, prompt, challengeId }) {
@@ -262,11 +263,8 @@ export function InspirationInline({ metadata: initialMetadata, language, prompt,
                 <View style={styles.headerContent}>
                     <Text style={styles.headerEmoji}>🥣</Text>
                     <Text style={styles.headerText}>Need some ingredients?</Text>
-                    <View style={styles.newBadge}>
-                        <Text style={styles.newBadgeText}>NEW</Text>
-                    </View>
                 </View>
-                {expanded ? <ChevronUp size={16} color="#fff" /> : <ChevronDown size={16} color="#fff" />}
+                {expanded ? <ChevronUp size={16} color={SOUP_COLORS.text} /> : <ChevronDown size={16} color={SOUP_COLORS.text} />}
             </Pressable>
 
             {/* Expanded Content */}
@@ -357,20 +355,17 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
     },
     headerButton: {
-        backgroundColor: SOUP_COLORS.pink,
+        backgroundColor: SOUP_COLORS.cream,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingVertical: 6,
-        paddingHorizontal: 12,
-        borderRadius: 16,
+        paddingHorizontal: 10,
+        borderRadius: 10,
         alignSelf: 'flex-start',
-        shadowColor: '#ec008b',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-        elevation: 3,
-        minWidth: 120,
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.06)',
+        minWidth: 100,
     },
     headerButtonExpanded: {
         borderBottomLeftRadius: 0,
@@ -386,9 +381,9 @@ const styles = StyleSheet.create({
         fontSize: 14,
     },
     headerText: {
-        color: '#fff',
-        fontSize: 13,
-        fontWeight: '700',
+        color: SOUP_COLORS.text,
+        fontSize: 12,
+        fontWeight: '600',
     },
     contentPanel: {
         backgroundColor: '#FFF0F5', // Light pink background
@@ -452,18 +447,6 @@ const styles = StyleSheet.create({
     vocabTranslation: {
         fontSize: 13,
         color: '#666',
-    },
-    newBadge: {
-        backgroundColor: '#fff',
-        paddingHorizontal: 4,
-        paddingVertical: 1,
-        borderRadius: 4,
-        marginLeft: 6,
-    },
-    newBadgeText: {
-        fontSize: 8,
-        fontWeight: '800',
-        color: SOUP_COLORS.pink,
     },
     loadingContainer: {
         padding: 20,

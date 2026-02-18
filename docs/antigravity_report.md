@@ -1,7 +1,7 @@
 # Antigravity Report: Language Soup Context & Data
 
 > **Generated:** Feb 12, 2026
-> **Source:** `LANGUAGE_SOUP_CONTEXT.md`, `user_interviews.md`, Dashboard Source Code
+> **Source:** `CONTEXT.md`, `user_interviews.md`, Dashboard Source Code
 
 This document synthesizes project context, financials, and history to bring new AI agents up to speed.
 
@@ -20,7 +20,7 @@ This document synthesizes project context, financials, and history to bring new 
 
 ## 2. Product and Usage Metrics 📊
 
-**Source:** `LANGUAGE_SOUP_CONTEXT.md` (Feb 2026 Update) & `GoalsTab.jsx`
+**Source:** `CONTEXT.md` (Feb 2026 Update) & `GoalsTab.jsx`
 
 ### Key Metrics
 | Metric | Value | Goal |

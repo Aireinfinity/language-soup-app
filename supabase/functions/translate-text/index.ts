@@ -1,8 +1,8 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 
-// DeepL API - 500k characters/month FREE
-const DEEPL_API_KEY = Deno.env.get('DEEPL_API_KEY')
+// DeepL API - 500k characters/month FREE. Trim so pasted keys with newlines work.
+const DEEPL_API_KEY = (Deno.env.get('DEEPL_API_KEY') ?? '').trim()
 const DEEPL_API_URL = 'https://api-free.deepl.com/v2/translate'
 
 if (!DEEPL_API_KEY) {
@@ -43,24 +43,42 @@ serve(async (req) => {
             )
         }
 
-        const params = new URLSearchParams()
-        params.append('auth_key', DEEPL_API_KEY)
-        params.append('text', text)
-        params.append('target_lang', targetLang.toUpperCase())
+        if (!DEEPL_API_KEY) {
+            console.error('DEEPL_API_KEY not set. Add it in Supabase → Project Settings → Edge Functions → Secrets')
+            throw new Error('DEEPL_API_KEY not configured in Supabase secrets')
+        }
+        console.log('DeepL request:', targetLang, '| key present:', !!DEEPL_API_KEY)
 
+        // DeepL now requires header-based auth (Nov 2025+); form-body auth is deprecated
         const response = await fetch(DEEPL_API_URL, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
+                'Authorization': `DeepL-Auth-Key ${DEEPL_API_KEY}`,
+                'Content-Type': 'application/json',
             },
-            body: params,
+            body: JSON.stringify({
+                text: [text],
+                target_lang: targetLang.toUpperCase(),
+            }),
         })
 
-        const result = await response.json()
+        const result = await response.json().catch(() => ({}))
+        const status = response.status
+
+        if (!response.ok) {
+            const msg = result?.message || result?.error?.message || (typeof result?.error === 'string' ? result.error : null) || JSON.stringify(result) || `HTTP ${status}`
+            console.error('DeepL API error:', status, msg, '| body:', JSON.stringify(result))
+            throw new Error(`DeepL ${status}: ${msg}`)
+        }
 
         if (result.message) {
-            // DeepL error format
+            console.error('DeepL result.message:', result.message)
             throw new Error(result.message)
+        }
+
+        if (!result?.translations?.[0]?.text) {
+            console.error('DeepL unexpected response shape:', JSON.stringify(result))
+            throw new Error('DeepL returned no translation')
         }
 
         const translatedText = result.translations[0].text

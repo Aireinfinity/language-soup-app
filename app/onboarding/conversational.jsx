@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { OnboardingSwipeForward } from '../../components/OnboardingSwipeForward';
 import { groupLanguageMatchesPicker } from '../../utils/languageGroupMatch';
+import { getOrCreateGroupForLanguage } from '../../utils/getOrCreateGroupForLanguage';
 import { haptics } from '../../utils/haptics';
 import { getAvatarSource, getDefaultSoupAvatarForId, sortAvatarUrlsRealFirst } from '../../utils/soupUtils';
 
@@ -25,7 +26,7 @@ const _ALL = [
     'Irish (Gaeilge)', 'Scottish Gaelic (Gàidhlig)', 'Icelandic (Íslenska)',
     'Yoruba (Èdè Yorùbá)', 'Igbo (Asụsụ Igbo)', 'Hausa', 'Somali (Soomaali)', 'Oromo (Afaan Oromoo)',
     'Tigrinya (ትግርኛ)', 'Shona (chiShona)', 'Sesotho', 'Kinyarwanda (Ikinyarwanda)',
-    'Luganda', 'Wolof', 'Bambara', 'Fulani (Fulfulde)', 'Akan', 'Twi', 'Ewe', 'Fon', 'Lingala', 'Sango',
+    'Mooré (Mòoré)', 'Luganda', 'Wolof', 'Bambara', 'Fulani (Fulfulde)', 'Akan', 'Twi', 'Ewe', 'Fon', 'Lingala', 'Sango',
     'Serbian (Српски)', 'Croatian (Hrvatski)', 'Bosnian (Bosanski)', 'Slovenian (Slovenščina)',
     'Slovak (Slovenčina)', 'Bulgarian (Български)', 'Albanian (Shqip)', 'Macedonian (Македонски)',
     'Ukrainian (Українська)', 'Belarusian (Беларуская)', 'Lithuanian (Lietuvių)', 'Latvian (Latviešu)',
@@ -52,7 +53,7 @@ const POPULAR_FIRST = [
     'Indonesian (Bahasa Indonesia)', 'Persian/Farsi (فارسی)', 'Danish (Dansk)', 'Norwegian (Norsk)', 'Finnish (Suomi)',
 ];
 const REST = _ALL.filter((l) => !POPULAR_FIRST.includes(l));
-const LANGUAGES_BY_POPULARITY = [...POPULAR_FIRST, ...REST];
+const LANGUAGES_BY_POPULARITY_BASE = [...POPULAR_FIRST, ...REST];
 
 // Show full name instead of acronyms (e.g. "French Sign Language" not "LSF")
 function getDisplayName(lang) {
@@ -71,6 +72,15 @@ export default function ConversationalScreen() {
     const [saving, setSaving] = useState(false);
     const [languageCounts, setLanguageCounts] = useState({});
     const [languageAvatars, setLanguageAvatars] = useState({});
+    const [extraLanguages, setExtraLanguages] = useState([]);
+
+    const LANGUAGES_BY_POPULARITY = useMemo(() => {
+        const combined = [...LANGUAGES_BY_POPULARITY_BASE];
+        for (const l of extraLanguages) {
+            if (!combined.includes(l)) combined.push(l);
+        }
+        return combined;
+    }, [extraLanguages]);
 
     useEffect(() => {
         let cancelled = false;
@@ -82,9 +92,13 @@ export default function ConversationalScreen() {
             const filtered = (groups || []).filter(
                 (g) => !['test', 'tester', 'support'].some((w) => (g.name || '').toLowerCase().includes(w))
             );
+            const fromDb = [...new Set(filtered.map(g => (g.language || g.name || '').trim()).filter(Boolean))];
+            const missing = fromDb.filter(l => !LANGUAGES_BY_POPULARITY_BASE.some(b => b.toLowerCase().includes(l.toLowerCase()) || l.toLowerCase().includes(b.split(' (')[0].toLowerCase())));
+            if (!cancelled) setExtraLanguages(missing);
+            const allLangs = [...LANGUAGES_BY_POPULARITY_BASE, ...missing];
             const counts = {};
             const bestGroupId = {};
-            for (const pickerLang of LANGUAGES_BY_POPULARITY) {
+            for (const pickerLang of allLangs) {
                 for (const g of filtered) {
                     if (!groupLanguageMatchesPicker(g.language || g.name, pickerLang)) continue;
                     const c = g.member_count || 0;
@@ -184,16 +198,8 @@ export default function ConversationalScreen() {
             const noGroupFor = selectedLanguages.filter((sel) =>
                 ![...matchedLanguages].some((gl) => groupLanguageMatchesPicker(gl, sel))
             );
-            if (noGroupFor.length > 0) {
-                const displayNames = noGroupFor.map((l) => l.split(' (')[0].split('/')[0]);
-                const names = displayNames.length <= 4
-                    ? displayNames.join(', ')
-                    : `${displayNames.slice(0, 4).join(', ')} and ${displayNames.length - 4} more`;
-                Alert.alert(
-                    "we don't have those yet",
-                    `No group for ${names} right now. You can request them on the next screen.`,
-                    [{ text: 'ok' }]
-                );
+            for (const pickerLang of noGroupFor) {
+                await getOrCreateGroupForLanguage(supabase, user.id, pickerLang);
             }
 
             router.push('/onboarding/your-groups');
@@ -237,7 +243,7 @@ export default function ConversationalScreen() {
             </Pressable>
             <View style={styles.header}>
                 <Text style={styles.headline}>add your languages</Text>
-                <Text style={styles.subline}>tap to add the ones you want to practice</Text>
+                <Text style={styles.subline}>we offer {LANGUAGES_BY_POPULARITY.length} languages. tap to add the ones you want to practice</Text>
             </View>
             <View style={styles.content}>
                 <TextInput

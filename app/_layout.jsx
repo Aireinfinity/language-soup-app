@@ -1,7 +1,7 @@
 /*
 import { View, Text } from 'react-native';
 */
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Stack } from 'expo-router';
@@ -15,9 +15,7 @@ import { PodcastPlayerExpanded } from '../components/PodcastPlayerExpanded';
 import { PodcastEndSummary } from '../components/PodcastEndSummary';
 import { Colors } from '../constants/Colors';
 import { QuestProvider } from '../contexts/QuestContext';
-import WhatsNewModal from '../components/WhatsNewModal';
 import { AppErrorBoundary } from '../components/AppErrorBoundary';
-import { shouldShowWhatsNew, markWhatsNewAsSeen } from '../utils/versionTracking';
 
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -28,8 +26,7 @@ console.log('[Layout] Root Layout Mounted');
 // It will be automatically initialized via app.json plugins in production builds
 
 function RootLayoutNav() {
-    const { loading, user } = useAuth();
-    const [showWhatsNew, setShowWhatsNew] = useState(false);
+    const { loading } = useAuth();
 
     useEffect(() => {
         // Android Navigation Bar Fix: Make it transparent
@@ -41,24 +38,8 @@ function RootLayoutNav() {
 
         if (!loading) {
             SplashScreen.hideAsync();
-
-            // Check if we should show What's New modal (only for logged-in users)
-            if (user) {
-                shouldShowWhatsNew().then((shouldShow) => {
-                    if (shouldShow) {
-                        // Small delay to let the app settle
-                        setTimeout(() => setShowWhatsNew(true), 1000);
-                    }
-                });
-            }
         }
-    }, [loading, user]);
-
-    const handleCloseWhatsNew = () => {
-        setShowWhatsNew(false);
-        markWhatsNewAsSeen();
-    };
-
+    }, [loading]);
 
     return (
         <>
@@ -80,6 +61,7 @@ function RootLayoutNav() {
                 <Stack.Screen name="status-page" />
                 <Stack.Screen name="login-callback" />
                 <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="profile-modal" options={{ presentation: 'modal', headerShown: false }} />
                 <Stack.Screen name="chat/[id]" options={{ animation: 'default' }} />
                 <Stack.Screen name="onboarding/avatar" />
                 <Stack.Screen name="onboarding/conversational" />
@@ -90,7 +72,6 @@ function RootLayoutNav() {
             <MiniAudioPlayer />
             <PodcastPlayerExpanded />
             <PodcastEndSummary />
-            <WhatsNewModal visible={showWhatsNew} onClose={handleCloseWhatsNew} />
         </>
     );
 }

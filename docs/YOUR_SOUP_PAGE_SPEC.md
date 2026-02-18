@@ -98,3 +98,18 @@ That path is outside this repo. If you have that file (or more beta quotes), pas
 ---
 
 **Next step:** Implement in [app/(tabs)/index.jsx](code/dashboard/app/(tabs)/index.jsx): (1) hero as above, (2) conversation cards replacing current list rows, (3) "More" block with Support / Request / Browse as list rows (or keep header icons and add one "More" row). Small steps, reversible.
+
+---
+
+## Design directions (pick one, then refine)
+
+Four different premises — not small tweaks. Pick a letter (or a blend) and we mock that in the app.
+
+| Direction | Hero | Conversations | More | Vibe |
+|-----------|------|----------------|------|------|
+| **A. Cards for people, list for rest** | One card (challenge), rounded, clear CTA | Cards (avatar, name, preview, time) — "your people" | List rows under "Soup kitchen" | Pinterest / people first |
+| **B. Big hero, everything recedes** | Large, friendly, cover-of-page feel | Simple list rows (current style) | One line or single "More" row | One thing dominates; rest calm |
+| **C. Feed / social** | "Today" as first feed item (card in stream) | Same scroll, cards or rows | Footer strip: Support · Request · Browse | One continuous feed |
+| **D. Dashboard / zones** | Today = compact widget (one line + CTA) | Main content: list or avatar bubbles | Zone 3: 3 buttons (Support, Request, Browse) | Clear sections; no single giant hero |
+
+Reply with A/B/C/D or a blend (e.g. "A but less card-y"); we implement in `index.jsx` and iterate.

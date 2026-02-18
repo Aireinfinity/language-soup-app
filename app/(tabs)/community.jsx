@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, FlatList, StyleSheet, Image, Pressable, ActivityIndicator, Platform, ScrollView, Alert, Modal, Dimensions } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MessageCircle, Users, ChevronRight, Play, Pause, Globe, PlusCircle, Megaphone, ThumbsUp } from 'lucide-react-native';
+import { MessageCircle, Users, ChevronRight, Play, Pause, Globe, PlusCircle, Megaphone, ThumbsUp, Headphones } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAudioPlayer } from '../../contexts/AudioPlayerContext';
 import { Audio } from 'expo-av';
 import WelcomeMissionModal from '../../components/WelcomeMissionModal';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LanguageRequestModal from '../../components/LanguageRequestModal';
 import { haptics } from '../../utils/haptics';
-import { UserPreviewModal } from '../../components/UserPreviewModal';
 import { useQuests } from '../../contexts/QuestContext';
 import ContextualTooltip from '../../components/ContextualTooltip';
 import { getLanguageFlag } from '../../utils/languageFlags';
@@ -66,7 +66,7 @@ function SpokeTodayWaveform({ durationSeconds, messageId, isPlaying }) {
     );
 }
 
-// Brand colors (LANGUAGE_SOUP_CONTEXT: Turquoise, Pink, Cream; Digital Pop Realism)
+// Brand colors (CONTEXT.md: Turquoise, Pink, Cream; Digital Pop Realism)
 const SOUP_COLORS = {
     turquoise: '#00ADEF',
     pink: '#EC008B',
@@ -92,7 +92,6 @@ export default function CommunityScreen() {
     const [knownIssues, setKnownIssues] = useState([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [activeUsers, setActiveUsers] = useState([]);
-    const [selectedUser, setSelectedUser] = useState(null);
     const [sortMode, setSortMode] = useState('all');
     const { completeQuest } = useQuests();
 
@@ -122,6 +121,94 @@ export default function CommunityScreen() {
     const [activeVoiceMediaUrl, setActiveVoiceMediaUrl] = useState(null);
     const [hasNeverSentMessage, setHasNeverSentMessage] = useState(false); // for first-challenge CTA
     const [voiceSound, setVoiceSound] = useState(null);
+    const [podcastLoading, setPodcastLoading] = useState(false);
+    const { startQueue, setIsPlayerExpanded } = useAudioPlayer();
+
+    const startCommunityPodcast = useCallback(async () => {
+        if (!user?.id) return;
+        if (voiceSound) {
+            try { await voiceSound.unloadAsync(); } catch (_) {}
+            setVoiceSound(null);
+            setActiveVoiceMediaUrl(null);
+        }
+        setPodcastLoading(true);
+        try {
+            const PODCAST_MAX_SECONDS = 5 * 60;
+            let queueItems = [];
+            if (pulseRecentVoices.length > 0) {
+                let total = 0;
+                for (const r of pulseRecentVoices) {
+                    if (!r.mediaUrl) continue;
+                    const sec = r.durationSeconds ?? 30;
+                    if (total + sec > PODCAST_MAX_SECONDS && queueItems.length > 0) break;
+                    queueItems.push({
+                        url: r.mediaUrl,
+                        durationSeconds: r.durationSeconds ?? 30,
+                        messageId: r.messageId,
+                        senderName: r.senderName ?? 'Someone',
+                        senderAvatar: r.avatarUrl ?? null,
+                        senderStatus: null,
+                        groupName: r.groupName ?? 'Soup',
+                        groupId: r.groupId,
+                    });
+                    total += sec;
+                }
+            }
+            if (queueItems.length === 0) {
+                const { data: myGroups } = await supabase.from('app_group_members').select('group_id').eq('user_id', user.id);
+                const groupIds = (myGroups || []).map(g => g.group_id).filter(Boolean);
+                if (groupIds.length === 0) {
+                    setPodcastLoading(false);
+                    return;
+                }
+                const { data: rows } = await supabase
+                    .from('app_messages')
+                    .select('id, media_url, group_id, sender_id, duration_seconds, created_at, sender:app_users!sender_id(display_name, avatar_url, status_text), group:app_groups!group_id(name)')
+                    .in('group_id', groupIds)
+                    .neq('sender_id', user.id)
+                    .eq('message_type', 'voice')
+                    .order('created_at', { ascending: false })
+                    .limit(40);
+                if (!rows?.length) {
+                    setPodcastLoading(false);
+                    Alert.alert('No playable voices', 'No voice messages in your groups right now. Try again later.');
+                    return;
+                }
+                let total = 0;
+                const capped = [];
+                for (const r of rows) {
+                    const sec = r.duration_seconds ?? 30;
+                    if (total + sec > PODCAST_MAX_SECONDS && capped.length > 0) break;
+                    capped.push(r);
+                    total += sec;
+                }
+                queueItems = capped
+                    .filter(r => r.media_url != null && String(r.media_url).trim() !== '')
+                    .map(r => ({
+                        url: r.media_url,
+                        durationSeconds: r.duration_seconds ?? 30,
+                        messageId: r.id,
+                        senderName: r.sender?.display_name ?? 'Someone',
+                        senderAvatar: r.sender?.avatar_url ?? null,
+                        senderStatus: r.sender?.status_text ?? null,
+                        groupName: r.group?.name ?? 'Group',
+                        groupId: r.group_id,
+                    }));
+            }
+            if (queueItems.length === 0) {
+                Alert.alert('No playable voices', 'No playable voice messages right now. Try again later.');
+                setPodcastLoading(false);
+                return;
+            }
+            startQueue(queueItems);
+            setIsPlayerExpanded?.(true);
+        } catch (e) {
+            console.warn('Community podcast failed:', e);
+            Alert.alert('Oops', 'Couldn\'t start podcast. Try again.');
+        } finally {
+            setPodcastLoading(false);
+        }
+    }, [user?.id, startQueue, setIsPlayerExpanded, voiceSound, pulseRecentVoices]);
 
     const loadCommunityChats = useCallback(async () => {
         if (!user?.id) return;
@@ -141,12 +228,17 @@ export default function CommunityScreen() {
                 return;
             }
             const lastReadByGroup = new Map(memberships.map(m => [m.app_groups?.id, m.last_read_at || '1970-01-01']));
+            setChatGroups(memberships.map(m => {
+                const g = m.app_groups;
+                if (!g || !g.id) return null;
+                return { id: g.id, name: g.name, language: g.language, memberCount: g.member_count || 0, lastMessage: null, unreadCount: 0 };
+            }).filter(g => g && !g.name?.toLowerCase().includes('support')));
             const { data: allMessages, error: msgError } = await supabase
                 .from('app_messages')
                 .select('id, group_id, content, created_at, message_type, sender_id')
                 .in('group_id', groupIds)
                 .order('created_at', { ascending: false })
-                .limit(300);
+                .limit(120);
             if (msgError) throw msgError;
             const lastMessageByGroup = {};
             const unreadByGroup = {};
@@ -206,6 +298,7 @@ export default function CommunityScreen() {
         if (!user?.id) return;
         try {
             const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
             const { data: myGroups } = await supabase.from('app_group_members').select('group_id').eq('user_id', user.id);
             if (!myGroups?.length) {
                 setPulseActiveCount(0);
@@ -214,13 +307,26 @@ export default function CommunityScreen() {
                 return;
             }
             const groupIds = myGroups.map(g => g.group_id);
-            const { data: messages, error } = await supabase
-                .from('app_messages')
-                .select('id, sender_id, group_id, message_type, created_at, media_url, duration_seconds, app_users(display_name, avatar_url), app_groups(name, language)')
-                .in('group_id', groupIds)
-                .gte('created_at', twentyFourHoursAgo)
-                .order('created_at', { ascending: false })
-                .limit(80);
+            const [messagesRes, voicesRes] = await Promise.all([
+                supabase
+                    .from('app_messages')
+                    .select('id, sender_id, group_id, message_type, created_at, media_url, duration_seconds, app_users(display_name, avatar_url), app_groups(name, language)')
+                    .in('group_id', groupIds)
+                    .gte('created_at', twentyFourHoursAgo)
+                    .order('created_at', { ascending: false })
+                    .limit(80),
+                supabase
+                    .from('app_messages')
+                    .select('id, sender_id, group_id, created_at, media_url, duration_seconds, app_users(display_name, avatar_url), app_groups(name, language)')
+                    .in('group_id', groupIds)
+                    .eq('message_type', 'voice')
+                    .gte('created_at', sevenDaysAgo)
+                    .neq('sender_id', user.id)
+                    .neq('sender_id', LANGUAGE_SOUP_BOT_ID)
+                    .order('created_at', { ascending: false })
+                    .limit(40),
+            ]);
+            const { data: messages, error } = messagesRes;
             if (error) throw error;
             const list = messages || [];
             const noBotNoSelf = list.filter(m => m.sender_id !== LANGUAGE_SOUP_BOT_ID && m.sender_id !== user.id);
@@ -242,18 +348,27 @@ export default function CommunityScreen() {
                 createdAt: m.created_at,
             })).filter(t => t.senderName && !/^language soup$/i.test(t.senderName.trim()) && !isNoahOrDicebear(t.senderName, ''));
             setTickerItems(ticker);
-            const voiceOnly = noBotNoSelf.filter(m => m.message_type === 'voice' && m.media_url && String(m.media_url).trim());
-            const voiceList = voiceOnly.slice(0, 30).map(m => {
+
+            let voiceRows = (voicesRes.data || []).filter(m => m.media_url && String(m.media_url).trim());
+            if (voicesRes.error) console.warn('Voices in the soup (7d voice query):', voicesRes.error);
+            if (voiceRows.length === 0 && noBotNoSelf.length > 0) {
+                const fromMixed = noBotNoSelf.filter(m => m.message_type === 'voice' && m.media_url && String(m.media_url).trim());
+                voiceRows = fromMixed;
+            }
+            const voiceList = voiceRows.slice(0, 30).map(m => {
                 const s = senderData(m);
+                const grp = groupData(m);
                 return {
-                senderId: m.sender_id,
-                senderName: s.display_name || 'Someone',
-                avatarUrl: s.avatar_url || null,
-                mediaUrl: m.media_url,
-                durationSeconds: m.duration_seconds != null ? m.duration_seconds : 30,
-                messageId: m.id,
-                createdAt: m.created_at,
-            };
+                    senderId: m.sender_id,
+                    senderName: s.display_name || 'Someone',
+                    avatarUrl: s.avatar_url || null,
+                    mediaUrl: m.media_url,
+                    durationSeconds: m.duration_seconds != null ? m.duration_seconds : 30,
+                    messageId: m.id,
+                    createdAt: m.created_at,
+                    groupId: m.group_id,
+                    groupName: grp.name || grp.language || 'Soup',
+                };
             }).filter(r => r.senderName && !/^language soup$/i.test(r.senderName.trim()) && !isNoahOrDicebear(r.senderName, r.avatarUrl || ''));
             setPulseRecentVoices(voiceList);
         } catch (e) {
@@ -704,6 +819,25 @@ export default function CommunityScreen() {
                             </Pressable>
                         )}
                     </View>
+                    {/* Podcast mode — play most recent voices in one go (same as Today) */}
+                    <Pressable
+                        style={({ pressed }) => [styles.podcastModeCard, pressed && { opacity: 0.9 }]}
+                        onPress={() => { try { haptics.light(); } catch (_) {} startCommunityPodcast(); }}
+                        disabled={podcastLoading}
+                    >
+                        <View style={styles.podcastModeGradient}>
+                            <Headphones size={24} color="#fff" />
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.podcastModeTitle}>podcast mode</Text>
+                                <Text style={styles.podcastModeSubtitle}>listen to the community.</Text>
+                            </View>
+                            {podcastLoading ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <ChevronRight size={22} color="#fff" strokeWidth={2.5} />
+                            )}
+                        </View>
+                    </Pressable>
                     {pulseRecentVoices.length > 0 ? (
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.voiceStripWrap} style={styles.voiceStripScroll}>
                             {pulseRecentVoices.map((item, idx) => {
@@ -875,13 +1009,6 @@ export default function CommunityScreen() {
                 </View>
                 </View>
             </ScrollView>
-
-            {/* User Preview Modal */}
-            <UserPreviewModal
-                visible={!!selectedUser}
-                user={selectedUser}
-                onClose={() => setSelectedUser(null)}
-            />
 
             <WelcomeMissionModal
                 visible={showWelcomeMission}
@@ -1302,6 +1429,29 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '800',
         color: SOUP_COLORS.turquoise,
+    },
+    podcastModeCard: {
+        borderRadius: 16,
+        overflow: 'hidden',
+        marginBottom: 14,
+    },
+    podcastModeGradient: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 14,
+        paddingVertical: 16,
+        paddingHorizontal: 18,
+        backgroundColor: SOUP_COLORS.turquoise,
+    },
+    podcastModeTitle: {
+        fontSize: 17,
+        fontWeight: '800',
+        color: '#fff',
+    },
+    podcastModeSubtitle: {
+        fontSize: 13,
+        color: 'rgba(255,255,255,0.9)',
+        marginTop: 2,
     },
     voiceStripCardFirst: {
         borderWidth: 2,

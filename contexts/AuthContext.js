@@ -314,6 +314,7 @@ export const AuthProvider = ({ children }) => {
             const internalPassword = `soup_${emojiPassword}_${targetName.length}`;
             console.log('[Auth] Generated Safe Email:', internalEmail);
 
+            let isNewUser = false;
             // Try to sign in with this identity
             let { data, error } = await supabase.auth.signInWithPassword({
                 email: internalEmail,
@@ -351,10 +352,10 @@ export const AuthProvider = ({ children }) => {
                     .select('id, emoji_password')
                     .ilike('display_name', targetName);
 
-                // If ANY matching name has a DIFFERENT password, it's taken!
+                // Existing user with different emoji password = they're logging in but wrong emojis
                 const passwordConflict = existingProfiles?.find(m => m.emoji_password && m.emoji_password !== emojiPassword);
                 if (passwordConflict) {
-                    throw new Error('Name already taken!');
+                    throw new Error('Wrong emoji password!');
                 }
 
                 // Sign up as a new stable user
@@ -363,7 +364,12 @@ export const AuthProvider = ({ children }) => {
                     password: internalPassword,
                 });
 
-                if (authResult.error) throw authResult.error;
+                if (authResult.error) {
+                    if (authResult.error.message?.includes('already registered') || authResult.error.message?.includes('already exists')) {
+                        throw new Error('Account exists but we couldn’t sign you in. Contact Noah to get back in.');
+                    }
+                    throw authResult.error;
+                }
                 data = authResult.data;
 
                 // NEW SIGNUP: Call Atomic Claim/Create RPC
@@ -381,12 +387,13 @@ export const AuthProvider = ({ children }) => {
 
                 // Profile is definitely ready now
                 setProfileChecked(true);
+                isNewUser = true;
 
             } else if (error) {
                 throw error;
             }
 
-            return data;
+            return { ...data, isNewUser };
         } catch (error) {
             console.error('Stable login failed:', error);
             throw error;

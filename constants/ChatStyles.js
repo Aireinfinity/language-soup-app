@@ -8,49 +8,59 @@ const SOUP_COLORS = {
 };
 
 export const ChatStyles = StyleSheet.create({
-    // Container
+    // Container (warm cream, fun and readable)
     messagesList: {
-        paddingHorizontal: 16
+        paddingHorizontal: 24,
+        paddingVertical: 20,
+        backgroundColor: SOUP_COLORS.cream,
     },
 
-    // Date Separator
+    // Date Separator (fun, brand accent)
     dateSeparator: {
         alignItems: 'center',
-        marginVertical: 16
+        marginVertical: 24
     },
     dateSeparatorBadge: {
-        backgroundColor: 'rgba(0,0,0,0.05)',
-        paddingVertical: 4,
-        paddingHorizontal: 12,
-        borderRadius: 12
+        backgroundColor: '#fff',
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        borderWidth: 2,
+        borderColor: SOUP_COLORS.pink,
+        shadowColor: SOUP_COLORS.pink,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+        elevation: 2,
     },
     dateSeparatorText: {
-        fontSize: 12,
-        color: Colors.textLight,
-        fontWeight: '600'
+        fontSize: 13,
+        color: SOUP_COLORS.pink,
+        fontWeight: '700'
     },
 
     // Message Rows
     messageRow: {
         flexDirection: 'row',
-        marginBottom: 12,
+        marginBottom: 22,
         alignItems: 'flex-end'
     },
     rowMe: {
         justifyContent: 'flex-end'
     },
     rowThem: {
-        justifyContent: 'flex-start'
+        justifyContent: 'flex-start',
+        alignItems: 'flex-end'
     },
 
-    // Avatars
+    // Avatars (square cards, bigger, no ring)
     avatarContainer: {
-        marginRight: 8
+        marginRight: 12
     },
     avatar: {
-        width: 32,
-        height: 32,
-        borderRadius: 16
+        width: 72,
+        height: 72,
+        borderRadius: 10
     },
     avatarPlaceholder: {
         backgroundColor: Colors.primary,
@@ -63,11 +73,12 @@ export const ChatStyles = StyleSheet.create({
         fontWeight: 'bold'
     },
 
-    // Message Bubbles
+    // Message Bubbles (blue = them, green = me; them same width feel as me)
     bubble: {
         paddingVertical: 10,
-        paddingHorizontal: 12,
-        maxWidth: '80%', // Increased from 72% for better text flow
+        paddingHorizontal: 14,
+        maxWidth: '85%',
+        minWidth: 100,
         borderRadius: 20,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
@@ -76,36 +87,52 @@ export const ChatStyles = StyleSheet.create({
         elevation: 2
     },
     bubbleVoice: {
-        paddingVertical: 4,
-        paddingHorizontal: 6
+        paddingVertical: 8,
+        paddingHorizontal: 12,
     },
     bubbleMe: {
-        backgroundColor: Colors.primary,
+        backgroundColor: '#19b091',
         borderBottomRightRadius: 6
     },
     bubbleThem: {
-        backgroundColor: '#fff',
+        backgroundColor: Colors.primary,
         borderBottomLeftRadius: 6,
-        borderWidth: 1,
-        borderColor: '#F2F2F7'
+        borderWidth: 0,
+    },
+    bubbleFromBot: {
+        backgroundColor: SOUP_COLORS.pink,
+        borderBottomLeftRadius: 6,
+        borderWidth: 0,
     },
     bubbleSending: {
         opacity: 0.7
     },
 
-    // Text
+    // Text (larger, easier to read in the main chat focus)
     senderName: {
-        fontSize: 13,
+        fontSize: 14,
         fontWeight: '700',
         color: SOUP_COLORS.pink,
-        marginBottom: 4
+        marginBottom: 8
+    },
+    senderNameThem: {
+        color: '#fff',
+    },
+    senderNameBot: {
+        color: '#fff',
     },
     messageText: {
-        fontSize: 16,
+        fontSize: 17,
         color: '#000',
-        lineHeight: 20
+        lineHeight: 26
     },
     messageTextMe: {
+        color: '#fff'
+    },
+    messageTextThem: {
+        color: '#fff'
+    },
+    messageTextBot: {
         color: '#fff'
     },
 
@@ -150,21 +177,22 @@ export const ChatStyles = StyleSheet.create({
     // Input Area
     inputContainer: {
         backgroundColor: SOUP_COLORS.cream,
-        paddingHorizontal: 10,
-        paddingTop: 8
+        paddingHorizontal: 16,
+        paddingTop: 12,
+        paddingBottom: 4
     },
     standardInputBar: {
         flexDirection: 'row',
         alignItems: 'flex-end',
-        gap: 8
+        gap: 10
     },
     textInput: {
         flex: 1,
         backgroundColor: '#fff',
         borderRadius: 20,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-        fontSize: 16,
+        paddingHorizontal: 18,
+        paddingVertical: 14,
+        fontSize: 17,
         maxHeight: 100,
         color: '#000'
     },
@@ -311,5 +339,54 @@ export const ChatStyles = StyleSheet.create({
         height: 250,
         borderRadius: 12,
         marginBottom: 4,
+    },
+});
+
+/** Compact overrides for feed view: fit ~5–7 messages without scrolling (one challenge per day, all responses) */
+export const CompactChatOverrides = StyleSheet.create({
+    messagesList: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+    },
+    dateSeparator: {
+        marginVertical: 6,
+    },
+    dateSeparatorBadge: {
+        paddingVertical: 2,
+        paddingHorizontal: 8,
+    },
+    dateSeparatorText: {
+        fontSize: 11,
+    },
+    messageRow: {
+        marginBottom: 5,
+    },
+    avatarContainer: {
+        marginRight: 5,
+    },
+    avatar: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+    },
+    avatarText: {
+        fontSize: 11,
+    },
+    bubble: {
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 14,
+    },
+    bubbleVoice: {
+        paddingVertical: 2,
+        paddingHorizontal: 4,
+    },
+    senderName: {
+        fontSize: 11,
+        marginBottom: 2,
+    },
+    messageText: {
+        fontSize: 13,
+        lineHeight: 17,
     },
 });

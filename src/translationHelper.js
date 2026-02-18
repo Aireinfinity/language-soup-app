@@ -52,6 +52,7 @@ export const translateText = async (text, language, getDeepLLangCode, getGoogleL
     }
 
     if (!deeplLang && !googleLang) {
+        console.warn('[TranslateText] No DeepL and no Google code for', language, '→ returning English fallback');
         return text; // No translation available, return original
     }
 
@@ -63,34 +64,50 @@ export const translateText = async (text, language, getDeepLLangCode, getGoogleL
             });
 
             if (!error && !data?.error) {
+                console.log('[TranslateText] DeepL OK for', language, '→', (data.translatedText?.length ?? 0), 'chars');
                 return data.translatedText;
             }
             if (error || data?.error) {
-                // Throw to catch block to continue to fallback, or validly fallback here?
-                // Simple logging here is enough, flow continues to Google below
-                // But wait, if we don't return, we need to ensure we don't return undefined.
-                // So we continue to the next block.
-                console.warn("DeepL failed, falling back...", error);
+                console.warn('[TranslateText] DeepL failed for', language, '→', error?.message || data?.error, '| trying OpenAI then Google...');
             }
         } catch (deeplError) {
-            console.warn("DeepL excepted, falling back...", deeplError);
-            // Swallows error, proceeds to Google
+            console.warn('[TranslateText] DeepL exception for', language, '→', deeplError?.message, '| trying OpenAI then Google...');
         }
     }
 
-    // Google Translate Logic (Fallback for DeepL failures OR languages unsupported by DeepL)
+    // OpenAI translation (same key as pronunciation). Try when DeepL fails so one key can cover both.
+    try {
+        const { data, error } = await supabase.functions.invoke('translate-openai', {
+            body: { text, targetLang: language }
+        });
+        if (!error && !data?.error && data?.translatedText) {
+            console.log('[TranslateText] OpenAI OK for', language, '→', (data.translatedText?.length ?? 0), 'chars');
+            return data.translatedText;
+        }
+        if (error || data?.error) {
+            console.warn('[TranslateText] OpenAI failed for', language, '→', error?.message || data?.error, '| trying Google...');
+        }
+    } catch (openaiError) {
+        console.warn('[TranslateText] OpenAI exception for', language, '→', openaiError?.message, '| trying Google...');
+    }
+
+    // Google Translate Logic (Fallback for DeepL and OpenAI failures OR languages unsupported by both)
+    if (!googleLang) {
+        console.warn('[TranslateText] No DeepL and no Google code for', language, '→ returning English fallback');
+        return text;
+    }
     try {
         const { data, error } = await supabase.functions.invoke('translate-google', {
             body: { text, targetLang: googleLang }
         });
 
         if (error || data?.error) {
-            throw new Error('Google failed');
+            throw new Error(error?.message || data?.error || 'Google failed');
         }
-
+        console.log('[TranslateText] Google OK for', language, '→', (data.translatedText?.length ?? 0), 'chars');
         return data.translatedText;
     } catch (googleError) {
-        console.error('All translation services failed:', googleError);
+        console.error('[TranslateText] All translation services failed for', language, '→', googleError?.message, '| returning English fallback');
         return text; // Fallback to English
     }
 };

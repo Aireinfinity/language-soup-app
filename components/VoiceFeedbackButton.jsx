@@ -232,12 +232,7 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage,
     return (
         <>
             <Pressable onPress={handlePress} style={styles.button}>
-                <View style={styles.buttonContent}>
-                    <Text style={styles.buttonText}>✨ Correct Me</Text>
-                    <View style={styles.newBadge}>
-                        <Text style={styles.newBadgeText}>NEW</Text>
-                    </View>
-                </View>
+                <Text style={styles.buttonText}>✨ Correct me</Text>
             </Pressable>
 
             <Modal
@@ -630,36 +625,17 @@ const WaveformBar = ({ index, totalBars, height, progress }) => {
 const styles = StyleSheet.create({
     button: {
         alignSelf: 'flex-start',
-        backgroundColor: SOUP_COLORS.pink,
-        borderRadius: 12,
-        paddingVertical: 5,
-        paddingHorizontal: 8,
-        shadowColor: '#ec008b',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    buttonContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
+        backgroundColor: '#FDF5E6',
+        borderRadius: 10,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.06)',
     },
     buttonText: {
-        color: '#fff',
+        color: '#2d3436',
         fontSize: 11,
         fontWeight: '700',
-    },
-    newBadge: {
-        backgroundColor: '#fff',
-        paddingHorizontal: 4,
-        paddingVertical: 1,
-        borderRadius: 4,
-        marginLeft: 4,
-    },
-    newBadgeText: {
-        fontSize: 8,
-        fontWeight: '800',
-        color: SOUP_COLORS.pink,
     },
     modalOverlay: {
         flex: 1,

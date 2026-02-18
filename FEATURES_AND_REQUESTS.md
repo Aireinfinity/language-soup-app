@@ -1,6 +1,32 @@
-# Ticket Blitz
+# Features & requests
 
-Update status as you go: New → In progress → Done.
+Stuff customers ask for that you want to build or think about. Update status as you go: New → In progress → Done.
+
+---
+
+## This build (focus)
+
+**Bar for this build:**  
+• **New users:** Can they come in and send voice memos easily?  
+• **Existing users:** Can they come in and send voice memos easily?  
+• **Vibe:** Does it feel social?
+
+**Concrete:**  
+• Confirm everything works with the **current flow** and the **new onboarding flow** (end-to-end).  
+• **Notification strategy (social proof, no spam):**  
+  - **Reply = voice only.** When someone sends a voice memo, others get "Someone replied to the challenge" (max 1 per user per 2 min; atomic dedup). Text replies don't trigger push.  
+  - **Challenge drop:** If you're in 14 groups you can get 14 notifications (one per trigger fire). **Fix when back:** Challenge-drop path should send **max one per user per day** (or per batch), e.g. table `challenge_drop_notification_sent` with (user_id, sent_at) and only send to users we haven't sent to in last 24h.  
+  - **Goal:** Re-engage people who have notifications on, with social proof ("someone replied"), without clumping or spam.  
+  - **Testing:** Notifications run in Edge Functions (production). To test without spamming: staging Supabase project or test-user allowlist in the function.
+
+---
+
+## Next build / remind later
+
+• **Support center redesign** — not for this build. Remind Noah to schedule this for a later build.
+
+• **Revamp support chat: 24/7, always talking to customers, better support chat.**  
+  Who: Noah
 
 ---
 
@@ -8,6 +34,7 @@ IN PROGRESS
 
 • **Onboarding flow + getting users to send their first voice memo**  
   First-challenge is now inline on Today (ChallengeQueueCard, no welcome modal). Next: double-check full onboarding flow end-to-end and confirm new users reliably get to first voice.  
+  **Quick test (new / 0-voice account):** Open Daily tab → you should see a **big 5→4→3→2→1 countdown** on the card, then "your first challenge just dropped" → tap to open challenge. Card should **fit one screen (no scroll)**.  
   Who: Noah
 
 • Initial onboarding "record one word"  
@@ -27,6 +54,18 @@ Audit the path from signup → first challenge (inline on Today) → first send.
 
 NEW
 
+• **Really clean up the user database** — full pass on app_users / auth hygiene, test accounts, orphans, duplicates. Now or later; note for Noah so he doesn't forget.  
+  Who: Noah
+
+• **Emoji password / login** — Never delete or clear app_users.emoji_password; users need it to log in. Migration `20260215_preserve_emoji_password.sql` makes claim_user_identity preserve existing emoji_password on conflict. If an account already lost theirs, Noah may need to set it manually in DB or use password reset flow.  
+  Who: Noah
+
+• **Profile pics load faster** — "add ur profile pic" and other avatar grids: reduce payload (e.g. thumbnail URLs if Supabase Pro / image transform), or add caching (e.g. react-native-fast-image). For now, example-avatars on avatar screen limited to 24.  
+  Who: Noah
+
+• **Greek vs Ancient Greek** — We have Ancient Greek in the list; add a modern Greek (Ελληνικά) group if missing, or merge with Ancient Greek? Noah to decide.  
+  Who: Noah
+
 • Voice rooms — live speaking, HelloTalk alternative with no time limit  
   Who: Allison
 
@@ -39,13 +78,16 @@ NEW
 • Push notification: include topic/hint + social proof (e.g. "X soupers responded")  
   Who: Miranda (2/13)
 
+• Challenge-drop notification: max one per user per day (not one per group — avoid 14 notifications when in 14 groups)  
+  Who: Noah
+
 • Reward native speakers / incentive so they show up and correct (e.g. native chat reward, corner for corrections)  
   Who: Babka, Jon L, Karen
 
 • Complete beginner can participate — product must work for true beginners (e.g. Aidan, 8h into German)  
   Who: Aidan
 
-• Feature voting — let users see and vote on what we're building (Community tab)  
+• **Community tab: little pop-up where people can vote on the next features Noah builds (hierarchy/priority).** Copy vibe: "hi i'm noah i'm building this app alone — vote on what u want to prioritize and we'll go with what the community wants!"  
   Who: Noah
 
 • Guard onboarding swipe so one accidental swipe doesn't kick them out  
@@ -104,14 +146,13 @@ DONE
 
 ---
 
-## Today's one big thing (Feb 15, 2026)
+## Today's one big thing (this build)
 
-Get people to do their daily challenges — existing users first, then new users.
+• **Existing users:** Come in, send voice memos easily. One clear path (see challenge → record → send).  
+• **New users:** Come in, send voice memos easily. Confirm current flow + new onboarding flow end-to-end.  
+• **Feel:** Social. Then (this build or next): notification hierarchy + "when people respond" notifications so users can opt in to what they want.
 
-• Existing users: Redesign the Today tab so there's one clear hero action. Path: see challenge → read/hear it → record → send.  
-• New users: Onboarding flow. Audit the full pipeline from how they find us → sending their first voice memo.
-
-Order of work: customer issues first, then the big thing, then polish.
+Order of work: customer issues first, then confirm flows, then polish. **Later build:** Support center redesign.
 
 ---
 

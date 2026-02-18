@@ -13,12 +13,17 @@ serve(async (req) => {
         const notificationBody = body.body || 'tap to see what it is!'
         const challengeId = body.record?.id || body.data?.challengeId || null
 
-        console.log('🔔 Push notification triggered', { userIds: userIds?.length, challengeId })
+        // Challenge drop webhook (no userIds): skip so we don't send to everyone. Scheduler sends with userIds.
+        if (body.table === 'app_challenges' && body.record?.group_id && !userIds) {
+            return new Response(JSON.stringify({ success: true, sent: 0 }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        }
 
         // Initialize Supabase client
         const supabaseUrl = Deno.env.get('SUPABASE_URL')!
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
         const supabase = createClient(supabaseUrl, supabaseKey)
+
+        console.log('🔔 Push notification triggered', { userIds: userIds?.length, challengeId })
 
         // Get push tokens - either for specific users or all users
         let query = supabase

@@ -118,7 +118,7 @@ export function AudioPlayerProvider({ children }) {
 
     const [nextInQueue, setNextInQueue] = useState(null);
 
-    const playAudio = async (url, audioDuration, messageId, senderName, senderAvatar = null, senderStatus = null, groupName = null, groupId = null) => {
+    const playAudio = async (url, audioDuration, messageId, senderName, senderAvatar = null, senderStatus = null, groupName = null, groupId = null, fromQueue = false) => {
         try {
             // If clicking the same audio that's playing, toggle pause/play
             if (currentAudio?.messageId === messageId && soundRef.current) {
@@ -140,13 +140,15 @@ export function AudioPlayerProvider({ children }) {
                 await soundRef.current.unloadAsync();
                 soundRef.current = null;
             }
-            // Single playback: clear queue so we don't show "up next" from a previous session
-            setQueue([]);
-            setFullQueue([]);
-            setCurrentIndex(0);
-            queueRef.current = [];
-            fullQueueRef.current = [];
-            currentIndexRef.current = 0;
+            // When playing from queue (podcast mode), keep queue state so skip next/prev work
+            if (!fromQueue) {
+                setQueue([]);
+                setFullQueue([]);
+                setCurrentIndex(0);
+                queueRef.current = [];
+                fullQueueRef.current = [];
+                currentIndexRef.current = 0;
+            }
 
             // Set up audio mode
             await Audio.setAudioModeAsync({
@@ -255,7 +257,8 @@ export function AudioPlayerProvider({ children }) {
             first.senderAvatar,
             first.senderStatus,
             first.groupName,
-            first.groupId
+            first.groupId,
+            true // fromQueue: keep queue so skip next/prev work
         );
     };
 
@@ -273,7 +276,7 @@ export function AudioPlayerProvider({ children }) {
         setQueue(full.slice(idx + 1));
         queueRef.current = full.slice(idx + 1);
         const dur = item.durationSeconds ?? (item.duration ? item.duration / 1000 : 30);
-        playAudio(item.url, dur, item.messageId, item.senderName, item.senderAvatar, item.senderStatus, item.groupName, item.groupId);
+        playAudio(item.url, dur, item.messageId, item.senderName, item.senderAvatar, item.senderStatus, item.groupName, item.groupId, true);
     };
 
     const skipPrevious = async () => {
@@ -292,7 +295,7 @@ export function AudioPlayerProvider({ children }) {
             setQueue(full.slice(prevIdx + 1));
             queueRef.current = full.slice(prevIdx + 1);
             const dur = item.durationSeconds ?? (item.duration ? item.duration / 1000 : 30);
-            playAudio(item.url, dur, item.messageId, item.senderName, item.senderAvatar, item.senderStatus, item.groupName, item.groupId);
+            playAudio(item.url, dur, item.messageId, item.senderName, item.senderAvatar, item.senderStatus, item.groupName, item.groupId, true);
         } else {
             seekTo(0);
         }
@@ -319,14 +322,17 @@ export function AudioPlayerProvider({ children }) {
     };
 
     // When a track ends, play next in queue (podcast mode)
-    const playAudioRef = useRef(playAudio);
-    playAudioRef.current = playAudio;
+    const playAudioRef = useRef(null);
+    useEffect(() => {
+        playAudioRef.current = typeof playAudio === 'function' ? playAudio : null;
+    }, [playAudio]);
     useEffect(() => {
         if (!nextInQueue) return;
         const item = nextInQueue;
         setNextInQueue(null);
         const dur = item.durationSeconds ?? (item.duration ? item.duration / 1000 : 30);
-        playAudioRef.current(
+        if (typeof playAudioRef.current === 'function') {
+            playAudioRef.current(
             item.url,
             dur,
             item.messageId,
@@ -334,8 +340,10 @@ export function AudioPlayerProvider({ children }) {
             item.senderAvatar,
             item.senderStatus,
             item.groupName,
-            item.groupId
-        );
+            item.groupId,
+            true
+            );
+        }
     }, [nextInQueue]);
 
     return (

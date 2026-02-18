@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Image, Pressable, ActivityIndicator, Platform, Modal } from 'react-native';
 import { Video } from 'expo-av';
-import { ChatStyles } from '../constants/ChatStyles';
+import { ChatStyles, CompactChatOverrides } from '../constants/ChatStyles';
 import { AudioMessage } from './AudioMessage';
 import { MessageActionMenu } from './MessageActionMenu';
 import { ReactionViewerModal } from "./ReactionViewerModal";
@@ -42,6 +42,7 @@ export function MessageBubble({
     currentChallenge = null, // Fix: Add prop
     onShowInspiration, // New Prop
     onGetTranscript, // (messageId) => Promise<transcript> for "Get transcript" on voice messages
+    compact = false,
 }) {
     const [showActionMenu, setShowActionMenu] = useState(false);
     const [showSharePreview, setShowSharePreview] = useState(false);
@@ -56,6 +57,7 @@ export function MessageBubble({
     const isSending = message.status === 'sending' || message.status === 'uploading';
     const isDeleted = !!message.deleted_at;
     const sender = message[senderKey];
+    const isFromLanguageSoup = (sender?.display_name || '').toLowerCase() === 'language soup';
     // Use display name and avatar directly
     const displayName = sender?.display_name || 'Unknown Souper';
     const avatarUrl = sender?.avatar_url;
@@ -156,13 +158,25 @@ export function MessageBubble({
         setShowActionMenu(false);
     };
 
-    const avatarElement = sender && !isMe && avatarUrl ? (
-        <Pressable onPress={() => onAvatarPress && onAvatarPress(sender)}>
-            <Image
-                source={getAvatarSource(avatarUrl)}
-                style={ChatStyles.avatar}
-                cache="force-cache"
-            />
+    const avatarWrapStyle = [styles.avatarWrap];
+    const avatarElement = sender && !isMe ? (
+        <Pressable onPress={() => onAvatarPress && onAvatarPress(sender)} style={avatarWrapStyle}>
+            {avatarUrl ? (
+                <Image
+                    source={getAvatarSource(avatarUrl)}
+                    style={compact ? [ChatStyles.avatar, CompactChatOverrides.avatar] : ChatStyles.avatar}
+                    cache="force-cache"
+                />
+            ) : (
+                <View style={[
+                    compact ? [ChatStyles.avatar, CompactChatOverrides.avatar] : ChatStyles.avatar,
+                    ChatStyles.avatarPlaceholder,
+                    isFromLanguageSoup && { backgroundColor: SOUP_COLORS.pink },
+                    !isFromLanguageSoup && { backgroundColor: '#19b091' },
+                ]}>
+                    <Text style={ChatStyles.avatarText}>{displayName.charAt(0).toUpperCase() || '?'}</Text>
+                </View>
+            )}
         </Pressable>
     ) : null;
 
@@ -209,37 +223,10 @@ export function MessageBubble({
                         groupId={groupId}
                         transcript={message.transcript}
                         onGetTranscript={onGetTranscript}
+                        showTranscript={false}
                     />
 
-                    {/* Action Buttons Row - Only for voice messages */}
-                    {isMe && message.media_url && (
-                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-                            <Pressable
-                                style={styles.shareButton}
-                                onPress={() => {
-                                    const { haptics } = require('../utils/haptics');
-                                    haptics.medium();
-                                    setShowSharePreview(true);
-                                }}
-                            >
-                                <Text style={styles.shareButtonEmoji}>🔥</Text>
-                                <Text style={styles.shareButtonText}>Challenge a Friend</Text>
-                            </Pressable>
-
-                            <VoiceFeedbackButton
-                                audioUrl={message.media_url || message.content}
-                                language={groupLanguage}
-                                userId={message.sender_id}
-                                groupLanguage={groupLanguage}
-                                // CONTEXT INJECTION (Frontend Only)
-                                challengeContext={{
-                                    prompt: currentChallenge?.prompt_text,
-                                    starter_phrase: message.challenge_metadata?.starter_phrase || currentChallenge?.metadata?.starter_phrase,
-                                    vocab_bank: message.challenge_metadata?.vocab_bank || currentChallenge?.metadata?.vocab_bank
-                                }}
-                            />
-                        </View>
-                    )}
+                    {/* Action row under voice — removed so only play shows */}
 
                     {/* Share Preview Modal */}
                     <Modal
@@ -332,9 +319,11 @@ export function MessageBubble({
                     )}
                     {/* Caption below media */}
                     {message.content && message.content !== message.media_url && (
-                        <Text style={[
-                            ChatStyles.messageText,
+<Text style={[
+                            compact ? [ChatStyles.messageText, CompactChatOverrides.messageText] : ChatStyles.messageText,
                             isMe && ChatStyles.messageTextMe,
+                            !isMe && !isFromLanguageSoup && ChatStyles.messageTextThem,
+                            isFromLanguageSoup && ChatStyles.messageTextBot,
                             { marginTop: 8 }
                         ]}>
                             {message.content}
@@ -343,43 +332,43 @@ export function MessageBubble({
                 </View>
             ) : message.message_type === 'system' ? (
                 <View>
-                    <Text style={[styles.systemMessageText, isMe && { color: '#fff' }]}>
+                    <Text style={[styles.systemMessageText, (isMe || isFromLanguageSoup) && { color: '#fff' }]}>
                         {message.content}
                     </Text>
-                    {/* Inline Inspiration Component (System) */}
-                    {sender?.display_name?.toLowerCase() === 'language soup' &&
+                    {/* Need some ingredients — commented out for now */}
+                    {/* sender?.display_name?.toLowerCase() === 'language soup' &&
                         (message.challenge_metadata || (message.content && message.content.toLowerCase().includes('#challenge'))) && (
                             <InspirationInline
                                 metadata={message.challenge_metadata}
                                 language={groupLanguage}
-                                // Pass generation context
                                 prompt={message.challenge_prompt || currentChallenge?.prompt_text}
                                 challengeId={message.challenge_id || currentChallenge?.id}
                             />
-                        )}
+                        ) */}
                 </View>
             ) : (
                 <View>
-                    <Text style={[
-                        ChatStyles.messageText,
-                        isMe && ChatStyles.messageTextMe
-                    ]}>
-                        {message.content}
+<Text style={[
+                            compact ? [ChatStyles.messageText, CompactChatOverrides.messageText] : ChatStyles.messageText,
+                            isMe && ChatStyles.messageTextMe,
+                            !isMe && !isFromLanguageSoup && ChatStyles.messageTextThem,
+                            isFromLanguageSoup && ChatStyles.messageTextBot
+                        ]}>
+                            {message.content}
                         {message.edited_at && (
-                            <Text style={[styles.editedLabel, isMe && { color: '#fff' }]}> Edited</Text>
+                            <Text style={[styles.editedLabel, (isMe || isFromLanguageSoup) && { color: 'rgba(255,255,255,0.9)' }]}> Edited</Text>
                         )}
                     </Text>
-                    {/* Inline Inspiration Component (Text) */}
-                    {sender?.display_name?.toLowerCase() === 'language soup' &&
+                    {/* Need some ingredients — commented out for now */}
+                    {/* sender?.display_name?.toLowerCase() === 'language soup' &&
                         (message.challenge_metadata || (message.content && message.content.toLowerCase().includes('#challenge'))) && (
                             <InspirationInline
                                 metadata={message.challenge_metadata}
                                 language={groupLanguage}
-                                // Pass generation context
                                 prompt={message.challenge_prompt || currentChallenge?.prompt_text}
                                 challengeId={message.challenge_id || currentChallenge?.id}
                             />
-                        )}
+                        ) */}
                 </View>
             )}
 
@@ -406,18 +395,24 @@ export function MessageBubble({
 
     if (isSpotlight) {
         return (
-            <View style={[ChatStyles.messageRow, isMe ? ChatStyles.rowMe : ChatStyles.rowThem, { marginBottom: 0 }]}>
+            <View style={[ChatStyles.messageRow, compact && CompactChatOverrides.messageRow, isMe ? ChatStyles.rowMe : ChatStyles.rowThem, { marginBottom: 0 }]}>
                 {!isMe && avatarElement}
                 <View style={[
                     ChatStyles.bubble,
+                    compact && CompactChatOverrides.bubble,
                     message.message_type === 'voice' && ChatStyles.bubbleVoice,
-                    isMe ? ChatStyles.bubbleMe : ChatStyles.bubbleThem,
+                    message.message_type === 'voice' && compact && CompactChatOverrides.bubbleVoice,
+                    isMe ? ChatStyles.bubbleMe : (isFromLanguageSoup ? ChatStyles.bubbleFromBot : ChatStyles.bubbleThem),
                     { maxWidth: '100%' }
                 ]}>
                     {!isMe && sender && (
-                        <Text style={ChatStyles.senderName}>
+                        <Text style={[
+                            compact ? [ChatStyles.senderName, CompactChatOverrides.senderName] : ChatStyles.senderName,
+                            isFromLanguageSoup ? ChatStyles.senderNameBot : ChatStyles.senderNameThem
+                        ]}>
                             {sender.display_name}
                             {languageString ? ` ${languageString}` : ''}
+                            {groupName ? ` · ${groupName}` : ''}
                         </Text>
                     )}
                     {bubbleContent}
@@ -428,14 +423,16 @@ export function MessageBubble({
     }
 
     return (
-        <View style={[ChatStyles.messageRow, isMe ? ChatStyles.rowMe : ChatStyles.rowThem]}>
+        <View style={[ChatStyles.messageRow, compact && CompactChatOverrides.messageRow, isMe ? ChatStyles.rowMe : ChatStyles.rowThem]}>
             {isMe ? (
                 <>
                     <Pressable
                         style={[
                             ChatStyles.bubble,
+                            compact && CompactChatOverrides.bubble,
                             message.message_type === 'voice' && ChatStyles.bubbleVoice,
-                            isMe ? ChatStyles.bubbleMe : ChatStyles.bubbleThem,
+                            message.message_type === 'voice' && compact && CompactChatOverrides.bubbleVoice,
+                            isMe ? ChatStyles.bubbleMe : (isFromLanguageSoup ? ChatStyles.bubbleFromBot : ChatStyles.bubbleThem),
                             isSending && ChatStyles.bubbleSending,
                             showActionMenu && styles.bubbleHighlight
                         ]}
@@ -490,12 +487,14 @@ export function MessageBubble({
                 </>
             ) : (
                 <>
-                    {avatarElement}
+                    <View style={styles.avatarSpacerThem}>{avatarElement}</View>
                     <Pressable
                         style={[
                             ChatStyles.bubble,
+                            compact && CompactChatOverrides.bubble,
                             message.message_type === 'voice' && ChatStyles.bubbleVoice,
-                            isMe ? ChatStyles.bubbleMe : ChatStyles.bubbleThem,
+                            message.message_type === 'voice' && compact && CompactChatOverrides.bubbleVoice,
+                            isFromLanguageSoup ? ChatStyles.bubbleFromBot : ChatStyles.bubbleThem,
                             isSending && ChatStyles.bubbleSending,
                             showActionMenu && styles.bubbleHighlight
                         ]}
@@ -518,9 +517,13 @@ export function MessageBubble({
                         ref={bubbleRef}
                     >
                         {!isMe && sender && (
-                            <Text style={ChatStyles.senderName}>
+                            <Text style={[
+                                compact ? [ChatStyles.senderName, CompactChatOverrides.senderName] : ChatStyles.senderName,
+                                isFromLanguageSoup ? ChatStyles.senderNameBot : ChatStyles.senderNameThem
+                            ]}>
                                 {sender.display_name}
                                 {languageString ? ` ${languageString}` : ''}
+                                {groupName ? ` · ${groupName}` : ''}
                             </Text>
                         )}
 
@@ -595,38 +598,29 @@ const styles = StyleSheet.create({
         left: 8,
         right: 'auto',
     },
+    avatarWrap: {
+        alignSelf: 'flex-start',
+    },
+    avatarSpacerThem: {
+        marginRight: 12,
+    },
     shareButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
-        paddingVertical: 5,
-        paddingHorizontal: 8,
-        borderRadius: 12,
-        backgroundColor: '#FDF5E6', // Cream color
-    },
-    newBadge: {
-        position: 'absolute',
-        top: -4,
-        left: -4,
-        backgroundColor: '#00aedf',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 8,
-        borderWidth: 2,
-        borderColor: '#fff',
-    },
-    newBadgeText: {
-        fontSize: 8,
-        fontWeight: '900',
-        color: '#fff',
-        letterSpacing: 0.5,
+        gap: 6,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 10,
+        backgroundColor: '#FDF5E6',
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.06)',
     },
     shareButtonEmoji: {
         fontSize: 12,
     },
     shareButtonText: {
         fontSize: 11,
-        color: '#000', // Black text on cream
+        color: '#2d3436',
         fontWeight: '700',
     },
     modalOverlay: {
@@ -797,9 +791,9 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0, 0, 0, 0.05)',
         borderLeftWidth: 3,
         borderLeftColor: SOUP_COLORS.blue,
-        borderRadius: 4,
-        padding: 8,
-        marginBottom: 8,
+        borderRadius: 6,
+        padding: 10,
+        marginBottom: 10,
     },
     replyBar: {
         position: 'absolute',

@@ -1,0 +1,17 @@
+# Reduce upload file count (Vercel limit 15k)
+node_modules
+.expo
+dist
+web-build
+_legacy_maintenance
+*.md
+docs
+.cursor
+.git
+*.log
+.DS_Store
+android
+ios
+*.pem
+.env
+.env.*

@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
-import { BarChart3, Users, MessageSquare, LifeBuoy, LogOut, Search, Zap, Megaphone, TrendingUp, Activity, MessageCircle, Layers, Menu, X, Target, DollarSign, Share2 } from 'lucide-react';
+import { BarChart3, Users, MessageSquare, LogOut, Search, Zap, Megaphone, Activity, MessageCircle, Layers, Menu, X, Target, DollarSign, Globe, Castle, ChefHat, Flame, Sprout } from 'lucide-react';
 import ChallengesTab from './ChallengesTab';
 import SupportInbox from './SupportInbox';
 import SupportTabSimplified from './SupportTabSimplified';
@@ -24,7 +24,7 @@ export default function App() {
     return localStorage.getItem('dashboardActiveTab') || 'overview';
   });
 
-  const [kitchenSubTab, setKitchenSubTab] = useState('challenges');
+  const [kitchenSubTab, setKitchenSubTab] = useState('challenges'); // challenges | groups | live_feed
   const [fireSubTab, setFireSubTab] = useState('support');
   const [unreadSupportCount, setUnreadSupportCount] = useState(0);
 
@@ -202,17 +202,30 @@ export default function App() {
     setAuthError('');
 
     try {
-      // Check if this name is the admin
       if (name.trim().toLowerCase() !== 'noah :)') {
         throw new Error('Not an admin account');
       }
 
-      // Sign in anonymously
+      // Reuse existing session so we don't create a new random anon user every time
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session?.user) {
+        const { data: adminCheck } = await supabase
+          .from('app_users')
+          .select('id')
+          .eq('id', sessionData.session.user.id)
+          .eq('is_admin', true)
+          .single();
+        if (adminCheck) {
+          setUser(sessionData.session.user);
+          setLoggingIn(false);
+          return;
+        }
+      }
+
       const { data, error } = await supabase.auth.signInAnonymously();
       if (error) throw error;
 
       if (data.user) {
-        // Check if this specific auth user already has a profile
         const { data: existingProfile } = await supabase
           .from('app_users')
           .select('id')
@@ -220,7 +233,6 @@ export default function App() {
           .single();
 
         if (!existingProfile) {
-          // Create user profile with admin access only if it doesn't exist
           const { error: profileError } = await supabase
             .from('app_users')
             .upsert({
@@ -233,12 +245,8 @@ export default function App() {
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             });
-
-          if (profileError) {
-            console.warn('Profile creation error:', profileError);
-          }
+          if (profileError) console.warn('Profile creation error:', profileError);
         }
-
         setUser(data.user);
       }
     } catch (err) {
@@ -305,7 +313,7 @@ export default function App() {
           </form>
 
           <p className="text-xs text-gray-500 text-center mt-4 italic">
-            (hint: only admins can access this)
+            Stay on the same browser so you stay logged in. One admin only.
           </p>
         </div>
       </div>
@@ -313,37 +321,38 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex bg-[var(--soup-beige)] text-[var(--soup-dark)]">
+    <div className="min-h-screen flex bg-[var(--soup-linen)] text-[var(--soup-dark)]">
       {/* Mobile Menu Button */}
       <button
         onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-3 bg-white rounded-xl shadow-lg border border-black/5"
+        className="lg:hidden fixed top-4 left-4 z-50 p-3 bg-[var(--soup-turquoise)] text-white rounded-xl shadow-lg"
       >
         {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
       </button>
 
-      {/* Sidebar */}
-      <div className={`w-64 bg-white border-r border-black/5 flex flex-col shadow-sm z-40 fixed lg:static h-full transition-transform duration-300 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+      {/* Sidebar — light, brand colors, fun social vibe (not dark mode) */}
+      <div className={`w-64 bg-white border-r border-[var(--soup-turquoise)]/10 flex flex-col shadow-sm z-40 fixed lg:static h-full transition-transform duration-300 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}>
-        <div className="p-8">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm border border-black/5 overflow-hidden transition-transform hover:scale-110 duration-500">
-              <img src="/src/assets/ls-icon-bowl.png" alt="Soup Logo" className="w-full h-full object-cover scale-110" />
+        <div className="p-6">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-[var(--soup-turquoise)]/15 flex items-center justify-center overflow-hidden border-2 border-[var(--soup-turquoise)]/30">
+              <img src="/src/assets/ls-icon-bowl.png" alt="Soup" className="w-full h-full object-cover scale-110" />
             </div>
             <div className="flex flex-col">
-              <h1 className="text-xl font-black tracking-tight text-[var(--soup-dark)] leading-none lowercase">language</h1>
-              <h1 className="text-xl font-black tracking-tight text-[var(--soup-turquoise)] leading-none lowercase">soup</h1>
+              <h1 className="text-lg font-black tracking-tight text-[var(--soup-dark)] leading-none lowercase">language</h1>
+              <h1 className="text-lg font-black tracking-tight text-[var(--soup-turquoise)] leading-none lowercase">soup</h1>
             </div>
           </div>
-          <p className="text-[10px] font-bold text-gray-400 mt-2 tracking-widest uppercase">Admin Dashboard</p>
+          <p className="text-[10px] font-black text-[var(--soup-turquoise)]/70 mt-2 tracking-widest uppercase">Admin</p>
         </div>
 
         <nav className="flex-1 px-4 space-y-1 mt-2">
           {[
-            { id: 'castle', label: 'the castle', icon: Target },
-            { id: 'kitchen', label: 'daily challenges', icon: Share2, badge: pendingRequestsCount },
-            { id: 'fire_station', label: 'fire station', icon: LifeBuoy, badge: unreadSupportCount },
-            { id: 'garden', label: 'the garden', icon: TrendingUp },
+            { id: 'castle', label: 'the castle', icon: Castle, color: 'turquoise' },
+            { id: 'kitchen', label: 'daily challenges', icon: ChefHat, color: 'pink', badge: pendingRequestsCount },
+            { id: 'fire_station', label: 'fire station', icon: Flame, color: 'pink', badge: unreadSupportCount },
+            { id: 'garden', label: 'the garden', icon: Sprout, color: 'green' },
+            { id: 'finances', label: 'finances', icon: DollarSign, color: 'turquoise' },
           ].map((item) => (
             <button
               key={item.id}
@@ -352,8 +361,12 @@ export default function App() {
                 setMobileMenuOpen(false);
               }}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl font-black transition-all ${activeTab === item.id || (activeTab === 'overview' && item.id === 'castle')
-                ? 'bg-[var(--soup-turquoise)] text-white shadow-lg shadow-[var(--soup-turquoise)]/20'
-                : 'text-gray-500 hover:bg-white hover:text-[var(--soup-turquoise)]'
+                ? item.color === 'pink'
+                  ? 'bg-[var(--soup-pink)] text-white shadow-lg shadow-[var(--soup-pink)]/20'
+                  : item.color === 'green'
+                    ? 'bg-[var(--soup-green)] text-white shadow-lg shadow-[var(--soup-green)]/20'
+                    : 'bg-[var(--soup-turquoise)] text-white shadow-lg shadow-[var(--soup-turquoise)]/20'
+                : 'text-[var(--soup-dark)]/80 hover:bg-[var(--soup-turquoise)]/10 hover:text-[var(--soup-turquoise)]'
                 }`}
             >
               <div className="flex items-center gap-3">
@@ -370,28 +383,12 @@ export default function App() {
               )}
             </button>
           ))}
-
-          <div className="pt-4 mt-4 border-t border-gray-100">
-            <button
-              onClick={() => {
-                setActiveTab('finances');
-                setMobileMenuOpen(false);
-              }}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-bold text-xs transition-all ${activeTab === 'finances'
-                ? 'bg-gray-100 text-[var(--soup-dark)]'
-                : 'text-gray-400 hover:text-gray-600'
-                }`}
-            >
-              <DollarSign size={14} />
-              <span className="lowercase">finances</span>
-            </button>
-          </div>
         </nav>
 
-        <div className="p-6 border-t border-gray-100">
+        <div className="p-4 border-t border-[var(--soup-turquoise)]/10">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 font-bold hover:bg-red-50 hover:text-red-500 rounded-xl transition-all"
+            className="w-full flex items-center gap-3 px-4 py-3 text-[var(--soup-dark)]/60 font-bold hover:bg-[var(--soup-pink)]/10 hover:text-[var(--soup-pink)] rounded-xl transition-all"
           >
             <LogOut size={18} />
             <span className="text-sm">Sign Out</span>
@@ -409,14 +406,14 @@ export default function App() {
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto flex flex-col relative">
-        {/* Top Branding Badge (Desktop only) */}
-        <div className="hidden lg:flex fixed top-8 right-8 z-50 items-center gap-3 bg-white/80 backdrop-blur-md px-5 py-3 rounded-2xl border border-black/5 shadow-sm animate-in slide-in-from-top-4 duration-1000">
-          <div className="w-8 h-8 rounded-full overflow-hidden shadow-sm">
+        {/* Top badge — light brand */}
+        <div className="hidden lg:flex fixed top-6 right-6 z-50 items-center gap-3 bg-white border-2 border-[var(--soup-turquoise)]/20 text-[var(--soup-dark)] px-4 py-2.5 rounded-2xl shadow-lg">
+          <div className="w-8 h-8 rounded-xl overflow-hidden bg-[var(--soup-turquoise)]/15 border border-[var(--soup-turquoise)]/30">
             <img src="/src/assets/ls-icon-bowl.png" className="w-full h-full object-cover scale-110" alt="Logo" />
           </div>
           <div className="flex flex-col">
-            <span className="text-[10px] font-black uppercase tracking-widest text-[var(--soup-turquoise)] leading-tight">Admin Hub</span>
-            <span className="text-[10px] font-bold text-gray-400 leading-tight">v1.2 // soup is hot 🍲</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-[var(--soup-turquoise)] leading-tight">Admin</span>
+            <span className="text-[10px] font-bold text-[var(--soup-dark)]/70 leading-tight">soup is hot 🍲</span>
           </div>
         </div>
 
@@ -427,17 +424,17 @@ export default function App() {
               <div className="flex justify-between items-center mb-10">
                 <div>
                   <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">gm {user.display_name?.split(' ')[0]} ✨</h1>
-                  <p className="text-gray-500 font-bold mt-1">the state of the soup today.</p>
+                  <p className="text-[var(--soup-dark)]/60 font-bold mt-1">the state of the soup today.</p>
                 </div>
-                <div className="flex items-center gap-2 px-4 py-2 bg-green-50 text-[var(--soup-green)] rounded-full text-xs font-black uppercase tracking-wider border border-[var(--soup-green)]/10">
+                <div className="flex items-center gap-2 px-4 py-2 bg-[var(--soup-green)]/15 text-[var(--soup-green)] rounded-full text-xs font-black uppercase tracking-wider border-2 border-[var(--soup-green)]/30">
                   <div className="w-2 h-2 rounded-full bg-[var(--soup-green)] animate-pulse"></div>
-                  App is Live
+                  Live
                 </div>
               </div>
 
               <div className="space-y-12">
                 <OverviewTab />
-                <div className="pt-8 border-t border-black/5">
+                <div className="pt-8 border-t-2 border-[var(--soup-turquoise)]/20">
                   <h3 className="text-2xl font-black text-[var(--soup-dark)] mb-6 flex items-center gap-2">
                     <Target className="text-[var(--soup-turquoise)]" size={24} />
                     2026 roadmap
@@ -451,22 +448,27 @@ export default function App() {
           {/* 🍳 Daily Challenges - Simple 2-card layout */}
           {activeTab === 'kitchen' && (
             <div className="space-y-8 animate-in fade-in duration-500">
-              <div className="mb-6">
-                <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">daily challenges 📅</h1>
-                <p className="text-gray-500 font-bold mt-1">queue up and see what's cooking.</p>
+              <div className="mb-6 flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-[var(--soup-turquoise)]/15 border-2 border-[var(--soup-turquoise)]/30 flex items-center justify-center overflow-hidden">
+                  <img src="/src/assets/ls-icon-bowl.png" alt="" className="w-full h-full object-cover scale-110" />
+                </div>
+                <div>
+                  <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">daily challenges 📅</h1>
+                  <p className="text-[var(--soup-dark)]/60 font-bold mt-1">queue up and see what's cooking.</p>
+                </div>
               </div>
 
               <PillarSubNav
                 options={[
                   { id: 'challenges', label: 'Challenges' },
-                  { id: 'groups', label: 'Groups & Requests' }
+                  { id: 'groups', label: 'Groups & Requests' },
+                  { id: 'live_feed', label: 'Live feed' }
                 ]}
                 activeId={kitchenSubTab}
                 onChange={setKitchenSubTab}
               />
 
-              {kitchenSubTab === 'challenges' ? (
-                /* Card 1: Challenge Queue */
+              {kitchenSubTab === 'challenges' && (
                 <div className="bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm p-8">
                   <QueueTab
                     user={user}
@@ -475,35 +477,41 @@ export default function App() {
                     getGoogleLangCode={getGoogleLangCode}
                   />
                 </div>
-              ) : (
+              )}
+              {kitchenSubTab === 'groups' && (
                 <GroupsTab
                   groups={groups}
                   loadGroups={loadGroups}
                 />
               )}
-
-              {/* Card 2: Live Feed */}
-              <div className="bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm p-8">
-                <h3 className="text-2xl font-black text-[var(--soup-dark)] mb-6 flex items-center gap-2">
-                  <Activity className="text-[var(--soup-pink)]" size={24} />
-                  live feed
-                </h3>
-                <LiveFeedTab />
-              </div>
+              {kitchenSubTab === 'live_feed' && (
+                <div className="bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm p-8">
+                  <h3 className="text-2xl font-black text-[var(--soup-dark)] mb-6 flex items-center gap-2">
+                    <Activity className="text-[var(--soup-pink)]" size={24} />
+                    live feed
+                  </h3>
+                  <LiveFeedTab />
+                </div>
+              )}
             </div>
           )}
 
-          {/* 🚒 The Fire Station: Support & Users */}
+          {/* 🚒 The Fire Station: 24/7 in-app chat + tickets + directory */}
           {activeTab === 'fire_station' && (
             <div className="space-y-8 animate-in fade-in duration-500">
-              <div className="mb-10">
-                <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">the fire station 🚒</h1>
-                <p className="text-gray-500 font-bold mt-1">triage and user care.</p>
+              <div className="mb-10 flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-[var(--soup-turquoise)]/15 border-2 border-[var(--soup-turquoise)]/30 flex items-center justify-center overflow-hidden">
+                  <img src="/src/assets/ls-icon-bowl.png" alt="" className="w-full h-full object-cover scale-110" />
+                </div>
+                <div>
+                  <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">the fire station 🚒</h1>
+                  <p className="text-[var(--soup-dark)]/60 font-bold mt-1">24/7 in-app chat. Get it on your phone so you never miss a message.</p>
+                </div>
               </div>
-              <div className="bg-white rounded-[32px] overflow-hidden border border-black/5 shadow-sm">
+              <div className="bg-white rounded-[32px] overflow-hidden border-2 border-[var(--soup-pink)]/20 shadow-lg shadow-[var(--soup-pink)]/5">
                 <PillarSubNav
                   options={[
-                    { id: 'support', label: 'support tickets' },
+                    { id: 'support', label: '24/7 chat' },
                     { id: 'users', label: 'user directory' }
                   ]}
                   activeId={fireSubTab || 'support'}
@@ -520,9 +528,14 @@ export default function App() {
           {/* 📈 The Garden: Growth & Marketing */}
           {activeTab === 'garden' && (
             <div className="space-y-12 animate-in fade-in duration-500">
-              <div className="mb-6">
-                <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">the garden 📈</h1>
-                <p className="text-gray-500 font-bold mt-1">seeds of growth.</p>
+              <div className="mb-6 flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-[var(--soup-turquoise)]/15 border-2 border-[var(--soup-turquoise)]/30 flex items-center justify-center overflow-hidden">
+                  <img src="/src/assets/ls-icon-bowl.png" alt="" className="w-full h-full object-cover scale-110" />
+                </div>
+                <div>
+                  <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">the garden 📈</h1>
+                  <p className="text-[var(--soup-dark)]/60 font-bold mt-1">seeds of growth.</p>
+                </div>
               </div>
 
               <MarketingTab />
@@ -534,7 +547,7 @@ export default function App() {
             <div className="space-y-8 animate-in fade-in duration-500">
               <div className="mb-10">
                 <h1 className="text-4xl font-black text-[var(--soup-dark)] tracking-tight">finances 💸</h1>
-                <p className="text-gray-500 font-bold mt-1">the boring back-office stuff.</p>
+                <p className="text-[var(--soup-dark)]/60 font-bold mt-1">back-office.</p>
               </div>
               <FinancesTab />
             </div>
@@ -548,14 +561,14 @@ export default function App() {
 // Sub-navigation for Pillars
 function PillarSubNav({ options, activeId, onChange }) {
   return (
-    <div className="flex border-b border-gray-100 px-4">
+    <div className="flex border-b-2 border-[var(--soup-turquoise)]/15 px-4">
       {options.map(opt => (
         <button
           key={opt.id}
           onClick={() => onChange(opt.id)}
           className={`px-6 py-4 text-xs font-black uppercase tracking-widest transition-all relative ${activeId === opt.id
             ? 'text-[var(--soup-turquoise)]'
-            : 'text-gray-400 hover:text-gray-600'
+            : 'text-[var(--soup-dark)]/60 hover:text-[var(--soup-dark)]'
             }`}
         >
           {opt.label}
@@ -655,8 +668,7 @@ function UsersTab() {
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Learning 🌱</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Conversational 💬</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Language soup</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Groups</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notifications 🔔</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Joined</th>
@@ -678,22 +690,19 @@ function UsersTab() {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-gray-600 text-sm">
-                    {user.learning_languages ? (
-                      <div className="flex flex-wrap gap-1">
-                        {(Array.isArray(user.learning_languages) ? user.learning_languages : [user.learning_languages]).map((lang, i) => (
-                          <span key={i} className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">{lang}</span>
-                        ))}
-                      </div>
-                    ) : '·'}
-                  </td>
-                  <td className="px-6 py-4 text-gray-600 text-sm">
-                    {user.fluent_languages ? (
-                      <div className="flex flex-wrap gap-1">
-                        {(Array.isArray(user.fluent_languages) ? user.fluent_languages : [user.fluent_languages]).map((lang, i) => (
-                          <span key={i} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">{lang}</span>
-                        ))}
-                      </div>
-                    ) : '·'}
+                    {(() => {
+                      const learning = Array.isArray(user.learning_languages) ? user.learning_languages : (user.learning_languages ? [user.learning_languages] : []);
+                      const fluent = Array.isArray(user.fluent_languages) ? user.fluent_languages : (user.fluent_languages ? [user.fluent_languages] : []);
+                      const all = [...new Set([...learning, ...fluent])].filter(Boolean);
+                      if (all.length === 0) return '·';
+                      return (
+                        <div className="flex flex-wrap gap-1">
+                          {all.map((lang, i) => (
+                            <span key={i} className="px-2 py-1 bg-[var(--soup-turquoise)]/10 text-[var(--soup-dark)] rounded text-xs font-medium">{lang}</span>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-6 py-4 text-gray-600 text-sm">
                     <button
@@ -797,6 +806,7 @@ function OverviewTab() {
     activeUsers: 0,
     totalMessages: 0,
     totalGroups: 0,
+    languagesInUse: 0,
     shares: [],
     totalShares: 0
   });
@@ -837,6 +847,13 @@ function OverviewTab() {
       const { count: groupsCount } = await supabase
         .from('app_groups')
         .select('*', { count: 'exact', head: true });
+
+      const { data: groupLanguages } = await supabase
+        .from('app_groups')
+        .select('language');
+      const languagesInUse = new Set(
+        (groupLanguages || []).map(g => (g.language || '').trim()).filter(Boolean)
+      ).size;
 
       // Fetch viral shares
       const { data: shareLinks } = await supabase
@@ -880,6 +897,7 @@ function OverviewTab() {
         activeUsers: uniqueActive.size,
         totalMessages: messagesCount || 0,
         totalGroups: groupsCount || 0,
+        languagesInUse,
         shares: shares,
         totalShares: filteredShareLinks.length || 0
       });
@@ -894,7 +912,7 @@ function OverviewTab() {
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 mb-12">
         <StatCard
           label="Soupers"
           value={stats.totalUsers}
@@ -908,16 +926,23 @@ function OverviewTab() {
           icon={Activity}
         />
         <StatCard
-          label="Messages"
-          value={stats.totalMessages}
-          color="turquoise"
-          icon={MessageCircle}
+          label="Active %"
+          value={stats.totalUsers ? Math.round((stats.activeUsers / stats.totalUsers) * 100) : 0}
+          suffix="%"
+          color="pink"
+          icon={Activity}
         />
         <StatCard
           label="Groups"
           value={stats.totalGroups}
           color="green"
           icon={Layers}
+        />
+        <StatCard
+          label="Languages in use"
+          value={stats.languagesInUse}
+          color="turquoise"
+          icon={Globe}
         />
       </div>
 
@@ -938,7 +963,7 @@ function OverviewTab() {
   );
 }
 
-function StatCard({ label, value, color, icon: Icon }) {
+function StatCard({ label, value, color, icon: Icon, suffix = '' }) {
   const colorStyles = {
     turquoise: 'text-[var(--soup-turquoise)] bg-[var(--soup-turquoise)]/10',
     pink: 'text-[var(--soup-pink)] bg-[var(--soup-pink)]/10',
@@ -954,7 +979,7 @@ function StatCard({ label, value, color, icon: Icon }) {
         <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{label}</div>
       </div>
       <div className="text-4xl font-black text-[var(--soup-dark)] tracking-tighter">
-        {value.toLocaleString()}
+        {typeof value === 'number' ? value.toLocaleString() : value}{suffix}
       </div>
     </div>
   );
@@ -969,7 +994,7 @@ function GroupsTab({ groups, loadGroups }) {
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState('active'); // 'active' or 'requests'
+  const [activeView, setActiveView] = useState('requests'); // default to requests (super important); 'active' or 'requests'
   const [creatingGroup, setCreatingGroup] = useState(false);
 
   // Create Group Modal
@@ -1022,6 +1047,8 @@ function GroupsTab({ groups, loadGroups }) {
       setRequests(data || []);
     } catch (err) {
       console.error('Error loading requests:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1311,11 +1338,11 @@ function GroupsTab({ groups, loadGroups }) {
   );
 }
 
-// Support Tab - Trello-style Ticket Board
+// Support Tab — Chat first (inbox), then tickets
 function SupportTab({ unreadCount }) {
   const [activeView, setActiveView] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get('view') || 'tickets';
+    return params.get('view') || 'inbox';
   });
 
   const handleViewChange = (newView) => {
@@ -1327,35 +1354,35 @@ function SupportTab({ unreadCount }) {
 
   return (
     <div className="animate-in fade-in duration-500">
-      {/* Tab Switcher */}
-      <div className="mb-6 flex items-center gap-4 bg-white p-2 rounded-2xl border border-black/5 shadow-sm w-fit">
-        <button
-          onClick={() => handleViewChange('tickets')}
-          className={`px-6 py-3 rounded-xl font-bold transition-all ${activeView === 'tickets'
-            ? 'bg-[var(--soup-turquoise)] text-white shadow-md'
-            : 'text-gray-500 hover:text-[var(--soup-turquoise)]'
-            }`}
-        >
-          🎫 Tickets
-        </button>
+      {/* Tab Switcher — 24/7 chat first, tickets secondary */}
+      <div className="mb-6 flex items-center gap-4 bg-white p-2 rounded-2xl border border-[var(--soup-turquoise)]/10 shadow-sm w-fit">
         <button
           onClick={() => handleViewChange('inbox')}
           className={`px-6 py-3 rounded-xl font-bold transition-all flex items-center gap-2 ${activeView === 'inbox'
             ? 'bg-[var(--soup-turquoise)] text-white shadow-md'
-            : 'text-gray-500 hover:text-[var(--soup-turquoise)]'
+            : 'text-[var(--soup-dark)]/60 hover:text-[var(--soup-turquoise)]'
             }`}
         >
-          <span>💬 Inbox</span>
+          <span>24/7 chat</span>
           {unreadCount > 0 && (
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${activeView === 'inbox' ? 'bg-white text-[var(--soup-turquoise)]' : 'bg-[var(--soup-turquoise)] text-white'}`}>
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${activeView === 'inbox' ? 'bg-white text-[var(--soup-turquoise)]' : 'bg-[var(--soup-pink)] text-white'}`}>
               {unreadCount}
             </span>
           )}
         </button>
+        <button
+          onClick={() => handleViewChange('tickets')}
+          className={`px-6 py-3 rounded-xl font-bold transition-all ${activeView === 'tickets'
+            ? 'bg-[var(--soup-turquoise)] text-white shadow-md'
+            : 'text-[var(--soup-dark)]/60 hover:text-[var(--soup-turquoise)]'
+            }`}
+        >
+          tickets
+        </button>
       </div>
 
       {/* Content */}
-      {activeView === 'tickets' ? <SupportTabSimplified /> : <SupportInbox />}
+      {activeView === 'inbox' ? <SupportInbox /> : <SupportTabSimplified />}
     </div>
   );
 }

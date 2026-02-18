@@ -1,6 +1,5 @@
 // Chat screen with language flag badges and admin toggle
-import React, { useState, useEffect, useRef } from 'react';
-import { UserPreviewModal } from '../../components/UserPreviewModal';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { View, StyleSheet, FlatList, Pressable, ActivityIndicator, Text, TextInput, KeyboardAvoidingView, Platform, StatusBar, Image, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -58,11 +57,24 @@ function addDateSeparators(messages) {
     return result;
 }
 
-export default function ChatScreen() {
+const LANGUAGE_SOUP_GROUP_ID = '00000000-0000-0000-0000-000000000000';
+
+// Optional: use from (tabs)/feed with groupId + embedded to show LS chat inside feed layout.
+// showLanguageTags: when true (Language Soup group), show per-message language tag.
+// oneChallengePerDayEnglish: when true (LS feed), show only one challenge per day (most recent; prefer English when we have it).
+export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, merged: mergedProp, showLanguageTags: showLanguageTagsProp, oneChallengePerDayEnglish: oneChallengeProp, onOpenGroupInfo }) {
     const { user } = useAuth();
     const { clearNotifications, clearGroupNotifications } = useNotifications();
     const router = useRouter();
-    const { id: groupId, messageId: scrollToMessageId } = useLocalSearchParams();
+    const params = useLocalSearchParams();
+    const groupId = groupIdProp ?? params.id;
+    const scrollToMessageId = params.messageId;
+    const embedded = embeddedProp ?? (params.embedded === '1' || params.embedded === true);
+    const merged = mergedProp ?? false;
+    const showLanguageTags = showLanguageTagsProp ?? false;
+    const oneChallengePerDayEnglish = oneChallengeProp ?? false;
+    const mergedGroupIdsRef = useRef([]);
+    const currentChallengeRef = useRef(null);
     const flatListRef = useRef(null);
     const insets = useSafeAreaInsets();
     const channelRef = useRef(null);
@@ -80,7 +92,6 @@ export default function ChatScreen() {
     const [showInspiration, setShowInspiration] = useState(false);
     const [inspirationMetadata, setInspirationMetadata] = useState(null);
 
-    const [selectedUser, setSelectedUser] = useState(null);
     const [messages, setMessages] = useState([]);
     const [loading, setLoading] = useState(true);
     const [textInput, setTextInput] = useState('');
@@ -92,6 +103,7 @@ export default function ChatScreen() {
     const [isDM, setIsDM] = useState(false);
     const [partner, setPartner] = useState(null);
     const [currentChallenge, setCurrentChallenge] = useState(null);
+    currentChallengeRef.current = currentChallenge;
     const [allChallenges, setAllChallenges] = useState([]);
     const [visibleChallenge, setVisibleChallenge] = useState(null);
     const [typingUsers, setTypingUsers] = useState({});
@@ -121,15 +133,24 @@ export default function ChatScreen() {
 
         clearGroupNotifications(groupId);
         markAsRead();
-    }, [groupId]);
+    }, [groupId, user?.id]);
 
-    // Load data when group or user changes
+    // Load data when group or user changes (use user?.id to avoid infinite re-runs from object reference)
     useEffect(() => {
-        if (user) {
-            loadChatData();
-            loadUserProfile();
+        if (!user?.id) {
+            setLoading(false);
+            return;
         }
-    }, [groupId, user]);
+        if (merged) {
+            loadMergedMessages();
+        } else if (groupId) {
+            loadChatData();
+        } else {
+            setLoading(false);
+            return;
+        }
+        loadUserProfile();
+    }, [groupId, user?.id, merged]);
 
     const loadUserProfile = async () => {
         const { data } = await supabase
@@ -296,12 +317,20 @@ export default function ChatScreen() {
     };
 
     const handleAvatarPress = (sender) => {
-        setSelectedUser(sender);
+        if (!sender?.id) return;
+        router.push({
+            pathname: `/user/${sender.id}`,
+            params: {
+                display_name: sender.display_name || '',
+                status_text: sender.status_text || '',
+                avatar_url: sender.avatar_url || '',
+            },
+        });
     };
 
-    // Subscribe to realtime events
+    // Subscribe to realtime events (single-group chat; when merged we use a separate subscription)
     useEffect(() => {
-        if (!user) return;
+        if (!user || merged) return;
         const channel = supabase
             .channel(`chat-${currentChallenge?.id || 'none'}`)
             .on('postgres_changes', {
@@ -403,13 +432,14 @@ export default function ChatScreen() {
             }, async (payload) => {
                 const { data: challenges } = await supabase
                     .from('app_challenges')
-                    .select('id, prompt_text, created_at, metadata') // Fetch metadata
+                    .select('id, prompt_text, created_at, metadata')
                     .eq('group_id', groupId)
                     .order('created_at', { ascending: false });
                 if (challenges && challenges.length > 0) {
-                    setAllChallenges(challenges);
-                    setCurrentChallenge(challenges[0]);
-                    setVisibleChallenge(challenges[0]);
+                    const list = oneChallengePerDayEnglish ? [challenges[0]] : challenges;
+                    setAllChallenges(list);
+                    setCurrentChallenge(list[0]);
+                    setVisibleChallenge(list[0]);
                 }
             })
             .subscribe();
@@ -417,7 +447,51 @@ export default function ChatScreen() {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [currentChallenge, user]);
+    }, [currentChallenge?.id, user?.id, merged, oneChallengePerDayEnglish]);
+
+    // Merged feed: subscribe to all new messages in any of the user's groups
+    useEffect(() => {
+        if (!merged || !user) return;
+        const channel = supabase
+            .channel('merged-messages')
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'app_messages',
+            }, async (payload) => {
+                const gid = payload.new?.group_id;
+                if (!gid || !mergedGroupIdsRef.current.includes(gid) || payload.new.sender_id === user.id) return;
+                const { data: full } = await supabase
+                    .from('app_messages')
+                    .select(`
+                        *,
+                        sender:app_users(id, display_name, avatar_url, fluent_languages, status_text),
+                        app_groups(name, language)
+                    `)
+                    .eq('id', payload.new.id)
+                    .single();
+                if (!full) return;
+                const grp = Array.isArray(full.app_groups) ? full.app_groups[0] : full.app_groups;
+                const newMsg = {
+                    ...full,
+                    sender: Array.isArray(full.sender) ? full.sender[0] : full.sender,
+                    group_name: grp?.name || null,
+                    group_language: grp?.language || null,
+                };
+                const isFromBot = (newMsg.sender?.display_name || '').toLowerCase() === 'language soup';
+                setMessages((prev) => {
+                    if (isFromBot && oneChallengePerDayEnglish) {
+                        const day = (newMsg.created_at || '').slice(0, 10);
+                        const alreadyHasBotForDay = prev.some((m) => (m.sender?.display_name || '').toLowerCase() === 'language soup' && (m.created_at || '').slice(0, 10) === day);
+                        if (alreadyHasBotForDay) return prev;
+                    }
+                    return [...prev, newMsg];
+                });
+                setTimeout(() => scrollToBottom(), 100);
+            })
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [merged, user?.id, oneChallengePerDayEnglish]);
 
     // Load reactions for current messages
     const loadReactions = async (messageIds) => {
@@ -444,23 +518,27 @@ export default function ChatScreen() {
     };
 
     const loadChatData = async () => {
+        const gid = typeof groupId === 'string' ? groupId : (groupId != null ? String(groupId) : null);
+        if (!gid) return;
         try {
-            const { data: group } = await supabase.from('app_groups').select('name, member_count, language, avatar_url').eq('id', groupId).single();
+            setLoading(true);
+            const { data: group } = await supabase.from('app_groups').select('name, member_count, language, avatar_url').eq('id', gid).single();
             if (group) {
                 if (group.name === 'DM' && group.member_count === 2) {
                     setIsDM(true);
-                    // Fetch partner details
                     const { data: members } = await supabase
                         .from('app_group_members')
-                        .select('user_id, app_users(display_name, avatar_url)')
-                        .eq('group_id', groupId)
+                        .select('user_id, app_users(id, display_name, avatar_url)')
+                        .eq('group_id', gid)
                         .neq('user_id', user.id)
-                        .single();
+                        .limit(1);
 
-                    if (members?.app_users) {
-                        setPartner(members.app_users);
-                        setGroupName(members.app_users.display_name);
-                        setGroupAvatar(members.app_users.avatar_url);
+                    const partnerData = members?.[0]?.app_users;
+                    const partnerUser = partnerData ? (Array.isArray(partnerData) ? partnerData[0] : partnerData) : null;
+                    if (partnerUser) {
+                        setPartner(partnerUser);
+                        setGroupName(partnerUser.display_name || 'Direct Message');
+                        setGroupAvatar(partnerUser.avatar_url ?? null);
                     } else {
                         setGroupName('Direct Message');
                         setGroupAvatar(null);
@@ -472,20 +550,24 @@ export default function ChatScreen() {
                 setMemberCount(group.member_count || 0);
                 setGroupLanguage(group.language || '');
             }
-            const { data: challenges } = await supabase.from('app_challenges').select('id, prompt_text, created_at, metadata').eq('group_id', groupId).order('created_at', { ascending: false });
+            const { data: challenges } = await supabase.from('app_challenges').select('id, prompt_text, created_at, metadata').eq('group_id', gid).order('created_at', { ascending: false });
             if (challenges && challenges.length > 0) {
-                setAllChallenges(challenges);
-                setCurrentChallenge(challenges[0]);
-                setVisibleChallenge(challenges[0]);
+                const one = oneChallengePerDayEnglish ? challenges[0] : null;
+                const list = oneChallengePerDayEnglish && one ? [one] : challenges;
+                setAllChallenges(list);
+                setCurrentChallenge(list[0]);
+                setVisibleChallenge(list[0]);
             }
-            const { data: messagesData } = await supabase
+            const { data: messagesDataRaw } = await supabase
                 .from('app_messages')
                 .select(`
                     *,
-                    sender:app_users(display_name, avatar_url, fluent_languages, status_text)
+                    sender:app_users(id, display_name, avatar_url, fluent_languages, learning_languages, status_text)
                 `)
-                .eq('group_id', groupId)
-                .order('created_at', { ascending: true });
+                .eq('group_id', gid)
+                .order('created_at', { ascending: false })
+                .limit(80);
+            const messagesData = messagesDataRaw?.slice(0).reverse() ?? null;
             if (messagesData) {
                 // Create lookup map for challenge metadata & prompts
                 const challengeMetadataMap = {};
@@ -521,10 +603,120 @@ export default function ChatScreen() {
                 const messageIds = messagesData.map(m => m.id);
                 await loadReactions(messageIds);
 
-                setTimeout(() => scrollToBottom(), 100);
+                if (messagesData.length > 0) setTimeout(() => scrollToBottom(), 100);
             }
         } catch (error) {
             console.error('Error loading chat:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const loadMergedMessages = async () => {
+        if (!user?.id) return;
+        try {
+            setLoading(true);
+            const { data: memberships, error: memberError } = await supabase
+                .from('app_group_members')
+                .select('group_id')
+                .eq('user_id', user.id);
+            if (memberError) throw memberError;
+            const groupIds = (memberships || []).map((m) => m.group_id).filter(Boolean);
+            if (groupIds.length === 0) {
+                setMessages([]);
+                setLoading(false);
+                return;
+            }
+            mergedGroupIdsRef.current = groupIds;
+
+            // One challenge per day: use the English group's challenge only (default for Language Soup feed)
+            let englishChallenge = null;
+            let englishGroupId = null;
+            if (oneChallengePerDayEnglish) {
+                const { data: groupsData } = await supabase
+                    .from('app_groups')
+                    .select('id, name, language')
+                    .in('id', groupIds);
+                const englishGroup = (groupsData || []).find(
+                    (g) =>
+                        (g.language && String(g.language).toLowerCase().includes('english')) ||
+                        (g.name && String(g.name).toLowerCase().includes('english'))
+                );
+                if (englishGroup) {
+                    englishGroupId = englishGroup.id;
+                    const { data: engChallenges } = await supabase
+                        .from('app_challenges')
+                        .select('id, prompt_text, created_at, metadata')
+                        .eq('group_id', englishGroup.id)
+                        .order('created_at', { ascending: false })
+                        .limit(1);
+                    if (engChallenges?.length > 0) englishChallenge = engChallenges[0];
+                }
+            }
+
+            if (oneChallengePerDayEnglish && englishChallenge) {
+                setAllChallenges([englishChallenge]);
+                setCurrentChallenge(englishChallenge);
+                setVisibleChallenge(englishChallenge);
+            } else if (!oneChallengePerDayEnglish) {
+                const { data: challenges } = await supabase
+                    .from('app_challenges')
+                    .select('id, prompt_text, created_at, metadata')
+                    .eq('group_id', groupId)
+                    .order('created_at', { ascending: false });
+                if (challenges?.length > 0) {
+                    setAllChallenges(challenges);
+                    setCurrentChallenge(challenges[0]);
+                    setVisibleChallenge(challenges[0]);
+                }
+            }
+
+            const { data: messagesData, error: msgError } = await supabase
+                .from('app_messages')
+                .select(`
+                    *,
+                    sender:app_users(id, display_name, avatar_url, fluent_languages, status_text),
+                    app_groups(name, language)
+                `)
+                .in('group_id', groupIds)
+                .order('created_at', { ascending: true });
+            if (msgError) throw msgError;
+
+            const normalized = (messagesData || []).map((msg) => {
+                const sender = Array.isArray(msg.sender) ? msg.sender[0] : msg.sender;
+                const grp = Array.isArray(msg.app_groups) ? msg.app_groups[0] : msg.app_groups;
+                return {
+                    ...msg,
+                    sender: sender || { display_name: 'Deleted User', avatar_url: null, fluent_languages: [] },
+                    group_name: grp?.name || null,
+                    group_language: grp?.language || null,
+                };
+            });
+
+            // One challenge post per day: keep all user messages; only one message from the Language Soup bot per day (pick one at random)
+            const isFromLanguageSoupBot = (m) => (m.sender?.display_name || '').toLowerCase() === 'language soup';
+            const byDay = {};
+            normalized.filter(isFromLanguageSoupBot).forEach((m) => {
+                const day = (m.created_at || '').slice(0, 10);
+                if (!day) return;
+                if (!byDay[day]) byDay[day] = [];
+                byDay[day].push(m);
+            });
+            const keepChallengeIds = new Set();
+            Object.keys(byDay).forEach((day) => {
+                const list = byDay[day];
+                const pick = list[Math.floor(Math.random() * list.length)];
+                keepChallengeIds.add(pick.id);
+            });
+            const filtered = normalized.filter((m) => !isFromLanguageSoupBot(m) || keepChallengeIds.has(m.id));
+            filtered.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+
+            setMessages(filtered);
+            const messageIds = filtered.map((m) => m.id);
+            if (messageIds.length > 0) await loadReactions(messageIds);
+            setTimeout(() => scrollToBottom(), 100);
+        } catch (e) {
+            console.error('loadMergedMessages:', e);
         } finally {
             setLoading(false);
         }
@@ -540,26 +732,33 @@ export default function ChatScreen() {
         if (recordingIds.length === 0 && typingIds.length === 0) return null;
         const isRecording = recordingIds.length > 0;
         const firstUser = isRecording ? recordingUsers[recordingIds[0]] : typingUsers[typingIds[0]];
+        const name = firstUser?.display_name || 'Someone';
         return (
             <View style={styles.typingIndicator}>
                 <View style={styles.typingAvatarContainer}>
-                    {firstUser.avatar_url ? (
+                    {firstUser?.avatar_url ? (
                         <Image source={getAvatarSource(firstUser.avatar_url)} style={styles.typingAvatar} />
                     ) : (
                         <View style={[styles.typingAvatar, styles.avatarPlaceholder]}>
-                            <Text style={styles.avatarText}>{firstUser.display_name?.charAt(0).toUpperCase() || '?'}</Text>
+                            <Text style={styles.avatarText}>{name.charAt(0).toUpperCase() || '?'}</Text>
                         </View>
                     )}
                 </View>
-                <View style={styles.typingBubble}>
+                <View style={[styles.typingBubble, isRecording && styles.typingBubbleRecording]}>
                     {isRecording ? (
-                        <Mic size={16} color="#8E8E93" />
+                        <>
+                            <Mic size={18} color={SOUP_COLORS.pink} />
+                            <Text style={styles.typingBubbleText}>{name} is recording…</Text>
+                        </>
                     ) : (
-                        <View style={styles.typingDots}>
-                            <View style={[styles.dot, styles.dot1]} />
-                            <View style={[styles.dot, styles.dot2]} />
-                            <View style={[styles.dot, styles.dot3]} />
-                        </View>
+                        <>
+                            <View style={styles.typingDots}>
+                                <View style={[styles.dot, styles.dot1]} />
+                                <View style={[styles.dot, styles.dot2]} />
+                                <View style={[styles.dot, styles.dot3]} />
+                            </View>
+                            <Text style={styles.typingBubbleText}>{name} is typing…</Text>
+                        </>
                     )}
                 </View>
             </View>
@@ -600,6 +799,7 @@ export default function ChatScreen() {
                 content: messageText,
             }).select().single();
             if (error) throw error;
+            // Reply push notification: voice only (not for text), to avoid spam
             // Mark group as read so we never show unread from our own message
             await supabase.from('app_group_members').update({ last_read_at: new Date().toISOString() }).eq('user_id', user.id).eq('group_id', groupId);
             setMessages((prev) => prev.map((msg) => (msg.id === tempId ? { ...data, sender: optimisticMessage.sender } : msg)));
@@ -726,6 +926,9 @@ export default function ChatScreen() {
                 throw insertError;
             }
             console.log('✅ [VOICE] Database insert successful:', data);
+            if (currentChallenge?.id) {
+                supabase.functions.invoke('notify-challenge-reply', { body: { group_id: groupId, sender_id: user.id } }).catch(() => {});
+            }
             // Mark group as read so we never show unread from our own message
             await supabase.from('app_group_members').update({ last_read_at: new Date().toISOString() }).eq('user_id', user.id).eq('group_id', groupId);
 
@@ -902,16 +1105,31 @@ export default function ChatScreen() {
         }
     };
 
+    const getMessageGroupLabel = useCallback(
+        (msg) => {
+            if (!(merged || showLanguageTags)) return undefined;
+            if (msg.type === 'date_separator') return null;
+            return msg.transcript_language || msg.group_name || msg.group_language || msg.sender?.learning_languages?.[0] || msg.sender?.fluent_languages?.[0] || '';
+        },
+        [merged, showLanguageTags]
+    );
 
+    const messagesWithDates = useMemo(
+        () => [...addDateSeparators(messages)].reverse(),
+        [messages]
+    );
 
-
-    const messagesWithDates = [...addDateSeparators(messages)].reverse();
-
-    // Scroll to a specific message when opened from podcast "React" (e.g. ?messageId=xxx)
+    const lastScrolledToMessageIdRef = useRef(null);
+    useEffect(() => {
+        if (!scrollToMessageId) lastScrolledToMessageIdRef.current = null;
+    }, [scrollToMessageId]);
+    // Scroll to a specific message when opened from podcast (once per scrollToMessageId to avoid update loops)
     useEffect(() => {
         if (!scrollToMessageId || !messagesWithDates.length || !flatListRef.current) return;
         const idx = messagesWithDates.findIndex((m) => m.id === scrollToMessageId);
         if (idx < 0) return;
+        if (lastScrolledToMessageIdRef.current === scrollToMessageId) return;
+        lastScrolledToMessageIdRef.current = scrollToMessageId;
         const t = setTimeout(() => {
             try {
                 flatListRef.current?.scrollToIndex({ index: idx, animated: true });
@@ -953,7 +1171,9 @@ export default function ChatScreen() {
                 reactionsTable="app_message_reactions"
                 userId={user?.id}
                 groupId={groupId}
-                groupName={groupName}
+                groupName={merged ? 'Language Soup' : groupName}
+                compact={merged}
+                getMessageGroupLabel={(merged || showLanguageTags) ? getMessageGroupLabel : undefined}
                 messages={messagesWithDates}
                 loading={loading}
                 groupLanguage={groupLanguage} // Pass language for Voice Feedback (Fixes "American Accent" bug)
@@ -1005,23 +1225,29 @@ export default function ChatScreen() {
                     setInspirationMetadata(dataToUse);
                     setShowInspiration(true);
                 }}
-                headerComponent={
+                headerComponent={embedded ? null : (
                     Platform.OS === 'ios' ? (
                         <BlurView intensity={95} tint="light" style={[styles.header, { paddingTop: insets.top }]}>
                             <View style={styles.headerContent}>
                                 <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.9 }]}>
                                     <ChevronLeft size={30} color={Colors.primary} />
                                 </Pressable>
-                                {groupAvatar && (
+                                {(groupAvatar || isDM) && (
                                     <View style={styles.headerAvatarContainer}>
-                                        <Image source={getAvatarSource(groupAvatar)} style={styles.headerAvatar} />
+                                        {groupAvatar ? (
+                                            <Image source={getAvatarSource(groupAvatar)} style={styles.headerAvatar} />
+                                        ) : (
+                                            <View style={[styles.headerAvatar, styles.headerAvatarPlaceholder]}>
+                                                <Text style={styles.headerAvatarLetter}>{(groupName || '?')[0].toUpperCase()}</Text>
+                                            </View>
+                                        )}
                                     </View>
                                 )}
                                 <View style={styles.headerInfo}>
                                     <Text style={styles.headerTitle}>{groupName}</Text>
                                     {!isDM && <Text style={styles.headerSubtitle}>{memberCount} members</Text>}
                                 </View>
-                                <Pressable style={({ pressed }) => [styles.headerAction, pressed && { opacity: 0.9 }]} onPress={() => router.push(`/group-info?id=${groupId}`)}>
+                                <Pressable style={({ pressed }) => [styles.headerAction, pressed && { opacity: 0.9 }]} onPress={() => (onOpenGroupInfo ? onOpenGroupInfo() : router.push(`/group-info?id=${groupId}`))}>
                                     <MoreVertical size={24} color={Colors.primary} />
                                 </Pressable>
                             </View>
@@ -1032,80 +1258,30 @@ export default function ChatScreen() {
                                 <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.9 }]}>
                                     <ChevronLeft size={30} color={Colors.primary} />
                                 </Pressable>
-                                {groupAvatar && (
+                                {(groupAvatar || isDM) && (
                                     <View style={styles.headerAvatarContainer}>
-                                        <Image source={getAvatarSource(groupAvatar)} style={styles.headerAvatar} />
+                                        {groupAvatar ? (
+                                            <Image source={getAvatarSource(groupAvatar)} style={styles.headerAvatar} />
+                                        ) : (
+                                            <View style={[styles.headerAvatar, styles.headerAvatarPlaceholder]}>
+                                                <Text style={styles.headerAvatarLetter}>{(groupName || '?')[0].toUpperCase()}</Text>
+                                            </View>
+                                        )}
                                     </View>
                                 )}
                                 <View style={styles.headerInfo}>
                                     <Text style={styles.headerTitle}>{groupName}</Text>
                                     {!isDM && <Text style={styles.headerSubtitle}>{memberCount} members</Text>}
                                 </View>
-                                <Pressable style={({ pressed }) => [styles.headerAction, pressed && { opacity: 0.9 }]} onPress={() => router.push(`/group-info?id=${groupId}`)}>
+                                <Pressable style={({ pressed }) => [styles.headerAction, pressed && { opacity: 0.9 }]} onPress={() => (onOpenGroupInfo ? onOpenGroupInfo() : router.push(`/group-info?id=${groupId}`))}>
                                     <MoreVertical size={24} color={Colors.primary} />
                                 </Pressable>
                             </View>
                         </View>
                     )
-                }
+                )}
 
-                bannerComponent={
-                    <View style={{ width: '100%' }}>
-                        {visibleChallenge && (
-                            Platform.OS === 'ios' ? (
-                                <BlurView intensity={95} tint="light" style={[styles.challengeBanner, { top: insets.top + 65, marginBottom: 12 }]}>
-                                    <View style={styles.challengeContent}>
-                                        <View style={styles.challengeHeader}>
-                                            <Text style={styles.challengeHashtag}>#challenge</Text>
-                                            {visibleChallenge.created_at && (() => {
-                                                const hoursSince = (Date.now() - new Date(visibleChallenge.created_at)) / (1000 * 60 * 60);
-                                                if (hoursSince < 1) return <Text style={styles.earlyBadge}>⚡ Early Bird</Text>;
-                                                if (hoursSince < 5) return <Text style={styles.earlyBadge}>🌅 Morning Person</Text>;
-                                                return null;
-                                            })()}
-                                        </View>
-                                        {visibleChallenge.prompt_text.split('\n').map((line, index) => (
-                                            <Text key={index} style={styles.challengeText}>{line}</Text>
-                                        ))}
-                                    </View>
-                                </BlurView>
-                            ) : (
-                                <View style={[styles.challengeBanner, { top: insets.top + 65, marginBottom: 12, backgroundColor: '#fff' }]}>
-                                    <View style={styles.challengeContent}>
-                                        <View style={styles.challengeHeader}>
-                                            <Text style={styles.challengeHashtag}>#challenge</Text>
-                                            {visibleChallenge.created_at && (() => {
-                                                const hoursSince = (Date.now() - new Date(visibleChallenge.created_at)) / (1000 * 60 * 60);
-                                                if (hoursSince < 1) return <Text style={styles.earlyBadge}>⚡ Early Bird</Text>;
-                                                if (hoursSince < 5) return <Text style={styles.earlyBadge}>🌅 Morning Person</Text>;
-                                                return null;
-                                            })()}
-                                        </View>
-                                        {visibleChallenge.prompt_text.split('\n').map((line, index) => (
-                                            <Text key={index} style={styles.challengeText}>{line}</Text>
-                                        ))}
-                                    </View>
-                                </View>
-                            )
-                        )}
-                        {showNotificationCTA && (
-                            <Pressable
-                                style={styles.notificationCTA}
-                                onPress={openSettings}
-                            >
-                                <View style={styles.notificationCTAContent}>
-                                    <View style={styles.notificationIconBg}>
-                                        <Clock size={16} color="#fff" />
-                                    </View>
-                                    <Text style={styles.notificationCTAText}>
-                                        Turn on notifications to never miss a challenge!
-                                    </Text>
-                                </View>
-                                <ChevronRight size={16} color={Colors.primary} />
-                            </Pressable>
-                        )}
-                    </View>
-                }
+                bannerComponent={null}
             />
 
             <InspirationModal
@@ -1115,13 +1291,12 @@ export default function ChatScreen() {
                 language={groupLanguage}
             />
 
-            <UserPreviewModal
-                visible={!!selectedUser}
-                user={selectedUser}
-                onClose={() => setSelectedUser(null)}
-            />
         </View>
     );
+}
+
+export default function ChatScreen() {
+    return <GroupChatView />;
 }
 
 const styles = StyleSheet.create({
@@ -1157,6 +1332,16 @@ const styles = StyleSheet.create({
         height: 36,
         borderRadius: 18,
         backgroundColor: '#E1E1E1',
+    },
+    headerAvatarPlaceholder: {
+        backgroundColor: '#00adef',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    headerAvatarLetter: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#fff',
     },
     backButton: {
         padding: 8,
@@ -1277,57 +1462,68 @@ const styles = StyleSheet.create({
     typingIndicator: {
         position: 'absolute',
         bottom: 80,
-        left: 16,
+        left: 20,
         zIndex: 20,
         flexDirection: 'row',
         alignItems: 'flex-end',
-        gap: 8,
+        gap: 10,
     },
     typingAvatarContainer: {
         marginBottom: 2,
     },
     typingAvatar: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        borderWidth: 1,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        borderWidth: 2,
         borderColor: '#fff',
     },
     avatarPlaceholder: {
-        backgroundColor: '#E1E1E1',
+        backgroundColor: SOUP_COLORS.pink,
         justifyContent: 'center',
         alignItems: 'center',
     },
     avatarText: {
-        fontSize: 10,
-        fontWeight: '600',
-        color: '#666',
+        fontSize: 14,
+        fontWeight: '800',
+        color: '#fff',
     },
     typingBubble: {
-        backgroundColor: '#fff', // White bubble
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 18,
-        borderBottomLeftRadius: 4,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-        elevation: 2,
-        minWidth: 40,
-        minHeight: 32,
-        justifyContent: 'center',
+        flexDirection: 'row',
         alignItems: 'center',
+        gap: 8,
+        backgroundColor: '#fff',
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 20,
+        borderBottomLeftRadius: 6,
+        borderWidth: 2,
+        borderColor: SOUP_COLORS.turquoise,
+        shadowColor: SOUP_COLORS.turquoise,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.15,
+        shadowRadius: 4,
+        elevation: 2,
+        minHeight: 40,
+    },
+    typingBubbleRecording: {
+        borderColor: SOUP_COLORS.pink,
+        shadowColor: SOUP_COLORS.pink,
+    },
+    typingBubbleText: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: Colors.text,
     },
     typingDots: {
         flexDirection: 'row',
         gap: 4,
     },
     dot: {
-        width: 5,
-        height: 5,
-        borderRadius: 2.5,
-        backgroundColor: '#8E8E93',
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: SOUP_COLORS.turquoise,
     },
     dot1: { opacity: 0.4 },
     dot2: { opacity: 0.7 },

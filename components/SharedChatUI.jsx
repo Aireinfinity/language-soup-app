@@ -7,7 +7,7 @@ import { LiveAudioWaveform } from './LiveAudioWaveform';
 import { ImagePreview } from './ImagePreview';
 import { ReplyPreview } from './ReplyPreview';
 import { ReactionViewerModal } from './ReactionViewerModal';
-import { ChatStyles } from '../constants/ChatStyles';
+import { ChatStyles, CompactChatOverrides } from '../constants/ChatStyles';
 import { Colors } from '../constants/Colors';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
@@ -51,6 +51,7 @@ const SOUP_COLORS = {
  * @param {Object} reactions - Reactions mapped by message ID
  * @param {Function} onReact - React to message callback
  * @param {string} groupName - Group/chat name for display
+ * @param {Function} getMessageGroupLabel - Optional. (message) => string for merged feed: per-message group/language label
  */
 export function SharedChatUI({
     chatType, // "group" | "support" | "community"
@@ -85,6 +86,7 @@ export function SharedChatUI({
     groupId = null,
     groupName = null,
     groupLanguage = null,
+    getMessageGroupLabel = null,
     currentChallenge = null, // New Prop: Full challenge object for context
     onAvatarPress,
     onShowInspiration, // New Prop
@@ -100,6 +102,7 @@ export function SharedChatUI({
     isPaused = false,
     onPauseRecording,
     onResumeRecording,
+    compact = false, // smaller messages so ~5–7 fit (e.g. Language Soup feed)
 }) {
     // ========== INTERNAL STATE (Self-Contained) ==========
     const [replyTo, setReplyTo] = useState(null); // { messageId, content, senderName }
@@ -248,7 +251,8 @@ export function SharedChatUI({
 
     const insets = useSafeAreaInsets();
     const internalFlatListRef = useRef(null);
-    const listRef = flatListRef || internalFlatListRef;
+    // Use only internal ref for FlatList to avoid frozen-ref errors when ref is set/cleared by React
+    const listRef = internalFlatListRef;
     const [imagePreview, setImagePreview] = useState(null);
     const [mediaType, setMediaType] = useState('image');
 
@@ -310,9 +314,9 @@ export function SharedChatUI({
     const renderMessage = ({ item }) => {
         if (item.type === 'date_separator') {
             return (
-                <View style={ChatStyles.dateSeparator}>
-                    <View style={ChatStyles.dateSeparatorBadge}>
-                        <Text style={ChatStyles.dateSeparatorText}>{item.label}</Text>
+                <View style={compact ? [ChatStyles.dateSeparator, CompactChatOverrides.dateSeparator] : ChatStyles.dateSeparator}>
+                    <View style={compact ? [ChatStyles.dateSeparatorBadge, CompactChatOverrides.dateSeparatorBadge] : ChatStyles.dateSeparatorBadge}>
+                        <Text style={compact ? [ChatStyles.dateSeparatorText, CompactChatOverrides.dateSeparatorText] : ChatStyles.dateSeparatorText}>{item.label}</Text>
                     </View>
                 </View>
             );
@@ -329,6 +333,7 @@ export function SharedChatUI({
         }
 
         const messageReactions = reactions[item.id] || [];
+        const perMessageGroupName = getMessageGroupLabel ? getMessageGroupLabel(item) : null;
         return (
             <MessageBubble
                 message={item}
@@ -342,12 +347,13 @@ export function SharedChatUI({
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 groupId={groupId}
-                groupName={groupName}
+                groupName={perMessageGroupName != null ? perMessageGroupName : groupName}
                 groupLanguage={groupLanguage}
                 onAvatarPress={onAvatarPress}
                 onShowInspiration={onShowInspiration}
                 onGetTranscript={onGetTranscript}
-                currentChallenge={currentChallenge} // Propagate Context
+                currentChallenge={currentChallenge}
+                compact={compact}
             />
         );
     };
@@ -373,7 +379,7 @@ export function SharedChatUI({
                 inverted={inverted}
                 initialScrollIndex={0}
                 keyboardDismissMode="on-drag"
-                contentContainerStyle={contentContainerStyle || ChatStyles.messagesList}
+                contentContainerStyle={contentContainerStyle || (compact ? [ChatStyles.messagesList, CompactChatOverrides.messagesList] : ChatStyles.messagesList)}
             />
 
             {/* Typing Indicator */}

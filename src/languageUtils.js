@@ -33,16 +33,31 @@ export const getDeepLLangCode = (groupLanguage) => {
     if (lang.includes('indonesian') || lang.includes('bahasa')) return 'ID';
     if (lang.includes('turkish') || lang.includes('türkçe')) return 'TR';
     if (lang.includes('arabic') || lang.includes('العربية')) return 'AR';
+    // Extended DeepL support (incl. Persian/Farsi, Hindi, Hebrew, Vietnamese, Thai, Tagalog, etc.)
+    if (lang.includes('persian') || lang.includes('فارسی') || lang.includes('farsi')) return 'FA';
+    if (lang.includes('hindi') || lang.includes('हिन्दी')) return 'HI';
+    if (lang.includes('hebrew') || lang.includes('עברית')) return 'HE';
+    if (lang.includes('vietnamese') || lang.includes('tiếng việt')) return 'VI';
+    if (lang.includes('thai') || lang.includes('ไทย')) return 'TH';
+    if (lang.includes('tagalog') || lang.includes('filipino')) return 'TL';
+    if (lang.includes('ukrainian') || lang.includes('українська')) return 'UK';
+    if (lang.includes('croatian') || lang.includes('hrvatski')) return 'HR';
+    if (lang.includes('serbian') || lang.includes('српски')) return 'SR';
+    if (lang.includes('bengali') || lang.includes('বাংলা')) return 'BN';
+    if (lang.includes('swahili') || lang.includes('kiswahili')) return 'SW';
+    if (lang.includes('yoruba')) return 'YO';
+    if (lang.includes('zulu')) return 'ZU';
+    if (lang.includes('afrikaans')) return 'AF';
+    if (lang.includes('galician') || lang.includes('galego')) return 'GL';
 
-    // Note: DeepL doesn't support all languages. If null, will fallback to Google
+    // Note: DeepL doesn't support Mooré and some others. If null, will fallback to Google (or Mooré pipeline)
     return null;
 };
 
 export const getGoogleLangCode = (groupLanguage) => {
-    // NUCLEAR DEBUG: Log everything immediately
-    console.log(`☢️ getGoogleLangCode INPUT: "${groupLanguage}"`, groupLanguage.split('').map(c => c.charCodeAt(0)));
-
-    const lang = groupLanguage.toLowerCase();
+    const lang = (groupLanguage || '').toLowerCase();
+    // English: we don't translate to English (source is English), so no code needed
+    if (lang === 'english') return null;
     // European languages
     if (lang.includes('spanish') || lang.includes('español')) return 'es';
     if (lang.includes('french') || lang.includes('français')) return 'fr';
@@ -148,7 +163,9 @@ export const getGoogleLangCode = (groupLanguage) => {
         'maltese': 'mt',
         'mooré': 'mos',
         'moore': 'mos',
-        'mossi': 'mos'
+        'mossi': 'mos',
+        'kyrgyz': 'ky',
+        'montenegrin': 'sr'
     };
 
     if (autoDetect[firstWord]) {

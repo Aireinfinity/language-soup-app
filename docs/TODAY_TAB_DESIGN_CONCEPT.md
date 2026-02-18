@@ -162,3 +162,13 @@ Use this table to prioritize small copy and layout tweaks (e.g. status line, her
 - **Order on the page:** Hero (record CTA or countdown) → pulse stats (days spoken, replies today) → “record your challenge” section (if pending) → “next challenge drops in” section (if no pending) → who replied → your groups.
 
 **Design:** Today uses the **same design language as the Community tab**: cream background wrap, two-tone hero (turquoise left, pink right), white `redesignSection`-style cards (rounded, shadow), same section title typography. So Today feels like “Community but for daily challenges.”
+
+---
+
+## Bold visual direction (one stage, one focus)
+
+*From the "bold concept" — use for a visual pass where the hero is unmissable and everything else recedes.*
+
+**Goal:** When you open the tab, you feel **excited** and know **exactly where to look**. One thing grabs your eye; nothing else competes.
+
+**Bold direction:** The challenge block is the **stage** — full color, size, and energy. Everything else is **supporting** (lighter, smaller, secondary). Above the hero: minimal ("today" + one status). Timeline = one compact line or remove. Below the hero: more whitespace; "next challenge," "who replied," "your groups" = calm (cream/white), small labels. **Excitement = contrast + one punch:** one bold colored moment on calm cream; one headline ("your turn," "today's challenge," "let's go") so the eye goes: **that line → hero → tap.** More padding between sections; fewer header elements. Use this to strip back what isn't the hero and make the hero unmissable.

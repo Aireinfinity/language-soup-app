@@ -18,6 +18,8 @@ const SOUP_COLORS = {
     subtext: '#636e72',
 };
 
+const LANGUAGE_SOUP_GROUP_ID = '00000000-0000-0000-0000-000000000000';
+
 export default function YourGroupsScreen() {
     const { user } = useAuth();
     const router = useRouter();
@@ -47,26 +49,15 @@ export default function YourGroupsScreen() {
 
             if (memberError) throw memberError;
 
-            if (!memberships || memberships.length === 0) {
-                setGroups([]);
-                setLoading(false);
-                setRefreshing(false);
-                return;
-            }
-
-            const groupIds = memberships.map(m => m.app_groups?.id).filter(Boolean);
-            if (groupIds.length === 0) {
-                setGroups([]);
-                setLoading(false);
-                setRefreshing(false);
-                return;
-            }
-            const lastReadByGroup = new Map(memberships.map(m => [m.app_groups?.id, m.last_read_at || '1970-01-01']));
+            const groupIds = (memberships || []).map(m => m.app_groups?.id).filter(Boolean);
+            // Always include Language Soup for everyone (show it even if no memberships yet)
+            const idsForMessages = groupIds.length > 0 ? groupIds : [LANGUAGE_SOUP_GROUP_ID];
+            const lastReadByGroup = new Map((memberships || []).map(m => [m.app_groups?.id, m.last_read_at || '1970-01-01']));
 
             const { data: allMessages, error: msgError } = await supabase
                 .from('app_messages')
                 .select('id, group_id, content, created_at, message_type, sender_id')
-                .in('group_id', groupIds)
+                .in('group_id', idsForMessages)
                 .order('created_at', { ascending: false })
                 .limit(400);
 
@@ -74,7 +65,7 @@ export default function YourGroupsScreen() {
 
             const lastMessageByGroup = {};
             const unreadCountByGroup = {};
-            groupIds.forEach(gid => { unreadCountByGroup[gid] = 0; });
+            idsForMessages.forEach(gid => { unreadCountByGroup[gid] = 0; });
             const recentSenderIdsByGroup = {};
             for (const msg of allMessages || []) {
                 const gid = msg.group_id;
@@ -101,7 +92,7 @@ export default function YourGroupsScreen() {
                 });
             }
 
-            let groupsWithDetails = memberships.map((membership) => {
+            let groupsWithDetails = (memberships || []).map((membership) => {
                 const group = membership.app_groups;
                 if (!group) return null;
                 const lastMsg = lastMessageByGroup[group.id];
@@ -135,20 +126,49 @@ export default function YourGroupsScreen() {
                 return timeB - timeA;
             });
 
+            // Language Soup always first: inject if missing, then move to top
+            const hasLS = groupsWithDetails.some(g => g.id === LANGUAGE_SOUP_GROUP_ID);
+            if (!hasLS) {
+                const { data: lsGroup } = await supabase.from('app_groups').select('id, name, language, member_count, avatar_url').eq('id', LANGUAGE_SOUP_GROUP_ID).maybeSingle();
+                const lsRow = {
+                    id: lsGroup?.id || LANGUAGE_SOUP_GROUP_ID,
+                    name: lsGroup?.name || 'Language Soup',
+                    language: lsGroup?.language || 'Language Soup',
+                    level: lsGroup?.level ?? null,
+                    memberCount: lsGroup?.member_count ?? 0,
+                    avatarUrl: lsGroup?.avatar_url ?? null,
+                    recentSpeakers: [],
+                    lastMessage: lastMessageByGroup[LANGUAGE_SOUP_GROUP_ID] ? {
+                        content: lastMessageByGroup[LANGUAGE_SOUP_GROUP_ID].content,
+                        type: lastMessageByGroup[LANGUAGE_SOUP_GROUP_ID].message_type,
+                        senderName: senderNames[lastMessageByGroup[LANGUAGE_SOUP_GROUP_ID].sender_id] || 'Unknown',
+                        time: lastMessageByGroup[LANGUAGE_SOUP_GROUP_ID].created_at
+                    } : null,
+                    unreadCount: unreadCountByGroup[LANGUAGE_SOUP_GROUP_ID] || 0
+                };
+                groupsWithDetails = [lsRow, ...groupsWithDetails];
+            } else {
+                const ls = groupsWithDetails.find(g => g.id === LANGUAGE_SOUP_GROUP_ID);
+                groupsWithDetails = [ls, ...groupsWithDetails.filter(g => g.id !== LANGUAGE_SOUP_GROUP_ID)];
+            }
+
             const dmGroups = groupsWithDetails.filter(g => g.name === 'DM' && g.memberCount === 2);
             const dmGroupIds = dmGroups.map(g => g.id);
             if (dmGroupIds.length > 0) {
                 const { data: partners } = await supabase
                     .from('app_group_members')
-                    .select('group_id, app_users(display_name, avatar_url)')
+                    .select('group_id, app_users(id, display_name, avatar_url)')
                     .in('group_id', dmGroupIds)
                     .neq('user_id', user.id);
                 const partnerMap = {};
-                partners?.forEach(p => { if (p.app_users) partnerMap[p.group_id] = p.app_users; });
+                partners?.forEach(p => {
+                    const u = p.app_users;
+                    if (u) partnerMap[p.group_id] = Array.isArray(u) ? u[0] : u;
+                });
                 groupsWithDetails.forEach(g => {
                     if (g.name === 'DM' && g.memberCount === 2) {
                         g.isDM = true;
-                        g.partner = partnerMap[g.id] || { display_name: 'Unknown User', avatar_url: null };
+                        g.partner = partnerMap[g.id] || { display_name: 'Unknown', avatar_url: null };
                     }
                 });
             }
@@ -222,6 +242,7 @@ export default function YourGroupsScreen() {
         <Pressable
             style={({ pressed }) => [
                 styles.row,
+                item.isDM && styles.rowDM,
                 item.unreadCount > 0 && styles.rowUnread,
                 pressed && { opacity: 0.9 },
             ]}
@@ -229,7 +250,13 @@ export default function YourGroupsScreen() {
         >
             <View style={styles.avatarWrap}>
                 {item.isDM ? (
-                    <Image source={getAvatarSource(item.partner?.avatar_url)} style={styles.avatar} />
+                    item.partner?.avatar_url ? (
+                        <Image source={getAvatarSource(item.partner.avatar_url)} style={[styles.avatar, styles.avatarDM]} />
+                    ) : (
+                        <View style={[styles.avatar, styles.avatarDM, styles.placeholderAvatar]}>
+                            <Text style={styles.placeholderText}>{(item.partner?.display_name || '?')[0].toUpperCase()}</Text>
+                        </View>
+                    )
                 ) : (item.recentSpeakers?.length > 0 || item.groupMemberFaces?.length > 0) ? (
                     <View style={styles.recentSpeakersRow}>
                         {(item.recentSpeakers?.length > 0 ? item.recentSpeakers : item.groupMemberFaces).slice(0, 3).map((person, i) => (
@@ -363,6 +390,11 @@ const styles = StyleSheet.create({
         borderLeftWidth: 3,
         borderLeftColor: 'transparent',
     },
+    rowDM: {
+        borderLeftWidth: 4,
+        borderLeftColor: SOUP_COLORS.pink,
+        backgroundColor: SOUP_COLORS.cream,
+    },
     rowUnread: {
         borderLeftColor: SOUP_COLORS.blue,
     },
@@ -376,6 +408,9 @@ const styles = StyleSheet.create({
     avatar: {
         width: 52,
         height: 52,
+        borderRadius: 14,
+    },
+    avatarDM: {
         borderRadius: 14,
     },
     recentSpeakersRow: {
@@ -395,14 +430,14 @@ const styles = StyleSheet.create({
         borderRadius: 10,
     },
     placeholderAvatar: {
-        backgroundColor: SOUP_COLORS.subtext,
+        backgroundColor: SOUP_COLORS.blue,
         justifyContent: 'center',
         alignItems: 'center',
     },
     placeholderText: {
         color: '#fff',
-        fontSize: 12,
-        fontWeight: '600',
+        fontSize: 18,
+        fontWeight: '700',
     },
     unreadBadge: {
         position: 'absolute',

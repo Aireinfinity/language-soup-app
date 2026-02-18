@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -7,42 +7,7 @@ import { Colors } from '../../constants/Colors';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { OnboardingSwipeForward } from '../../components/OnboardingSwipeForward';
-
-const ALL_LANGUAGES = [
-    'English', 'Spanish (Español)', 'French (Français)', 'German (Deutsch)', 'Italian (Italiano)',
-    'Portuguese (Português)', 'Russian (Русский)', 'Chinese/Mandarin (中文)', 'Japanese (日本語)',
-    'Korean (한국어)', 'Arabic (العربية)', 'Hindi (हिन्दी)', 'Bengali (বাংলা)', 'Urdu (اردو)',
-    'Turkish (Türkçe)', 'Polish (Polski)', 'Dutch (Nederlands)', 'Swedish (Svenska)',
-    'Danish (Dansk)', 'Norwegian (Norsk)', 'Finnish (Suomi)', 'Greek (Ελληνικά)', 'Czech (Čeština)',
-    'Romanian (Română)', 'Hungarian (Magyar)', 'Thai (ไทย)', 'Vietnamese (Tiếng Việt)',
-    'Indonesian (Bahasa Indonesia)', 'Malay (Bahasa Melayu)', 'Tagalog (Filipino)', 'Hebrew (עברית)',
-    'Persian/Farsi (فارسی)', 'Swahili (Kiswahili)', 'Amharic (አማርኛ)', 'Zulu (isiZulu)',
-    'Xhosa (isiXhosa)', 'Afrikaans', 'Catalan (Català)', 'Basque (Euskara)', 'Welsh (Cymraeg)',
-    'Irish (Gaeilge)', 'Scottish Gaelic (Gàidhlig)', 'Icelandic (Íslenska)',
-    'Yoruba (Èdè Yorùbá)', 'Igbo (Asụsụ Igbo)', 'Hausa', 'Somali (Soomaali)', 'Oromo (Afaan Oromoo)',
-    'Tigrinya (ትግርኛ)', 'Shona (chiShona)', 'Sesotho', 'Kinyarwanda (Ikinyarwanda)',
-    'Luganda', 'Wolof', 'Bambara', 'Fulani (Fulfulde)', 'Akan', 'Twi', 'Ewe', 'Fon', 'Lingala', 'Sango',
-    'Serbian (Српски)', 'Croatian (Hrvatski)', 'Bosnian (Bosanski)', 'Slovenian (Slovenščina)',
-    'Slovak (Slovenčina)', 'Bulgarian (Български)', 'Albanian (Shqip)', 'Macedonian (Македонски)',
-    'Ukrainian (Українська)', 'Belarusian (Беларуская)', 'Lithuanian (Lietuvių)', 'Latvian (Latviešu)',
-    'Estonian (Eesti)', 'Georgian (ქართული)', 'Armenian (Հայերեն)', 'Azeri (Azərbaycan)',
-    'Kazakh (Қазақ)', 'Uzbek (Oʻzbek)', 'Tajik (Тоҷикӣ)', 'Turkmen (Türkmen)', 'Kyrgyz (Кыргызча)',
-    'Mongolian (Монгол)', 'Tibetan (བོད་ཡིག)', 'Burmese (မြန်မာ)', 'Lao (ລາວ)',
-    'Khmer (ភាសាខ្មែរ)', 'Sinhala (සිංහල)', 'Tamil (தமிழ்)', 'Telugu (తెలుగు)', 'Kannada (ಕನ್ನಡ)',
-    'Malayalam (മലയാളം)', 'Gujarati (ગુજરાતી)', 'Punjabi (ਪੰਜਾਬੀ)', 'Marathi (मराठी)',
-    'Nepali (नेपाली)', 'Pashto (پښتو)', 'Kurdish (Kurdî)', 'Dari (دری)', 'Quechua (Runasimi)',
-    'Aymara', 'Guarani (Avañe\'ẽ)', 'Nahuatl', 'Maya (Mayat\'an)',
-    'Navajo (Diné bizaad)', 'Cherokee (ᏣᎳᎩ)', 'Cree', 'Inuktitut (ᐃᓄᒃᑎᑐᑦ)', 'Hawaiian (ʻŌlelo Hawaiʻi)',
-    'Maori (Te Reo Māori)', 'Samoan (Gagana Samoa)', 'Tongan (lea faka-Tonga)', 'Fijian (Na vosa vaka-Viti)',
-    'Javanese (Basa Jawa)', 'Sundanese (Basa Sunda)', 'Balinese (Basa Bali)', 'Cebuano (Binisaya)',
-    'Ilocano', 'Hiligaynon', 'Waray', 'Kapampangan',
-    'Esperanto', 'Latin (Latina)', 'Sanskrit (संस्कृतम्)', 'Ancient Greek (Ἑλληνική)', 'Old Norse',
-    'Yiddish (ייִדיש)', 'Ladino', 'Maltese (Malti)',
-    'ASL (American Sign Language)', 'BSL (British Sign Language)', 'Auslan (Australian Sign Language)',
-    'LSF (French Sign Language)', 'DGS (German Sign Language)', 'JSL (Japanese Sign Language)',
-    'KSL (Korean Sign Language)', 'CSL (Chinese Sign Language)', 'ISL (Indian Sign Language)',
-    'LSE (Spanish Sign Language)', 'LIS (Italian Sign Language)', 'International Sign',
-];
+import { SUPPORTED_LANGUAGES } from '../../constants/SupportedLanguages';
 
 export default function LearningScreen() {
     const { user } = useAuth();
@@ -50,6 +15,27 @@ export default function LearningScreen() {
     const [selectedLanguages, setSelectedLanguages] = useState([]);
     const [search, setSearch] = useState('');
     const [saving, setSaving] = useState(false);
+    const [extraLanguages, setExtraLanguages] = useState([]);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const { data: groups } = await supabase.from('app_groups').select('language').eq('is_visible', true);
+            if (cancelled || !groups?.length) return;
+            const fromDb = [...new Set((groups || []).map(g => (g.language || '').trim()).filter(Boolean))];
+            const missing = fromDb.filter(l => !SUPPORTED_LANGUAGES.some(b => b.toLowerCase().includes(l.toLowerCase()) || l.toLowerCase().includes(b.split(' (')[0].toLowerCase())));
+            setExtraLanguages(missing);
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    const ALL_LANGUAGES = useMemo(() => {
+        const combined = [...SUPPORTED_LANGUAGES];
+        for (const l of extraLanguages) {
+            if (!combined.includes(l)) combined.push(l);
+        }
+        return combined.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    }, [extraLanguages]);
 
     const filteredLanguages = ALL_LANGUAGES.filter(lang =>
         !selectedLanguages.includes(lang) &&
@@ -100,7 +86,7 @@ export default function LearningScreen() {
             </Pressable>
             <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.header}>
                 <Text style={styles.title}>which languages are you learning? 🌍</Text>
-                <Text style={styles.subtitle}>we'll match you to groups for these</Text>
+                <Text style={styles.subtitle}>we offer {ALL_LANGUAGES.length} languages. we'll match you to groups for these</Text>
             </Animated.View>
 
             <View style={styles.content}>

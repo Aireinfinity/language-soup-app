@@ -178,17 +178,10 @@ export default function MarketingTab() {
                     subtitle={`${stats.languages[0]?.count || 0} interested`}
                     color="indigo"
                 />
-                <StatCard
-                    icon={Wrench}
-                    label="Top Tool"
-                    value={stats.tools[0]?.name || 'N/A'}
-                    subtitle={`${stats.tools[0]?.count || 0} users`}
-                    color="amber"
-                />
             </div>
 
             {/* Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Signup Sources */}
                 <div className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
                     <h3 className="text-xl font-black text-[var(--soup-dark)] mb-6 flex items-center gap-3">
@@ -237,29 +230,6 @@ export default function MarketingTab() {
                     </div>
                 </div>
 
-                {/* Tools */}
-                <div className="bg-white p-8 rounded-[32px] border border-black/5 shadow-sm">
-                    <h3 className="text-xl font-black text-[var(--soup-dark)] mb-6 flex items-center gap-3">
-                        <span className="p-2 bg-indigo-50 rounded-xl text-indigo-500">🛠️</span>
-                        Previous Tools
-                    </h3>
-                    <div className="space-y-6">
-                        {stats.tools.map((tool, i) => (
-                            <div key={i} className="group">
-                                <div className="flex justify-between text-sm font-bold mb-2">
-                                    <span className="text-gray-700 group-hover:text-indigo-500 transition-colors">{tool.name}</span>
-                                    <span className="text-indigo-500">{tool.count}</span>
-                                </div>
-                                <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                                    <div
-                                        className="bg-indigo-500 h-full rounded-full transition-all duration-1000"
-                                        style={{ width: `${(tool.count / stats.totalSignups) * 100}%` }}
-                                    />
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
             </div>
 
             {/* Future Integrations */}

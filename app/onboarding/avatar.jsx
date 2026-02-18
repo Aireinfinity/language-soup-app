@@ -58,7 +58,7 @@ export default function AvatarScreen() {
                 .select('avatar_url')
                 .not('id', 'eq', user.id)
                 .not('avatar_url', 'is', null)
-                .limit(120);
+                .limit(24);
             const urls = (data || []).map((r) => r?.avatar_url).filter(Boolean);
             const photos = urls.filter(isRealPhotoUrl);
             setExampleAvatars(shuffle(photos));
@@ -211,9 +211,6 @@ export default function AvatarScreen() {
                                         </View>
                                     ))}
                                 </ScrollView>
-                                <View style={styles.scrollFade} pointerEvents="none">
-                                    <LinearGradient colors={['transparent', '#FDF5E6']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.scrollFadeGradient} />
-                                </View>
                                 <Text style={styles.scrollHint}>scroll for more</Text>
                             </View>
                         )}

@@ -3,15 +3,19 @@
   "version": "1.1.1",
   "main": "expo-router/entry",
   "scripts": {
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,md}\"",
     "db:push": "supabase db push",
     "db:migrate": "node scripts/run_migration.mjs",
     "start": "expo start --scheme languagesoup",
+    "start:clear": "expo start --clear --scheme languagesoup",
     "start:dev": "expo start --dev-client --lan --scheme languagesoup",
     "start:dev:tunnel": "expo start --dev-client --tunnel --scheme languagesoup",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "build": "vite build"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",
@@ -70,6 +74,7 @@
     "@vitejs/plugin-react": "^5.1.2",
     "babel-preset-expo": "^54.0.7",
     "pg": "^8.17.2",
+    "prettier": "^3.8.1",
     "tailwindcss": "^4.1.18",
     "typescript": "~5.9.2",
     "vite": "^7.3.1"

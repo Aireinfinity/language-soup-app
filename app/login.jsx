@@ -44,35 +44,49 @@ export default function LoginScreen() {
                 throw new Error('Sign-in did not return a user');
             }
 
-            Alert.alert(
-                'save your password!',
-                `Your password is ${password.join(' ')}. Screenshot or write it down so you can get back in if you ever get logged out (you probably won't need to. Noah has all passwords saved and can recover it if you forget).`,
-                [{
-                    text: 'got it',
-                    onPress: () => {
-                        InteractionManager.runAfterInteractions(() => {
-                            requestAnimationFrame(() => {
-                                try {
-                                    router.replace('/onboarding/conversational');
-                                } catch (e) {
-                                    console.warn('[Login] replace failed:', e);
-                                    router.push('/onboarding/conversational');
-                                }
-                            });
-                        });
-                    }
-                }]
-            );
-        } catch (error) {
-            console.error('Error:', error);
-            if (error.message === 'Name already taken!') {
+            if (authData.isNewUser) {
                 Alert.alert(
-                    'Name Taken 🙅',
-                    'Someone else is using that name with a different password. Try a different name!',
-                    [{ text: 'OK', onPress: () => { setPassword([]); setName(''); } }]
+                    'save your password!',
+                    `Your password is ${password.join(' ')}. Screenshot or write it down so you can get back in if you ever get logged out (you probably won't need to. Noah has all passwords saved and can recover it if you forget).`,
+                    [{
+                        text: 'got it',
+                        onPress: () => {
+                            InteractionManager.runAfterInteractions(() => {
+                                requestAnimationFrame(() => {
+                                    try {
+                                        router.replace('/onboarding/conversational');
+                                    } catch (e) {
+                                        console.warn('[Login] replace failed:', e);
+                                        router.push('/onboarding/conversational');
+                                    }
+                                });
+                            });
+                        }
+                    }]
                 );
             } else {
-                Alert.alert('Oops!', 'Something went wrong. Try again?');
+                try {
+                    router.replace('/(tabs)');
+                } catch (e) {
+                    router.push('/(tabs)');
+                }
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            if (error.message === 'Wrong emoji password!') {
+                Alert.alert(
+                    'Double-check your emojis',
+                    'That name’s already in use. If it’s you, make sure you’re tapping the same 3 emojis you used before — they’re your password.',
+                    [{ text: 'OK', onPress: () => setPassword([]) }]
+                );
+            } else if (error.message?.includes('Account exists but we couldn’t')) {
+                Alert.alert(
+                    'Need to get you back in',
+                    error.message,
+                    [{ text: 'OK' }]
+                );
+            } else {
+                Alert.alert('Oops!', error.message || 'Something went wrong. Try again?');
             }
         } finally {
             setLoading(false);

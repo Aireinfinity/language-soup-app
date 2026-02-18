@@ -1,106 +1,178 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabase';
 import { Calendar, Trash2, Send, Clock, CheckCircle, Edit2, X, Check } from 'lucide-react';
 import { predictResponseRate, logChallengeSent } from './soupPredictor';
 import { translateText } from './translationHelper';
 
+// Fixed holidays and special days (month 1–12, day 1–31). Global audience, not just European.
+const SPECIAL_DAYS = [
+    { month: 1, day: 1, label: "New Year's" },
+    { month: 2, day: 14, label: "Valentine's" },
+    { month: 2, day: 21, label: "Mother Language Day" },
+    { month: 3, day: 8, label: "Intl Women's Day" },
+    { month: 3, day: 17, label: "St. Patrick's" },
+    { month: 3, day: 20, label: "Nowruz" },
+    { month: 4, day: 22, label: "Earth Day" },
+    { month: 4, day: 23, label: "World Book Day" },
+    { month: 6, day: 21, label: "Summer solstice" },
+    { month: 7, day: 4, label: "July 4th" },
+    { month: 7, day: 14, label: "Bastille Day" },
+    { month: 9, day: 26, label: "European Day of Languages" },
+    { month: 10, day: 31, label: "Halloween" },
+    { month: 11, day: 1, label: "Día de Muertos" },
+    { month: 12, day: 18, label: "Arabic Language Day" },
+    { month: 12, day: 24, label: "Christmas Eve" },
+    { month: 12, day: 25, label: "Christmas" },
+    { month: 12, day: 31, label: "New Year's Eve" },
+];
+
+// Variable dates (lunar / cultural). Year -> [{ month, day, label }]. Update annually if needed.
+const VARIABLE_SPECIAL_DAYS = {
+    2025: [
+        { month: 1, day: 29, label: "Chinese New Year" },
+        { month: 3, day: 1, label: "Ramadan starts" },
+        { month: 10, day: 20, label: "Diwali" },
+    ],
+    2026: [
+        { month: 2, day: 17, label: "Chinese New Year" },
+        { month: 2, day: 18, label: "Ramadan starts" },
+        { month: 11, day: 1, label: "Diwali" },
+    ],
+    2027: [
+        { month: 2, day: 6, label: "Chinese New Year" },
+        { month: 2, day: 8, label: "Ramadan starts" },
+        { month: 10, day: 21, label: "Diwali" },
+    ],
+};
+
+function getSpecialDay(date) {
+    const d = new Date(date);
+    const m = d.getMonth() + 1, day = d.getDate();
+    const fixed = SPECIAL_DAYS.find(s => s.month === m && s.day === day);
+    if (fixed) return fixed;
+    const year = d.getFullYear();
+    const variable = (VARIABLE_SPECIAL_DAYS[year] || []).find(s => s.month === m && s.day === day);
+    return variable || null;
+}
+
+// Show when a challenge goes out in key regions (for "all timezones" view). First row = your (browser) time, then global.
+const TZ_LABELS = [
+    { tz: 'America/Los_Angeles', label: 'LA' },
+    { tz: 'America/New_York', label: 'NYC' },
+    { tz: 'Europe/London', label: 'London' },
+    { tz: 'Europe/Paris', label: 'Paris' },
+    { tz: 'Asia/Tokyo', label: 'Tokyo' },
+    { tz: 'Australia/Sydney', label: 'Sydney' },
+    { tz: 'America/Sao_Paulo', label: 'São Paulo' },
+];
+function getTimesByRegion(scheduledTimeIso) {
+    if (!scheduledTimeIso) return [];
+    const d = new Date(scheduledTimeIso);
+    const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const yourTime = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: browserTz }).format(d);
+    const rest = TZ_LABELS.map(({ tz, label }) => ({
+        label,
+        time: new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz }).format(d)
+    }));
+    return [{ label: 'You', time: yourTime }, ...rest];
+}
+
 // Big pool of prompt ideas - random ones shown each time
 // Inspired by The Artist's Way (Julia Cameron), Pinterest, and life-in-your-20s vibes — reflective, creative, human.
 // Emoji guideline: default to black/dark skin tone (🏿) for hand/body emojis — never yellow.
+// Mixed pool: fun + light depth + interview-inspired (community, connection, life stories, low pressure)
 const ALL_PROMPT_IDEAS = [
-    // ——— Light & fun (keep the good ones) ———
+    // ——— Fun & easy ———
     "what song are you listening to right now? 🎧",
-    "share a photo of something that made you smile today 📸",
-    "what's a word in your language that doesn't translate? 🤔",
     "what did you eat for breakfast? 🍳",
-    "describe your mood using only emojis 😎",
-    "what's your favorite thing about where you live? 🏡",
-    "share a memory from your childhood 🧒🏿",
-    "what's something you learned recently? 🧠",
     "what's your comfort food? 🍜",
-    "show us your view right now 🌅",
-    "what language are you learning and why? 🌍",
     "what's making you happy today? ✨",
-    "share a song that reminds you of home 🎵",
-    "what's a tradition in your culture? 🎊",
-    "describe your perfect weekend 🛋️",
-    "what's your morning routine? ☀️",
-    "show us something on your desk right now 🖥️",
-    "what movie could you watch 100 times? 🎬",
     "what's your go-to snack? 🍿",
-    "share a photo of your pet (or dream pet) 🐾",
-    "what did you dream about last night? 💭",
-    "what's playing on your spotify wrapped? 🎶",
-    "show us your coffee or tea setup ☕",
-    "what's your favorite season and why? 🍂",
+    "what's your favorite way to relax? 🧘",
+    "what movie could you watch 100 times? 🎬",
     "what's the last photo you took? 📸",
-    "describe your dream vacation ✈️",
-    "what are you grateful for today? 🙏🏿",
-    "what's your hidden talent? 🌟",
-    "what's a scent that brings back memories? 👃🏿",
-    "who is your role model? 🦸🏿",
-    "what's the most beautiful place you've visited? 🏞️",
-    "what's a goal you're working towards? 🚀",
+    "show us your view right now 🌅",
     "what makes you laugh uncontrollably? 😂",
-    "what's your favorite way to relax? 🧘🏿",
-    "show us your pets (or plants!) 🌿",
     "what's your favorite local slang word? 🗣️",
     "what's a song that always gets you dancing? 💃",
-    "what's something you collect? 🧸",
-    "what's a quote that inspires you? 💬",
-    "what's a skill you're proud of? 🏆",
-    // ——— The Artist's Way vibes (creative recovery, permission, filling the well) ———
-    "what would you do if you didn't need anyone's permission? ✨",
-    "where would you go on a solo 'artist date' just to fill the well? 🎨",
-    "what did you love creating when you were a kid? 🧒🏿",
-    "what's one thing your inner critic says that you're ready to ignore? 🗣️",
-    "what's a small creative act you could do this week? 🌱",
-    "what are you secretly good at that you don't show off? 🌟",
-    "what would you try if you knew you couldn't fail? 🚀",
-    "what's a hobby you gave up that you miss? 💭",
-    "what song or place makes you feel most like yourself? 🎵",
-    "what would you make if you had one uninterrupted hour? ⏳",
-    "what's something beautiful you noticed today? 👀",
-    "what do you wish you had more time to create? 🎨",
-    "what's a rule you're ready to break? 🔓",
-    "who or what gave you permission to be creative? 💡",
-    "what's your version of 'morning pages' — what do you need to get out of your head? 📝",
-    // ——— Life advice / Pinterest / 20s energy ———
-    "what's the best advice you'd give your 20-year-old self? 💬",
-    "what's a boundary you're learning to set? 🧱",
-    "what's something you're unlearning? 🧠",
-    "what does 'enough' look like for you right now? 🌿",
-    "what's a small win you're proud of this week? 🏆",
-    "what's the kindest thing someone said to you recently? 💛",
-    "what's a belief you've changed your mind about? 🔄",
-    "what would you tell a friend going through what you went through? 🤝🏿",
-    "what's one thing you're no longer sorry for? ✊🏿",
-    "what's a habit you're trying to build or break? 🔁",
-    "what makes you feel like you're in the right place at the right time? ✨",
-    "what's the best decision you've made lately? ✅",
-    "what's something you're figuring out as you go? 🗺️",
-    "what do you need to hear today? (then say it to yourself) 🎧",
-    "what's a piece of advice that actually changed how you live? 💡",
-    "what are you saying no to so you can say yes to something else? 🚫",
+    "show us your pets (or plants!) 🌿",
     "what's your favorite ice cream flavor? 🍦",
-    "what's a book that changed your life? 📚",
-    "show us your favorite mug ☕",
-    "what's your favorite weather? ☔",
-    "show us your workspace setup 💻",
-    "what's your favorite animal? 🦁",
-    "what's your favorite board game? 🎲",
-    "what's the best meal you've ever had? 🍽️",
+    "describe your mood using only emojis 😎",
+    "what language are you learning and why? 🌍",
+    // ——— Life stories / connection (interview-inspired) ———
+    "what's a tradition in your culture? 🎊",
+    "share a song that reminds you of home 🎵",
+    "what's something you learned recently? 🧠",
+    "what's your morning routine? ☀️",
+    "what did you dream about last night? 💭",
+    "what's a word in your language that doesn't translate? 🤔",
+    "what's your favorite thing about where you live? 🏡",
+    "who's someone you're grateful for and why? 💛",
+    "what's a small win from this week? 🏆",
+    "what would you tell a friend who's learning your language? 🤝",
+    "what's the kindest thing someone said to you recently? 💛",
+    "what's something beautiful you noticed today? 👀",
+    "describe your perfect weekend 🛋️",
     "what's your favorite holiday tradition? 🎄",
-    "what's a skill you want to learn? 🎯",
-    "what's a movie you can quote by heart? 🎬",
-    "what's your favorite childhood snack? 🍪",
-    "what's a hobby you'd love to pick up? 🎨",
+    "what's something you collect? 🧸",
+    // ——— Artist's Way / gentle depth ———
+    "what would you try if you knew you couldn't fail? 🚀",
+    "what's something you're secretly good at? 🌟",
+    "what song or place makes you feel most like yourself? 🎵",
+    "what did you love creating when you were a kid? 🧒",
+    "what's a hobby you gave up that you miss? 💭",
+    "what would you make if you had one uninterrupted hour? ⏳",
+    "what's a rule you're ready to break? 🔓",
+    "what do you wish you had more time to create? 🎨",
+    "what's one thing your inner critic says that you're ready to ignore? 🗣️",
+    "where would you go on a solo 'artist date' just to fill the well? 🎨",
+    "what's your version of morning pages — what do you need to get out of your head? 📝",
+    // ——— From user interviews: community, connection, low pressure, life stories ———
+    "what's one thing you'd tell someone who's scared to speak in a new language? 🗣️",
+    "who's someone you practice with (or wish you could)? 🤝",
+    "what's a phrase you use all the time in your language? 💬",
+    "what made you laugh in your target language recently? 😂",
+    "what's the nicest thing another learner said to you? 💛",
+    "what's a small win you had this week with the language? 🏆",
+    "if you could have coffee with any native speaker, who and why? ☕",
+    "what's something you're proud of saying out loud? 🌟",
+    "what's a goal you're working towards with this language? 🎯",
+    "what do you do when you don't feel like practicing? 🛋️",
+    // ——— Learn from others' stories (not invasive; typical day, habits, small details) ———
+    "what does a typical day look like for you? ☀️",
+    "do you usually walk or drive to work (or wherever you go)? 🚶",
+    "what's the first thing you do when you wake up? 🌅",
+    "how do you usually get your coffee or tea? ☕",
+    "what do you do to unwind after a long day? 🛋️",
+    "what's a small ritual you have that you really love? ✨",
+    "what does your morning look like before you leave the house? 🏠",
+    "do you cook most days or grab something? 🍳",
+    "what's one thing you always have in your bag or pocket? 🎒",
+    "how do you get around your city or town? 🚌",
+    "what's your favorite time of day and why? ⏰",
+    "what do you do on a lazy weekend? 📖",
+    "where do you usually work or study? 💻",
+    "what's a phrase you say every day in your language? 💬",
+    "who do you usually eat dinner with? 🍽️",
+    "what's one thing that's different about life where you live? 🌍",
 ];
 
-const getRandomIdeas = (count = 6, exclude = []) => {
-    const available = ALL_PROMPT_IDEAS.filter(i => !exclude.includes(i));
+const getRandomIdeas = (count = 6, exclude = [], recentlyShown = []) => {
+    const excludeSet = new Set([...exclude, ...(recentlyShown || []).slice(-18)]); // exclude sent + last 18 shown so we cycle
+    const available = ALL_PROMPT_IDEAS.filter(i => !excludeSet.has(i));
     const shuffled = [...available].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, count);
+};
+
+// Dynamic mix: up to 2 from top performers (response-rate data), rest from pool. Never from recent history.
+const getDynamicIdeas = (count, exclude, topPerformers = [], recentlyShown = []) => {
+    const fromTop = (topPerformers || [])
+        .map(t => (typeof t === 'string' ? t : t?.text))
+        .filter(Boolean)
+        .filter(text => !exclude.includes(text));
+    const fromPool = getRandomIdeas(count - Math.min(2, fromTop.length), [...exclude, ...fromTop], recentlyShown);
+    const topPicks = fromTop.slice(0, 2).sort(() => Math.random() - 0.5);
+    return [...topPicks, ...fromPool].slice(0, count).sort(() => Math.random() - 0.5);
 };
 
 export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogleLangCode, handleSendToGroups }) {
@@ -112,6 +184,7 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
     const [selectedChallenge, setSelectedChallenge] = useState(null);
     const [translations, setTranslations] = useState({});
     const [translating, setTranslating] = useState(false);
+    const [translationFallbackUsed, setTranslationFallbackUsed] = useState(false);
     const [sending, setSending] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [editText, setEditText] = useState('');
@@ -121,12 +194,16 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
     const [showSoupInfo, setShowSoupInfo] = useState(false);
     const [prediction, setPrediction] = useState(null);
 
-    // Random prompt ideas - refresh when one is used
-    const [promptIdeas, setPromptIdeas] = useState(() => getRandomIdeas(6));
+    // Random prompt ideas - exclude already-sent and used; track recently shown so we cycle (less repetition)
+    const [excludedSentTexts, setExcludedSentTexts] = useState([]);
+    const [promptIdeas, setPromptIdeas] = useState([]);
     const [usedIdeas, setUsedIdeas] = useState([]);
+    const recentlyShownRef = useRef([]);
 
     // Past challenges for inspiration
     const [pastChallenges, setPastChallenges] = useState({ top: [], recent: [] });
+    // Sent challenges from last 7 days (so "Past 3 days" always has data; main queue can be capped at 1000)
+    const [recentSentChallenges, setRecentSentChallenges] = useState([]);
 
     // Generate dynamic date options for the next 7 days
     const dateOptions = Array.from({ length: 7 }, (_, i) => {
@@ -155,6 +232,14 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
         loadQueue();
     }, []);
 
+    // Dynamic ideas: top performers + new prompts; exclude sent + recently shown so we see more variety
+    useEffect(() => {
+        const recent = recentlyShownRef.current;
+        const next = getDynamicIdeas(6, excludedSentTexts, pastChallenges.top, recent);
+        setPromptIdeas(next);
+        recentlyShownRef.current = [...recent, ...next].slice(-24);
+    }, [excludedSentTexts, pastChallenges.top]);
+
     // Trigger prediction when draft text changes
     useEffect(() => {
         if (draftText.trim().length > 3) {
@@ -173,11 +258,30 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
         try {
             const { data, error } = await supabase
                 .from('app_scheduled_challenges')
-                .select('*')
+                .select('id, created_by, challenge_text, scheduled_time, status, translations, created_at')
                 .order('scheduled_time', { ascending: true });
 
             if (error) throw error;
-            setQueuedChallenges(data || []);
+            const normalized = (data || []).map((row) => {
+                let trans = row.translations;
+                if (typeof trans === 'string') {
+                    try { trans = JSON.parse(trans); } catch (_) { trans = null; }
+                }
+                return { ...row, translations: trans ?? null };
+            });
+            setQueuedChallenges(normalized);
+
+            // Load sent challenges from last 14 days so "Past 3 days" has data (timezone + sparse sends)
+            const fourteenDaysAgo = new Date();
+            fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+            const { data: recentSent } = await supabase
+                .from('app_scheduled_challenges')
+                .select('id, created_by, challenge_text, scheduled_time, status, translations, created_at')
+                .eq('status', 'sent')
+                .gte('scheduled_time', fourteenDaysAgo.toISOString())
+                .order('scheduled_time', { ascending: false })
+                .limit(100);
+            setRecentSentChallenges(recentSent || []);
 
             // Load past challenges for inspiration
             loadPastChallenges();
@@ -188,9 +292,17 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
         }
     };
 
+    const formatChallengeText = (text) => {
+        if (!text) return '';
+        return text
+            .replace(/^#challenge\s*/i, '')
+            .split('\n')[0]
+            .trim();
+    };
+
     const loadPastChallenges = async () => {
         try {
-            // Get recent sent challenges
+            // Get recent sent challenges (for "recent" display)
             const { data: recent } = await supabase
                 .from('app_scheduled_challenges')
                 .select('challenge_text')
@@ -198,8 +310,16 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                 .order('scheduled_time', { ascending: false })
                 .limit(5);
 
+            // Get ALL sent challenge texts so we never suggest them again
+            const { data: allSent } = await supabase
+                .from('app_scheduled_challenges')
+                .select('challenge_text')
+                .eq('status', 'sent');
+
+            const excluded = (allSent || []).map(c => formatChallengeText(c.challenge_text)).filter(Boolean);
+            setExcludedSentTexts(excluded);
+
             // Get top performers from challenge_performance_log
-            // Filter by date >= 2026-01-01 to only get app challenges (not WhatsApp)
             const { data: top } = await supabase
                 .from('challenge_performance_log')
                 .select('challenge_text, response_rate, sent_at')
@@ -208,23 +328,13 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                 .order('response_rate', { ascending: false })
                 .limit(5);
 
-            // Format: remove #challenge prefix and get first sentence only
-            const formatChallenge = (text) => {
-                if (!text) return '';
-                return text
-                    .replace(/^#challenge\s*/i, '')
-                    .split('\n')[0]
-                    .trim();
-            };
-
             setPastChallenges({
-                recent: (recent || []).map(c => formatChallenge(c.challenge_text)),
+                recent: (recent || []).map(c => formatChallengeText(c.challenge_text)),
                 top: (top || []).slice(0, 3).map(c => ({
-                    text: formatChallenge(c.challenge_text),
+                    text: formatChallengeText(c.challenge_text),
                     rate: c.response_rate ? Math.round(c.response_rate) : null
                 }))
             });
-            console.log('📊 Loaded past challenges:', { recent: recent?.length, top: top?.length });
         } catch (err) {
             console.log('Could not load past challenges:', err.message);
         }
@@ -290,14 +400,14 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
 
         setSaving(true);
         try {
-            // 1. Insert the challenge
+            // 1. Insert the challenge as APPROVED (auto-translations below; cron will send at scheduled time)
             const { data: newChallenge, error } = await supabase
                 .from('app_scheduled_challenges')
                 .insert({
                     created_by: user.id,
                     challenge_text: draftText.trim(),
                     scheduled_time: scheduleDate.toISOString(),
-                    status: 'pending'
+                    status: 'approved'
                 })
                 .select()
                 .single();
@@ -306,25 +416,31 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
 
             // 2. Generate Translations (Synchronously now, to ensure they aren't "missing")
             try {
-                const uniqueLanguages = [...new Set(groups.map(g => g.language))];
-                // console.log(`🌍 Translating for ${uniqueLanguages.length} languages...`);
+                const uniqueLanguages = [...new Set(groups.map(g => g.language).filter(Boolean))];
+                console.log('[QueueTab saveDraft] groups:', groups.length, '| languages:', uniqueLanguages);
+                if (uniqueLanguages.length === 0) {
+                    console.warn('⚠️ No groups with language; translations will be empty. Add groups in Groups & Requests.');
+                }
 
+                const cleanEnglish = newChallenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
+                console.log('[QueueTab saveDraft] cleanEnglish (first 60 chars):', cleanEnglish.substring(0, 60) + (cleanEnglish.length > 60 ? '…' : ''));
                 const translationPromises = uniqueLanguages.map(async (language) => {
+                    console.log('[QueueTab saveDraft] translating to:', language);
                     const translated = await translateText(
-                        newChallenge.challenge_text,
+                        cleanEnglish,
                         language,
                         getDeepLLangCode,
                         getGoogleLangCode,
                         supabase
                     );
+                    const isFallback = translated === cleanEnglish || !translated;
+                    console.log('[QueueTab saveDraft]', language, '→', isFallback ? '⚠️ FALLBACK (same as English)' : '✅ translated', isFallback ? '' : `(${translated?.length ?? 0} chars)`);
                     return [language, translated];
                 });
 
                 const translationPairs = await Promise.all(translationPromises);
                 const rawResults = Object.fromEntries(translationPairs);
 
-                // Construct full messages
-                const cleanEnglish = newChallenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
                 const finalTranslations = {};
 
                 uniqueLanguages.forEach(lang => {
@@ -338,12 +454,17 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                 });
 
                 // Update the record with translations
-                await supabase
+                const { error: updateErr } = await supabase
                     .from('app_scheduled_challenges')
                     .update({ translations: finalTranslations })
                     .eq('id', newChallenge.id);
 
-                console.log('✅ Translations generated and saved!');
+                if (updateErr) {
+                    console.error('❌ Failed to save translations:', updateErr);
+                    alert('Translations generated but save failed. You can use Backfill Translations or open Preview and Approve to save them.');
+                } else {
+                    console.log('✅ Auto-translations generated and saved.');
+                }
 
             } catch (transErr) {
                 console.error('Translation failed:', transErr);
@@ -435,35 +556,131 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
         }
     };
 
+    // Helper: get value from translations object by language (case-insensitive key match)
+    const getTranslationForLang = (transObj, lang) => {
+        if (!transObj || typeof transObj !== 'object' || !lang) return null;
+        if (transObj[lang] !== undefined && transObj[lang] !== null) return transObj[lang];
+        const key = Object.keys(transObj).find(k => String(k).toLowerCase() === String(lang).toLowerCase());
+        return key ? transObj[key] : null;
+    };
+
+    // For Backfill: treat as "missing" if no translation OR (non-English) translation is just the English fallback
+    const hasValidTranslation = (transObj, lang, cleanEnglish) => {
+        const raw = getTranslationForLang(transObj, lang);
+        if (!raw || typeof raw !== 'string') return false;
+        if (String(lang).toLowerCase() === 'english') return true;
+        const parts = raw.replace(/^#challenge\s*/i, '').trim().split('\n');
+        const translatedPart = parts.length > 1 ? parts.slice(1).join('\n').trim() : '';
+        return translatedPart.length > 0 && translatedPart !== cleanEnglish;
+    };
+
     const openPreview = async (challenge) => {
         setSelectedChallenge(challenge);
         setShowPreview(true);
 
-        // Check cache first
-        if (translationCache[challenge.challenge_text]) {
-            const cachedTranslations = translationCache[challenge.challenge_text];
-            setTranslations(cachedTranslations);
+        let existing = challenge.translations;
+        if (typeof existing === 'string') {
+            try { existing = JSON.parse(existing); } catch (_) { existing = null; }
+        }
+        const requiredLangs = [...new Set(groups.map(g => g.language).filter(Boolean))];
+        const hasCompleteTranslations = existing && typeof existing === 'object' && requiredLangs.length > 0 && requiredLangs.every(lang => getTranslationForLang(existing, lang));
+        if (hasCompleteTranslations) {
+            setTranslations(existing);
             setTranslating(false);
+            const cleanEnglish = challenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
+            const anyFallback = requiredLangs.some(lang => {
+                if (String(lang).toLowerCase() === 'english') return false;
+                const raw = getTranslationForLang(existing, lang);
+                const parts = (raw || '').replace(/^#challenge\s*/i, '').trim().split('\n');
+                const translatedPart = parts.length > 1 ? parts.slice(1).join('\n').trim() : '';
+                return !translatedPart || translatedPart === cleanEnglish;
+            });
+            setTranslationFallbackUsed(anyFallback);
+            return;
+        }
 
-            // SAVE IMMEDIATELY (Even if cached)
-            // Ensure DB is always in sync with what user sees
-            await supabase
-                .from('app_scheduled_challenges')
-                .update({ translations: cachedTranslations })
-                .eq('id', challenge.id);
+        if (translationCache[challenge.challenge_text]) {
+            const cached = translationCache[challenge.challenge_text];
+            setTranslations(cached);
+            setTranslating(false);
+            const cleanEnglish = challenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
+            const anyFallback = Object.keys(cached).some(lang => {
+                if (String(lang).toLowerCase() === 'english') return false;
+                const raw = cached[lang];
+                const parts = (raw || '').replace(/^#challenge\s*/i, '').trim().split('\n');
+                const translatedPart = parts.length > 1 ? parts.slice(1).join('\n').trim() : '';
+                return !translatedPart || translatedPart === cleanEnglish;
+            });
+            setTranslationFallbackUsed(anyFallback);
+            await supabase.from('app_scheduled_challenges').update({ translations: cached }).eq('id', challenge.id);
             return;
         }
 
         setTranslating(true);
-
+        setTranslationFallbackUsed(false);
         try {
-            // Get unique languages from groups
-            const uniqueLanguages = [...new Set(groups.map(g => g.language))];
+            const cleanEnglish = challenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
+            const uniqueLanguages = [...new Set(groups.map(g => g.language).filter(Boolean))];
+            console.log('[QueueTab openPreview] languages:', uniqueLanguages, '| cleanEnglish (first 50):', cleanEnglish.substring(0, 50) + '…');
+            const translationPromises = uniqueLanguages.map(async (language) => {
+                console.log('[QueueTab openPreview] translating to:', language);
+                const translated = await translateText(
+                    cleanEnglish,
+                    language,
+                    getDeepLLangCode,
+                    getGoogleLangCode,
+                    supabase
+                );
+                console.log('[QueueTab openPreview]', language, '→', translated === cleanEnglish ? '⚠️ FALLBACK' : '✅', translated?.substring?.(0, 40) + (translated?.length > 40 ? '…' : ''));
+                return [language, translated];
+            });
+            const translationPairs = await Promise.all(translationPromises);
+            const translationResults = Object.fromEntries(translationPairs);
+            const fullMessages = {};
+            let anyFallback = false;
+            uniqueLanguages.forEach(lang => {
+                const isEnglish = String(lang).toLowerCase() === 'english';
+                const trans = translationResults[lang];
+                if (isEnglish) {
+                    fullMessages[lang] = `#challenge\n${cleanEnglish}`;
+                } else {
+                    if (trans === cleanEnglish || !trans) anyFallback = true;
+                    fullMessages[lang] = `#challenge\n${cleanEnglish}\n${trans || cleanEnglish}`;
+                }
+            });
+            setTranslationFallbackUsed(anyFallback);
+            setTranslations(fullMessages);
+            setTranslationCache(prev => ({ ...prev, [challenge.challenge_text]: fullMessages }));
+            const { error: saveError } = await supabase
+                .from('app_scheduled_challenges')
+                .update({ translations: fullMessages })
+                .eq('id', challenge.id);
+            if (saveError) console.error('❌ DB Save Failed:', saveError);
+        } catch (err) {
+            console.error('Translation error:', err);
+            setTranslationFallbackUsed(true);
+            alert('Some translations failed. Please try again.');
+        } finally {
+            setTranslating(false);
+        }
+    };
 
-            // Translate all languages in PARALLEL for speed!
+    const regenerateTranslationsInPreview = async () => {
+        if (!selectedChallenge) return;
+        setTranslationCache(prev => {
+            const next = { ...prev };
+            delete next[selectedChallenge.challenge_text];
+            return next;
+        });
+        setTranslating(true);
+        setTranslationFallbackUsed(false);
+        try {
+            const challenge = selectedChallenge;
+            const cleanEnglish = challenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
+            const uniqueLanguages = [...new Set(groups.map(g => g.language).filter(Boolean))];
             const translationPromises = uniqueLanguages.map(async (language) => {
                 const translated = await translateText(
-                    challenge.challenge_text,
+                    cleanEnglish,
                     language,
                     getDeepLLangCode,
                     getGoogleLangCode,
@@ -471,60 +688,38 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                 );
                 return [language, translated];
             });
-
-            // Wait for all translations to complete
             const translationPairs = await Promise.all(translationPromises);
             const translationResults = Object.fromEntries(translationPairs);
-
-            setTranslations(translationResults);
-
-            console.log('🔮 Generated Translations:', translationResults); // DEBUG
-
-            // --- SIMPLIFICATION: CONSTRUCT FINAL FORMATTED MESSAGES (WYSIWYG) ---
-            const cleanEnglish = challenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
             const fullMessages = {};
-
-            // Calculate the exact string for every language
+            let anyFallback = false;
             uniqueLanguages.forEach(lang => {
-                const isEnglish = lang.toLowerCase() === 'english';
+                const isEnglish = String(lang).toLowerCase() === 'english';
                 const trans = translationResults[lang];
-
                 if (isEnglish) {
                     fullMessages[lang] = `#challenge\n${cleanEnglish}`;
                 } else {
-                    // Foreign groups get: Header + English + Translation
+                    if (trans === cleanEnglish || !trans) anyFallback = true;
                     fullMessages[lang] = `#challenge\n${cleanEnglish}\n${trans || cleanEnglish}`;
                 }
             });
-
-            console.log('💾 Saving Final WYSIWYG Messages:', fullMessages);
-
-            // UPDATE STATE & CACHE WITH FULL MESSAGES
+            setTranslationFallbackUsed(anyFallback);
             setTranslations(fullMessages);
-
-            setTranslationCache(prev => ({
-                ...prev,
-                [challenge.challenge_text]: fullMessages
-            }));
-
-            // SAVE FINAL MESSAGES TO DB
+            setTranslationCache(prev => ({ ...prev, [challenge.challenge_text]: fullMessages }));
             const { error: saveError } = await supabase
                 .from('app_scheduled_challenges')
-                .update({
-                    translations: fullMessages
-                })
+                .update({ translations: fullMessages })
                 .eq('id', challenge.id);
-
             if (saveError) console.error('❌ DB Save Failed:', saveError);
-            else console.log('✅ DB Save Success!');
-
+            else console.log('✅ Translations regenerated and saved.');
         } catch (err) {
-            console.error('Translation error:', err);
-            alert('Some translations failed. Please try again.');
+            console.error('Regenerate translations error:', err);
+            setTranslationFallbackUsed(true);
+            alert('Regenerate failed. Check console and try again.');
         } finally {
             setTranslating(false);
         }
     };
+
     const approveChallenge = async (challengeId = null) => {
         try {
             // Find the challenge - either from ID or selectedChallenge
@@ -545,10 +740,8 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                 console.log('Translations missing, generating on fly...');
                 setTranslating(true);
 
-                // 1. Get languages
                 const uniqueLanguages = [...new Set(groups.map(g => g.language))];
 
-                // 2. Translate in parallel
                 const translationPromises = uniqueLanguages.map(async (language) => {
                     const translated = await translateText(
                         challenge.challenge_text,
@@ -563,8 +756,8 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                 const translationPairs = await Promise.all(translationPromises);
                 const rawResults = Object.fromEntries(translationPairs);
 
-                // 3. CONSTRUCT FORMATTED MESSAGES (Same logic as Preview)
                 const cleanEnglish = challenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
+                // 3. CONSTRUCT FORMATTED MESSAGES (Same logic as Preview)
                 uniqueLanguages.forEach(lang => {
                     const isEnglish = lang.toLowerCase() === 'english';
                     const trans = rawResults[lang];
@@ -614,24 +807,34 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
 
             if (error) throw error;
 
-            console.log(`Checking ${challenges.length} challenges for missing translations...`);
+            console.log('[QueueTab backfill] challenges:', challenges.length, '| groups:', groups.length);
             let updatedCount = 0;
 
-            const uniqueLanguages = [...new Set(groups.map(g => g.language))];
+            const uniqueLanguages = [...new Set(groups.map(g => g.language).filter(Boolean))];
+            console.log('[QueueTab backfill] uniqueLanguages:', uniqueLanguages);
+            if (uniqueLanguages.length === 0) {
+                alert('No languages from groups. Load the dashboard with groups (Kitchen → Groups & Requests) and try again.');
+                setTranslating(false);
+                return;
+            }
 
             for (const challenge of challenges) {
-                // Check if translations are missing or incomplete
-                const currentTrans = challenge.translations || {};
-                const missingLangs = uniqueLanguages.filter(lang => !currentTrans[lang]);
+                let currentTrans = challenge.translations;
+                if (typeof currentTrans === 'string') {
+                    try { currentTrans = JSON.parse(currentTrans); } catch (_) { currentTrans = {}; }
+                }
+                if (!currentTrans || typeof currentTrans !== 'object') currentTrans = {};
+                const cleanEnglish = challenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
+                const missingLangs = uniqueLanguages.filter(lang => !hasValidTranslation(currentTrans, lang, cleanEnglish));
 
                 if (missingLangs.length > 0) {
-                    console.log(`Challenge ${challenge.id.substring(0, 4)} missing: ${missingLangs.join(', ')}`);
+                    console.log('[QueueTab backfill] challenge', challenge.id.substring(0, 8), 'missing langs:', missingLangs.join(', '));
 
                     // Generate missing translations
-                    const cleanEnglish = challenge.challenge_text.replace(/^#challenge\s*/i, '').trim();
                     const newTrans = { ...currentTrans };
 
                     for (const lang of missingLangs) {
+                        console.log('[QueueTab backfill] translating', lang, '…');
                         const translation = await translateText(
                             cleanEnglish,
                             lang,
@@ -639,6 +842,8 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                             getGoogleLangCode,
                             supabase
                         );
+                        const isFallback = translation === cleanEnglish || !translation;
+                        console.log('[QueueTab backfill]', lang, '→', isFallback ? '⚠️ FALLBACK' : '✅', isFallback ? '' : `(${translation?.length ?? 0} chars)`);
 
                         // Construct format
                         const isEnglish = lang.toLowerCase() === 'english';
@@ -860,28 +1065,113 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                         </div>
                     </div>
                 </div>
+
+                {/* What's going out – past 3 days (sent only) + tomorrow + next 7 days */}
+                {(() => {
+                    const challengesByDate = {};
+                    // Past 3 days: use recentSentChallenges (explicit last-7-days fetch so we always have them)
+                    // Match by local calendar date so "Past 3 days" lines up with what you expect
+                    recentSentChallenges.forEach(c => {
+                        if (!c?.scheduled_time) return;
+                        const d = new Date(c.scheduled_time);
+                        const dateKey = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toDateString();
+                        if (!challengesByDate[dateKey]) challengesByDate[dateKey] = c;
+                    });
+                    // Future: pending + approved from main queue
+                    [...pendingChallenges, ...approvedChallenges].forEach(c => {
+                        const dateKey = new Date(c.scheduled_time).toDateString();
+                        challengesByDate[dateKey] = c;
+                    });
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const past3 = [];
+                    for (let i = 3; i >= 1; i--) {
+                        const d = new Date(today);
+                        d.setDate(d.getDate() - i);
+                        past3.push({ date: d, challenge: challengesByDate[d.toDateString()] });
+                    }
+                    const tomorrow = new Date(today);
+                    tomorrow.setDate(tomorrow.getDate() + 1);
+                    const tomorrowChallenge = challengesByDate[tomorrow.toDateString()];
+                    // Next 7 days = day after tomorrow through 7 days out (tomorrow is shown above, so no duplicate)
+                    const next7 = [];
+                    for (let i = 1; i <= 7; i++) {
+                        const d = new Date(tomorrow);
+                        d.setDate(tomorrow.getDate() + i);
+                        next7.push({ date: d, challenge: challengesByDate[d.toDateString()] });
+                    }
+                    const clean = (t) => (t || '').replace(/^#challenge\s*/i, '').trim().slice(0, 80) + ((t || '').length > 80 ? '…' : '');
+                    const timesLine = (challenge) => {
+                        if (!challenge?.scheduled_time) return null;
+                        const byRegion = getTimesByRegion(challenge.scheduled_time);
+                        return byRegion.map(({ label, time }) => `${label} ${time}`).join(' · ');
+                    };
+                    return (
+                        <div className="mt-6 pt-6 border-t border-gray-200">
+                            <h3 className="text-sm font-black text-[var(--soup-dark)] uppercase tracking-wider mb-4">What&apos;s going out</h3>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                                {/* Past 3 days — compact card */}
+                                <div className="rounded-2xl border border-gray-100 bg-gray-50/80 p-4">
+                                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2">Past 3 days</div>
+                                    {past3.map(({ date, challenge }) => (
+                                        <div key={date.toISOString()} className="flex items-start gap-2 py-1.5 border-b border-gray-100 last:border-0">
+                                            <span className="text-xs font-bold text-gray-500 shrink-0 w-14">{date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })}</span>
+                                            <span className="text-xs font-medium text-[var(--soup-dark)] leading-tight">{challenge ? clean(challenge.challenge_text) : '—'}</span>
+                                            {challenge?.status === 'sent' && <span className="shrink-0 text-[9px] font-bold text-green-600">✓</span>}
+                                        </div>
+                                    ))}
+                                    <p className="text-[9px] text-gray-400 mt-2">No row = no challenge that day.</p>
+                                </div>
+
+                                {/* Tomorrow — highlight */}
+                                <div className="rounded-2xl border-2 border-[var(--soup-turquoise)]/30 bg-[var(--soup-turquoise)]/5 p-4">
+                                    <div className="text-[10px] font-black text-[var(--soup-turquoise)] uppercase tracking-wider mb-2">Tomorrow</div>
+                                    <p className="text-sm font-bold text-[var(--soup-dark)] leading-snug">
+                                        {tomorrowChallenge ? clean(tomorrowChallenge.challenge_text) : '— No challenge yet'}
+                                    </p>
+                                    {tomorrowChallenge?.scheduled_time && (
+                                        <p className="text-[9px] text-gray-500 mt-2">{timesLine(tomorrowChallenge)}</p>
+                                    )}
+                                </div>
+
+                                {/* Next 7 days — compact list */}
+                                <div className="rounded-2xl border border-gray-100 bg-gray-50/80 p-4">
+                                    <div className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2">Next 7 days</div>
+                                    {next7.map(({ date, challenge }) => (
+                                        <div key={date.toISOString()} className="flex items-center gap-2 py-1 border-b border-gray-100 last:border-0">
+                                            <span className="text-xs font-bold text-gray-500 shrink-0 w-14">{date.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })}</span>
+                                            <span className="text-xs font-medium text-[var(--soup-dark)] truncate">{challenge ? clean(challenge.challenge_text) : '—'}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <p className="text-[10px] text-gray-400 font-medium">One challenge per day per group; notifications by timezone.</p>
+                        </div>
+                    );
+                })()}
             </div>
 
             {/* Draft Form */}
             <div className="mb-8 bg-white p-8 rounded-3xl border border-black/5 shadow-sm">
                 <h3 className="text-xl font-black text-[var(--soup-dark)] mb-4">Create New Challenge</h3>
 
-                {/* Prompt Ideas - always visible for inspiration */}
+                {/* Prompt Ideas — mix of fun, depth, interview-inspired; dynamic (top performers when we have data) */}
                 <div className="mb-4 p-4 bg-[var(--soup-beige)]/50 rounded-xl border border-[var(--soup-turquoise)]/20">
-                    <span className="text-xs font-black text-[var(--soup-turquoise)] uppercase tracking-wider">💡 need ideas? click one:</span>
+                    <span className="text-xs font-black text-[var(--soup-turquoise)] uppercase tracking-wider">💡 need ideas? (dynamic: high responders + new prompts)</span>
                     <div className="mt-3 flex flex-wrap gap-2">
                         {promptIdeas.map((idea, i) => (
                             <button
                                 key={idea}
                                 onClick={() => {
                                     setDraftText(idea);
-                                    // Replace this idea with a new random one
                                     const newUsed = [...usedIdeas, idea];
                                     setUsedIdeas(newUsed);
                                     const remaining = promptIdeas.filter(p => p !== idea);
-                                    const newIdea = getRandomIdeas(1, [...remaining, ...newUsed])[0];
-                                    if (newIdea) {
-                                        setPromptIdeas([...remaining, newIdea]);
+                                    const next = getDynamicIdeas(1, [...remaining, ...newUsed, ...excludedSentTexts], pastChallenges.top, recentlyShownRef.current)[0];
+                                    if (next) {
+                                        setPromptIdeas([...remaining, next]);
+                                        recentlyShownRef.current = [...recentlyShownRef.current, next].slice(-24);
                                     }
                                 }}
                                 className="px-3 py-2 bg-white hover:bg-[var(--soup-turquoise)]/10 rounded-lg border border-[var(--soup-turquoise)]/20 text-sm font-medium text-[var(--soup-dark)] transition-all hover:scale-105"
@@ -890,40 +1180,33 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                             </button>
                         ))}
                     </div>
+                    {pastChallenges.top.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-[var(--soup-turquoise)]/20">
+                            <span className="text-[10px] font-black text-green-600 uppercase tracking-wider">🔥 High response rate (from your data)</span>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                                {pastChallenges.top.slice(0, 3).map((c, i) => (
+                                    <button
+                                        key={i}
+                                        onClick={() => {
+                                            setDraftText(c.text);
+                                            const newUsed = [...usedIdeas, c.text];
+                                            setUsedIdeas(newUsed);
+                                            const remaining = promptIdeas.filter(p => p !== c.text);
+                                            const next = getDynamicIdeas(1, [...remaining, ...newUsed, ...excludedSentTexts], pastChallenges.top, recentlyShownRef.current)[0];
+                                            if (next) {
+                                                setPromptIdeas([...remaining, next]);
+                                                recentlyShownRef.current = [...recentlyShownRef.current, next].slice(-24);
+                                            }
+                                        }}
+                                        className="px-2 py-1.5 bg-green-50 hover:bg-green-100 rounded-lg border border-green-200 text-xs font-medium text-[var(--soup-dark)]"
+                                    >
+                                        {c.rate != null ? `${c.rate}% · ` : ''}{(c.text || '').slice(0, 50)}{(c.text || '').length > 50 ? '…' : ''}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
-
-                {/* Top Performers - if we have data */}
-                {pastChallenges.top.length > 0 && (
-                    <div className="mb-4 p-4 bg-green-50 rounded-xl border border-green-100">
-                        <span className="text-xs font-black text-green-600 uppercase tracking-wider">🔥 Top performers (click to reuse):</span>
-                        <div className="mt-3 space-y-2">
-                            {pastChallenges.top.slice(0, 3).map((c, i) => (
-                                <button
-                                    key={i}
-                                    onClick={() => setDraftText(c.text)}
-                                    className="block w-full text-left p-3 bg-white hover:bg-green-100 rounded-lg border border-green-200 transition-all"
-                                >
-                                    {c.rate && <span className="text-xs font-black text-green-500">{c.rate}% response rate</span>}
-                                    <p className={`text-sm text-[var(--soup-dark)] font-medium ${c.rate ? 'mt-1' : ''}`}>{c.text}</p>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Recent Challenges - don't repeat */}
-                {pastChallenges.recent.length > 0 && (
-                    <div className="mb-4 p-4 bg-orange-50 rounded-xl border border-orange-100">
-                        <span className="text-xs font-black text-orange-500 uppercase tracking-wider">⚠️ Recently sent (don't repeat):</span>
-                        <div className="mt-3 space-y-2">
-                            {pastChallenges.recent.slice(0, 3).map((c, i) => (
-                                <div key={i} className="p-2 bg-white rounded-lg border border-orange-200">
-                                    <p className="text-sm text-gray-600">{c}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
 
                 <textarea
                     value={draftText}
@@ -1062,7 +1345,7 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
             <div className="bg-white rounded-3xl border border-black/5 shadow-sm overflow-hidden">
                 <div className="px-8 py-4 bg-[var(--soup-beige)]/30 border-b border-black/5">
                     <h3 className="text-lg font-black text-[var(--soup-dark)]">Challenge Calendar 📅</h3>
-                    <p className="text-xs text-gray-500 font-bold mt-1">{pendingChallenges.length} pending • {approvedChallenges.length} approved</p>
+                    <p className="text-xs text-gray-500 font-bold mt-1">{pendingChallenges.length} pending • {approvedChallenges.length} approved • <span className="text-[var(--soup-pink)]">pink ring = holiday / special day</span></p>
                 </div>
 
                 {/* Calendar Grid */}
@@ -1101,15 +1384,19 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                                                 const dateKey = day.toDateString();
                                                 const challenge = challengesByDate[dateKey];
                                                 const isToday = day.toDateString() === today.toDateString();
+                                                const special = getSpecialDay(day);
 
                                                 return (
                                                     <div
                                                         key={i}
                                                         onClick={() => challenge && startEditing(challenge)}
-                                                        className={`p-1.5 rounded-lg text-center transition-all min-h-[60px] ${challenge ? 'cursor-pointer' : ''} ${isToday ? 'ring-2 ring-[var(--soup-turquoise)]' : ''} ${challenge?.status === 'approved' ? 'bg-green-100 hover:bg-green-200' : ''} ${challenge?.status === 'pending' ? 'bg-yellow-100 hover:bg-yellow-200' : ''} ${!challenge ? 'bg-gray-50' : ''}`}
+                                                        className={`p-1.5 rounded-lg text-center transition-all min-h-[60px] ${challenge ? 'cursor-pointer' : ''} ${isToday ? 'ring-2 ring-[var(--soup-turquoise)]' : ''} ${special ? 'ring-1 ring-[var(--soup-pink)]/60 bg-[var(--soup-pink)]/5' : ''} ${challenge?.status === 'approved' ? 'bg-green-100 hover:bg-green-200' : ''} ${challenge?.status === 'pending' ? 'bg-yellow-100 hover:bg-yellow-200' : ''} ${!challenge && !special ? 'bg-gray-50' : ''}`}
                                                     >
                                                         <div className="text-[9px] font-bold text-gray-400">{day.toLocaleDateString('en-US', { weekday: 'short' })}</div>
                                                         <div className="text-sm font-black text-[var(--soup-dark)]">{day.getDate()}</div>
+                                                        {special && (
+                                                            <div className="text-[8px] font-bold leading-tight text-[var(--soup-pink)] truncate" title={special.label}>{special.label}</div>
+                                                        )}
                                                         {challenge && (
                                                             <div className={`text-[8px] font-bold leading-tight ${challenge.status === 'approved' ? 'text-green-600' : 'text-yellow-600'}`}>
                                                                 {challenge.status === 'approved' ? '✓' : '⏳'}
@@ -1174,11 +1461,11 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                             </button>
 
                             <button onClick={() => { if (confirm('Delete?')) { deleteChallenge(editingId); cancelEditing(); } }} className="px-6 py-3 bg-red-100 text-red-600 rounded-xl font-black hover:bg-red-200 transition-all"><Trash2 size={16} /></button>
-                            <button onClick={saveEdit} className="flex-1 px-6 py-3 bg-[var(--soup-turquoise)] text-white rounded-xl font-black hover:scale-105 transition-all">Save</button>
+                            <button onClick={saveEdit} className="flex-1 px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-black hover:bg-gray-200 transition-all">Save</button>
+                            {queuedChallenges.find(c => c.id === editingId)?.status === 'pending' && (
+                                <button onClick={() => { approveChallenge(editingId); cancelEditing(); }} className="flex-1 px-6 py-3 bg-green-500 text-white rounded-xl font-black hover:scale-105 transition-all flex items-center justify-center gap-2"><Check size={16} /> Approve</button>
+                            )}
                         </div>
-                        {queuedChallenges.find(c => c.id === editingId)?.status === 'pending' && (
-                            <button onClick={() => { approveChallenge(editingId); cancelEditing(); }} className="w-full mt-4 px-6 py-3 bg-green-500 text-white rounded-xl font-black hover:scale-105 transition-all flex items-center justify-center gap-2"><Check size={16} /> Approve</button>
-                        )}
                     </div>
                 </div>
             )}
@@ -1195,9 +1482,27 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                         <p className="text-gray-500 font-bold mb-2">
                             This is EXACTLY what will be sent to each group
                         </p>
-                        <p className="text-sm text-gray-400 font-bold mb-8">
+                            <p className="text-sm text-gray-400 font-bold mb-2">
                             all groups • {Object.keys(translations).length} languages
                         </p>
+                        <p className="text-xs text-gray-500 mb-4">
+                            Excluded from send: <strong>app testers</strong> and <strong>noah&apos;s test group solo</strong> won&apos;t receive this challenge (they&apos;re shown here for reference only).
+                        </p>
+                        {translationFallbackUsed && (
+                            <div className="mb-4 p-4 bg-amber-50 border-2 border-amber-200 rounded-xl">
+                                <p className="text-sm font-bold text-amber-800">Translations couldn’t be loaded (showing English for some or all languages).</p>
+                                <p className="text-xs text-amber-700 mt-1">We try <strong>DeepL</strong> first (DEEPL_API_KEY), then <strong>Google</strong> (GOOGLE_TRANSLATE_API_KEY) as fallback. You need at least one of these set in Supabase → Project Settings → Edge Functions → Secrets. If DeepL fails (wrong key, auth change), Google is used; if both are missing or invalid, you get all English.</p>
+                                <p className="text-xs text-amber-600 mt-2">Check Edge Function logs for <strong>translate-text</strong> and <strong>translate-google</strong> to see the exact error. See DEV_BUILD_BUG_CHECKLIST.md for verification steps.</p>
+                            </div>
+                        )}
+                        <button
+                            type="button"
+                            onClick={regenerateTranslationsInPreview}
+                            disabled={translating}
+                            className="mb-6 text-sm font-bold text-[var(--soup-turquoise)] hover:underline disabled:opacity-50"
+                        >
+                            {translating ? 'translating…' : 'regenerate translations'}
+                        </button>
 
                         {translating ? (
                             <div className="py-12 text-center">
@@ -1206,18 +1511,26 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                             </div>
                         ) : (
                             <div className="mb-8 space-y-3">
-                                {/* Show each group individually with exact format */}
+                                {/* Exact format: prefer challenge's saved translations, then state, then raw text */}
                                 {groups.map((group) => {
-                                    // SIMPLIFIED: Just show what is in the "translations" object.
-                                    // It now holds the FULL message (Header + English + Translation).
-                                    // This is true WYSIWYG.
-                                    const exactFormat = translations[group.language] || "Loading...";
+                                    const lang = group.language;
+                                    const nameLower = (group.name || '').toLowerCase();
+                                    const isExcluded = nameLower.includes('app testers') || nameLower.includes("noah's test group solo");
+                                    let challengeTrans = selectedChallenge?.translations;
+                                    if (typeof challengeTrans === 'string') {
+                                        try { challengeTrans = JSON.parse(challengeTrans); } catch (_) { challengeTrans = null; }
+                                    }
+                                    const exactFormat =
+                                        getTranslationForLang(challengeTrans, lang) ??
+                                        getTranslationForLang(translations, lang) ??
+                                        (selectedChallenge?.challenge_text || 'Loading...');
 
                                     return (
-                                        <div key={group.id} className="p-4 bg-white border-2 border-black/5 rounded-2xl hover:border-[var(--soup-turquoise)]/30 transition-all">
+                                        <div key={group.id} className={`p-4 bg-white border-2 rounded-2xl transition-all ${isExcluded ? 'border-amber-200 bg-amber-50/50' : 'border-black/5 hover:border-[var(--soup-turquoise)]/30'}`}>
                                             <div className="flex items-center justify-between mb-3">
                                                 <p className="text-xs font-black text-[var(--soup-turquoise)] uppercase tracking-wider">
                                                     {group.name}
+                                                    {isExcluded && <span className="ml-2 text-[10px] font-bold text-amber-600 normal-case">(won&apos;t receive)</span>}
                                                 </p>
                                                 <span className="text-xs font-bold text-gray-400">
                                                     {group.language}
@@ -1242,6 +1555,7 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
                                     setShowPreview(false);
                                     setSelectedChallenge(null);
                                     setTranslations({});
+                                    setTranslationFallbackUsed(false);
                                 }}
                                 className="px-8 py-4 text-gray-400 font-bold hover:text-gray-600 transition-colors"
                                 disabled={sending}

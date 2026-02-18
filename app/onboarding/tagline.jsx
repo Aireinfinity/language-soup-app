@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -8,6 +8,12 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { OnboardingSwipeForward } from '../../components/OnboardingSwipeForward';
 import { getRandomTagline, getRandomTaglineChipsWithLanguages, pickRandom, TAGLINE_SUGGESTIONS } from '../../constants/CopyPhilosophy';
+import { getAvatarSource, getDefaultSoupAvatarForId } from '../../utils/soupUtils';
+
+function displayLang(lang) {
+    if (!lang || typeof lang !== 'string') return '';
+    return lang.split(' (')[0].split('/')[0].trim() || lang.trim();
+}
 
 export default function TaglineScreen() {
     const { user } = useAuth();
@@ -16,6 +22,7 @@ export default function TaglineScreen() {
     const [saving, setSaving] = useState(false);
     const [inspirationChips, setInspirationChips] = useState(() => getRandomTaglineChipsWithLanguages(10, []));
     const [placeholder, setPlaceholder] = useState(() => pickRandom(TAGLINE_SUGGESTIONS));
+    const [communityTaglines, setCommunityTaglines] = useState([]);
 
     const userLanguages = useCallback(async () => {
         if (!user?.id) return [];
@@ -28,17 +35,37 @@ export default function TaglineScreen() {
         let mounted = true;
         (async () => {
             const langs = await userLanguages();
+            const normalized = (langs || []).map(displayLang).filter(Boolean);
             if (!mounted) return;
-            setTagline(getRandomTagline(langs));
-            setInspirationChips(getRandomTaglineChipsWithLanguages(10, langs));
+            setTagline(getRandomTagline(normalized));
+            setInspirationChips(getRandomTaglineChipsWithLanguages(10, normalized));
         })();
         return () => { mounted = false; };
     }, [userLanguages]);
 
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            const { data } = await supabase
+                .from('app_users')
+                .select('id, status_text, avatar_url')
+                .not('status_text', 'is', null)
+                .limit(12);
+            if (cancelled || !data?.length) return;
+            const others = (data || [])
+                .filter((u) => u.id !== user?.id && (u.status_text || '').trim().length > 0)
+                .slice(0, 8)
+                .map((u) => ({ id: u.id, status_text: (u.status_text || '').trim(), avatar_url: u.avatar_url || getDefaultSoupAvatarForId(u.id) }));
+            setCommunityTaglines(others);
+        })();
+        return () => { cancelled = true; };
+    }, [user?.id]);
+
     const shuffleTagline = useCallback(async () => {
         const langs = await userLanguages();
-        setTagline(getRandomTagline(langs));
-        setInspirationChips(getRandomTaglineChipsWithLanguages(10, langs));
+        const normalized = (langs || []).map(displayLang).filter(Boolean);
+        setTagline(getRandomTagline(normalized));
+        setInspirationChips(getRandomTaglineChipsWithLanguages(10, normalized));
         setPlaceholder(pickRandom(TAGLINE_SUGGESTIONS));
     }, [userLanguages]);
 
@@ -81,11 +108,13 @@ export default function TaglineScreen() {
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={styles.content}
             >
-                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                    <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.form}>
+                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                    <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.header}>
                         <Text style={styles.title}>give yourself a tagline ✨</Text>
-                        <Text style={styles.subtitle}>make it fun, make it you</Text>
+                        <Text style={styles.subtitle}>make it fun, make it you — we'll match you with people who get it</Text>
+                    </Animated.View>
 
+                    <View style={styles.form}>
                         <TextInput
                             style={styles.input}
                             placeholder={placeholder}
@@ -113,7 +142,34 @@ export default function TaglineScreen() {
                                 </Pressable>
                             ))}
                         </View>
-                    </Animated.View>
+
+                        {communityTaglines.length > 0 && (
+                            <View style={styles.communitySection}>
+                                <Text style={styles.communityTitle}>what others chose</Text>
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.communityScroll} contentContainerStyle={styles.communityScrollContent}>
+                                    {communityTaglines.map((u) => {
+                                        const source = getAvatarSource(u.avatar_url);
+                                        return (
+                                            <Pressable
+                                                key={u.id}
+                                                style={({ pressed }) => [styles.communityCard, pressed && { opacity: 0.9 }]}
+                                                onPress={() => setTagline(u.status_text)}
+                                            >
+                                                <View style={styles.communityAvatarWrap}>
+                                                    {source ? (
+                                                        <Image source={source} style={styles.communityAvatar} />
+                                                    ) : (
+                                                        <View style={[styles.communityAvatar, styles.communityAvatarPlaceholder]} />
+                                                    )}
+                                                </View>
+                                                <Text style={styles.communityTagline} numberOfLines={2}>{u.status_text}</Text>
+                                            </Pressable>
+                                        );
+                                    })}
+                                </ScrollView>
+                            </View>
+                        )}
+                    </View>
                 </ScrollView>
 
                 <View style={styles.footer}>
@@ -149,25 +205,28 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         flexGrow: 1,
-        justifyContent: 'center',
         paddingVertical: 20,
+        paddingBottom: 24,
+    },
+    header: {
+        paddingHorizontal: 24,
+        paddingBottom: 16,
     },
     form: {
         width: '100%',
         paddingHorizontal: 24,
     },
     title: {
-        fontSize: 28,
+        fontSize: 26,
         fontWeight: '700',
         color: Colors.text,
         marginBottom: 8,
-        textAlign: 'center',
     },
     subtitle: {
-        fontSize: 16,
+        fontSize: 15,
         color: Colors.textLight,
-        marginBottom: 32,
-        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: 20,
     },
     input: {
         backgroundColor: '#fff',
@@ -221,6 +280,51 @@ const styles = StyleSheet.create({
     exampleText: {
         fontSize: 14,
         color: Colors.text,
+    },
+    communitySection: {
+        marginTop: 28,
+    },
+    communityTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: Colors.textLight,
+        marginBottom: 12,
+        textTransform: 'lowercase',
+    },
+    communityScroll: {
+        marginHorizontal: -24,
+    },
+    communityScrollContent: {
+        paddingHorizontal: 24,
+        flexDirection: 'row',
+        paddingRight: 36,
+    },
+    communityCard: {
+        width: 140,
+        marginRight: 12,
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 12,
+        borderWidth: 1,
+        borderColor: '#eee',
+        alignItems: 'center',
+    },
+    communityAvatarWrap: {
+        marginBottom: 8,
+    },
+    communityAvatar: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+    },
+    communityAvatarPlaceholder: {
+        backgroundColor: Colors.primary + '30',
+    },
+    communityTagline: {
+        fontSize: 12,
+        color: Colors.text,
+        textAlign: 'center',
+        lineHeight: 16,
     },
     footer: {
         padding: 24,

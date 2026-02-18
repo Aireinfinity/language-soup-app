@@ -15,7 +15,7 @@ Use this to manually verify the path from sign-up → first challenge.
 | 5 | **Avatar** | Set avatar → Continue → `/onboarding/notifications` |
 | 6 | **Notifications** | “Turn on notifications” or “Maybe later” → **`/group-selection`** |
 | 7 | **Group selection** | Select ≥1 language group → Join → **`/(tabs)`** (home) |
-| 8 | **Home** | If **0 messages sent** → **OnboardingMissionModal** (welcome to the soup → listen to voices → first challenge / skip) |
+| 8 | **Home** | If **0 messages sent** → **inline first challenge** on Today (same card as daily challenge; record or skip) |
 
 After step 8, completing or skipping the first challenge should leave them on home with the normal Your Soup experience.
 
@@ -49,7 +49,7 @@ Note: If AuthContext runs first and sends you to `/group-selection` before you s
 - **Conversational / Learning / Tagline / Avatar:** Buttons work, skip works, no crash; next screen loads.
 - **Notifications:** “Turn on” and “Maybe later” both lead to group-selection.
 - **Group selection:** At least one group required; join succeeds; redirect to `/(tabs)`.
-- **Home + OnboardingMissionModal:**  
+- **Home + inline first challenge:**  
   - “Preparing ur soup…” then listening step (voices from group).  
   - “More” / “Skip to challenge” work.  
   - First challenge card appears; record or skip works.  
@@ -63,4 +63,4 @@ Note: If AuthContext runs first and sends you to `/group-selection` before you s
 - **Auth redirect (no groups):** `contexts/AuthContext.js` → `group-selection`.
 - **Onboarding steps:** `app/onboarding/conversational.jsx` → `learning.jsx` → `tagline.jsx` → `avatar.jsx` → `notifications.jsx` → `group-selection.jsx`.
 - **Group selection → home:** `app/group-selection.jsx` → `router.push('/(tabs)')`.
-- **Show welcome modal:** `app/(tabs)/index.jsx` → `checkOnboardingStatus()` (0 messages → `setShowOnboardingMission(true)`); modal is `OnboardingMissionModal.jsx`.
+- **Show first challenge:** `app/(tabs)/index.jsx` → `checkOnboardingStatus()` (0 messages → `setShowOnboardingMission(true)`); first challenge is inline on Today (same `ChallengeQueueCard` as daily).

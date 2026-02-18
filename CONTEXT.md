@@ -1,6 +1,15 @@
-# Language Soup - Founder Context
+# Language Soup – Context (product, design, admin, dev)
 
-> Last updated: 2026-02-14 (Today tab focus; Ashton incentive idea in backlog)
+> **Search in Cursor:** `CONTEXT` or `CONTEXT.md` to find this file.  
+> Last updated: 2026-02-15 (Renamed from LANGUAGE_SOUP_CONTEXT; schedule/social/assets split to other docs.)
+
+**See also (so you don't lose things):**
+- **[docs/KEY_DOCUMENTS.md](docs/KEY_DOCUMENTS.md)** — Index of key docs (context, ticket blitz, schedule, social, feedback, assets). Use when you forget where something lives.
+- **[docs/FOUNDER_SCHEDULE.md](docs/FOUNDER_SCHEDULE.md)** — Weekly anchors, daily flow, Sundays off, personal notes, current focus blocks
+- **[docs/SOCIAL_CONTENT_CALENDAR.md](docs/SOCIAL_CONTENT_CALENDAR.md)** — Content pillars, app milestones (1 month, 200 users), holidays (Valentine's, Mother Language Day), Google Calendar reminder how-to
+- **[docs/MARKETING_ASSETS.md](docs/MARKETING_ASSETS.md)** — Where photos/logos/design refs live (`assets/marketing/`), design rules quick ref
+
+---
 
 ## 🍲 What is Language Soup?
 
@@ -82,7 +91,7 @@
 ## 💡 Top User Insights (from 48+ interviews)
  
 > [!NOTE]
-> Detailed user interview log available at: [user_interviews.md](file:///Users/Aireinfinity/.gemini/antigravity/brain/7b1248bb-fb5c-4da2-a466-86a1e3c11976/user_interviews.md)
+> Detailed user interview log: [docs/user_interviews.md](docs/user_interviews.md)
  
 | Theme | What Users Say |
 |-------|----------------|
@@ -97,7 +106,7 @@
 > "A low-pressure community where I can practice speaking without feeling judged"
 
 **Future ideas (backlog, not current focus):**
-- **Ashton (2/14/26):** Incentive/progression — "the more you speak you unlock new soups or something cool." Long-term implementation (small ticket in TICKET_BLITZ).
+- **Ashton (2/14/26):** Incentive/progression — "the more you speak you unlock new soups or something cool." Long-term implementation (small item in FEATURES_AND_REQUESTS).
 
 **Today tab vision (Feb 2026):**
 - **Single primary job:** Get users to do their daily challenge — show the challenge, let them read/hear it (beginner phrases, vocab), record, send. Easy path: what's the challenge? what do I say? read it → hear it → record → send.
@@ -181,37 +190,6 @@
 
 ---
 
-## 🗓️ Current Focus (Next 3 Weeks)
-
-| Week | Focus |
-|------|-------|
-| Jan 25-30 | **Skiing in Austrian Alps** - no building |
-| Jan 31 - Feb 7 | **Budapest coffee chats** - chill coffee chats with founders and investors, catch up on what didn't work in the alps
-| Feb 7-16 | **Travel home** - light support only |
-| Feb 10+ (Now) | **Retention & Onboarding**. Ship **"Record Your First Word"** mission (Task #9). Redesign Profile for DMs. **Performance** (TTS Reversion + Persistence). |
-
----
-
-## 📝 Content Strategy: The 3-Pillar Rotation
-
-> [!NOTE]
-> Detailed social strategy and idea bank available at: 
-> - [social_media_pillars.md](file:///Users/Aireinfinity/.gemini/antigravity/brain/7b1248bb-fb5c-4da2-a466-86a1e3c11976/social_media_pillars.md)
-> - [content_idea_bank.md](file:///Users/Aireinfinity/.gemini/antigravity/brain/7b1248bb-fb5c-4da2-a466-86a1e3c11976/content_idea_bank.md)
- 
-1. **The Hook (Daily Challenges)**: Noah + App Screenshot. Builds habit/trust. (4/week)
-   - *Hook Idea:* "Everyone in the soup is failing today's challenge... can you do better?"
-2. **The Vibe (Polyglot Diary)**: Noah traveling/living in multiple languages. Builds aspiration. (2/week)
-   - *Hook Idea:* "How I use 3 languages to survive a day in Budapest without a textbook."
-3. **The Spark (Anti-School Rants)**: Calling out the failures of traditional learning. Targets "Classroom Trauma." (1/week)
-   - *Hook Idea:* "Stop trying to conjugate reflexive verbs. It's killing your progress."
- 
-- **Style:** Raw, authentic, walking/talking > over-edited memes.
-- **Goal:** 1 video/day across TikTok/Reels/LinkedIn.
-- **Tactics:** 3-second hook rule; use "translanguaging" in captions.
-
----
-
 ## 🎨 Design Vibe (The "Language Soup Aesthetic")
 
 **Core Identity:** 2016 Pop / Disco / Pinterest / BeReal.
@@ -233,34 +211,7 @@
 
 ---
 
-## 🧘 Personal Notes
-
-- Finished The Artist's Way (12 weeks) - learning to rest
-- Artist dates = good for creativity
-- Less user calls = lower morale (user calls = fuel)
-- One bug/feature per day = sustainable pace
-- 7-person founder community helps with loneliness
-
----
-
-## 🗓️ Weekly Anchors & Daily Flow
-
-**Weekly Anchors (Non-negotiables):**
-- **Tues @ 9am:** LinkedIn "Build in Public" Post
-- **Fri @ 10am:** YC Weekly Update
-- **Daily @ 11am:** Post TikTok/IG (Batch created previously)
-
-**Daily Flow (current):**
-- **Build** — jump in and ship. Random tasks and catch-up while things are loading (no separate admin sunrise/sunset blocks).
-
-**Deep-dive day (once a week):** One full day for long-form input — podcasts, videos, reading, emails. No shipping pressure; absorb, think, catch up. **When:** e.g. **Wednesday** (mid-week reset) or **Monday** (set the week after the weekend). Pick one and treat it as the non-build day.
-
-**What would Tyler Denk say? (prioritization lens)**  
-You have a lot to do and could build all day — so the question is order, not effort. Your own top three: **talk to customers**, **build**, **post once a day**. Treat that as the stack: **customers first** (support, DMs, feedback, calls). That's the highest-leverage thing for a solo founder. Then **build** with the rest of the day; if you're waiting on loads, that's when you do random tasks. **Post once a day** is a habit — batch it (e.g. 11am) so it doesn't fragment the day. Everything else (emails, deep-dive day, weekly anchors) fits around those three. Revisit next week and see how it feels.
-
----
-
-## �️ How We Build (AI Workflow)
+## How We Build (AI Workflow)
 
 **BEFORE building anything, always follow this process:**
 
@@ -347,7 +298,7 @@ npx expo start --dev-client --tunnel --scheme languagesoup
 
 ## 📜 History / Changelog
 
-### Feb 9, 2026 - The "Apology Build" (Ticket Blitz) 🍜
+### Feb 9, 2026 - The "Apology Build" (Features & requests) 🍜
 - **Objective:** Fix 8 critical bugs/UX issues reported by users in < 24h to restore trust.
 - **Shipped:**
   1. ✅ **Listen Before Send** (Voice Memos)

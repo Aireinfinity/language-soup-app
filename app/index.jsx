@@ -48,7 +48,7 @@ export default function BootScreen() {
                 router.replace('/how-it-works');
             } else {
                 // User found? Send 'em home! Skip language/group selection checks for veterans.
-                router.replace('/(tabs)');
+                router.replace('/(tabs)/feed');
             }
         } catch (err) {
             console.error('[Boot] Critical navigation error:', err);
