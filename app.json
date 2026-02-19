@@ -65,7 +65,8 @@
           "photosPermission": "Allow Language Soup to access your photos to set your profile picture"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "./plugins/withBlockMediaPermissions.js"
     ],
     "platforms": [
       "ios",

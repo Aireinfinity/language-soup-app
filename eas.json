@@ -40,6 +40,9 @@
       "env": {
         "NODE_OPTIONS": "--max-old-space-size=4096",
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
+      },
+      "cache": {
+        "key": "android-no-read-media-v1"
       }
     }
   },

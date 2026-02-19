@@ -242,9 +242,12 @@ export default function ProfileScreen() {
     const pickImage = async () => {
         try {
             console.log('[Profile] pickImage called');
-            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            console.log('[Profile] Permission status:', status);
-            if (status !== 'granted') return Alert.alert('Permission Required', 'Needs photo access');
+            // On Android we use the system photo picker (no READ_MEDIA_* permission); only request on iOS.
+            if (Platform.OS === 'ios') {
+                const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                console.log('[Profile] Permission status:', status);
+                if (status !== 'granted') return Alert.alert('Permission Required', 'Needs photo access');
+            }
 
             console.log('[Profile] Launching image picker...');
             const result = await ImagePicker.launchImageLibraryAsync({

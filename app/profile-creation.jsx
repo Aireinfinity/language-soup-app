@@ -23,12 +23,14 @@ export default function ProfileCreationScreen() {
     const pickImage = async () => {
         try {
             console.log('[Avatar Picker] Starting image selection...');
-            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            console.log('[Avatar Picker] Permission status:', status);
-
-            if (status !== 'granted') {
-                Alert.alert('Permission Required', 'Please grant photo library access to upload an avatar');
-                return;
+            // On Android we use the system photo picker (no READ_MEDIA_* permission); only request on iOS.
+            if (Platform.OS === 'ios') {
+                const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                console.log('[Avatar Picker] Permission status:', status);
+                if (status !== 'granted') {
+                    Alert.alert('Permission Required', 'Please grant photo library access to upload an avatar');
+                    return;
+                }
             }
 
             console.log('[Avatar Picker] Launching image library...');

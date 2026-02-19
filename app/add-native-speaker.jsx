@@ -138,11 +138,13 @@ export default function AddNativeSpeakerScreen() {
     };
 
     const pickImage = async () => {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-        if (status !== 'granted') {
-            Alert.alert('Permission needed', 'Please allow access to your photos');
-            return;
+        // On Android we use the system photo picker (no READ_MEDIA_* permission); only request on iOS.
+        if (Platform.OS === 'ios') {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission needed', 'Please allow access to your photos');
+                return;
+            }
         }
 
         const result = await ImagePicker.launchImageLibraryAsync({
