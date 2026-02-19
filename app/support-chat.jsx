@@ -17,6 +17,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
 import { useQuests } from '../contexts/QuestContext';
+import { getAvatarSource } from '../utils/soupUtils';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -24,7 +25,23 @@ const SOUP_COLORS = {
     pink: '#ec008b',
     cream: '#FDF5E6',
     green: '#19b091',
+    text: '#2d3436',
+    subtext: '#636e72',
 };
+
+const NOAH_USER_ID = '32ac1943-aa68-4025-b4d9-3aa7ef129fb1';
+const NOAH_SUPPORT_EMAIL = 'noah@languagesoup.com';
+const NOAH_TIMEZONE = 'America/Los_Angeles';
+const SUPPORT_RECENT_MESSAGES_LIMIT = 50; // Only show recent thread so it feels fresh, not a ticket archive
+
+function getNoahStatusLabel(availabilityOverride) {
+    if (availabilityOverride === 'at_desk') return "Noah's coding";
+    if (availabilityOverride === 'sleeping') return "Noah's sleeping";
+    if (availabilityOverride === 'on_the_go') return "Noah's on the go";
+    const hour = new Date(new Date().toLocaleString('en-US', { timeZone: NOAH_TIMEZONE })).getHours();
+    if (hour >= 23 || hour < 6) return "Noah's sleeping";
+    return "Noah's on the go";
+}
 
 // Date separator helper
 function addDateSeparators(messages) {
@@ -72,6 +89,7 @@ export default function SupportChatScreen() {
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
     const [reactions, setReactions] = useState({}); // { messageId: [{ user_id, reaction, created_at }] }
+    const [noahProfile, setNoahProfile] = useState(null); // { display_name, avatar_url, availability_override } for header + banner
     const { completeQuest } = useQuests();
 
     const {
@@ -84,6 +102,13 @@ export default function SupportChatScreen() {
     } = useVoiceRecorder();
 
     useEffect(() => {
+        (async () => {
+            const { data } = await supabase.from('app_users').select('display_name, avatar_url, availability_override').eq('id', NOAH_USER_ID).single();
+            if (data) setNoahProfile(data);
+        })();
+    }, []);
+
+    useEffect(() => {
         loadMessages();
 
         const channel = supabase
@@ -94,10 +119,10 @@ export default function SupportChatScreen() {
                 table: 'app_support_messages',
                 filter: `user_id=eq.${user.id}`
             }, (payload) => {
-                // Replace temp optimistic message with real one, or add if new
                 setMessages(prev => {
                     const filtered = prev.filter(m => !m.id.startsWith('temp-'));
-                    return [...filtered, payload.new];
+                    const next = [...filtered, payload.new];
+                    return next.slice(-SUPPORT_RECENT_MESSAGES_LIMIT);
                 });
                 scrollToBottom();
             })
@@ -141,18 +166,21 @@ export default function SupportChatScreen() {
 
     const loadMessages = async () => {
         try {
-            const { data, error } = await supabase
+            // Only load recent messages so it feels like a fresh chat, not a ticket history
+            const { data: recent, error } = await supabase
                 .from('app_support_messages')
                 .select('*')
                 .eq('user_id', user.id)
-                .order('created_at', { ascending: true });
+                .order('created_at', { ascending: false })
+                .limit(SUPPORT_RECENT_MESSAGES_LIMIT);
 
             if (error) throw error;
-            setMessages(data || []);
+            const chronological = (recent || []).reverse();
+            setMessages(chronological);
 
             // Load reactions
-            if (data && data.length > 0) {
-                const messageIds = data.map(m => m.id);
+            if (chronological && chronological.length > 0) {
+                const messageIds = chronological.map(m => m.id);
                 const { data: reactionsData } = await supabase
                     .from('app_support_reactions')
                     .select('id, message_id, user_id, emoji, created_at')
@@ -179,8 +207,9 @@ export default function SupportChatScreen() {
     };
 
     const scrollToBottom = () => {
+        // For inverted lists, offset 0 is the "bottom" (latest messages)
         setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: true });
+            flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
         }, 100);
     };
 
@@ -375,11 +404,28 @@ export default function SupportChatScreen() {
                         <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.headerBack, pressed && { opacity: 0.85 }]}>
                             <ChevronLeft size={28} color="#fff" />
                         </Pressable>
-                        <Text style={styles.headerTitleLive}>Chat with Noah</Text>
+                        <View style={styles.headerLiveCenter}>
+                            {noahProfile?.avatar_url ? (
+                                <Image source={getAvatarSource(noahProfile.avatar_url)} style={styles.headerNoahAvatar} />
+                            ) : (
+                                <View style={styles.headerNoahPlaceholder}>
+                                    <Text style={styles.headerNoahLetter}>N</Text>
+                                </View>
+                            )}
+                            <Text style={styles.headerTitleLive}>Chat with Noah</Text>
+                        </View>
                         <View style={{ width: 40 }} />
                     </View>
                 }
-                bannerComponent={null}
+                bannerComponent={
+                    <View style={styles.noahBanner}>
+                        <Text style={styles.noahBannerTitle}>noah's here 24/7</Text>
+                        <Text style={styles.noahBannerReply}>usually replies within a few hours</Text>
+                        <Text style={styles.noahBannerStatus}>{noahProfile ? getNoahStatusLabel(noahProfile.availability_override) : "Noah's on the go"}</Text>
+                        <Text style={styles.noahBannerCopy}>They get notified when you reply. You get notified when they message.</Text>
+                        <Text style={styles.noahBannerEmail}>For longer stuff: noah@languagesoup.com</Text>
+                    </View>
+                }
                 placeholderText="Type a message..."
                 showLanguageFlags={false}
                 senderKey="sender"
@@ -392,11 +438,11 @@ export default function SupportChatScreen() {
                 typingIndicatorComponent={null}
                 flatListRef={flatListRef}
                 userId={user?.id}
-                contentContainerStyle={[ChatStyles.messagesList, { paddingTop: 20, paddingBottom: insets.top + 80 }]}
                 inverted={true}
                 reactions={reactions}
                 onReact={handleReact}
                 groupName="Support"
+                theme="whatsapp"
             />
         </View>
     );
@@ -432,12 +478,71 @@ const styles = StyleSheet.create({
     headerBack: {
         padding: 8,
     },
-    headerTitleLive: {
+    headerLiveCenter: {
         flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+    },
+    headerNoahAvatar: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+    },
+    headerNoahPlaceholder: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,255,255,0.3)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    headerNoahLetter: {
         fontSize: 18,
         fontWeight: '800',
         color: '#fff',
-        textAlign: 'center',
+    },
+    headerTitleLive: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#fff',
+    },
+    noahBanner: {
+        backgroundColor: 'rgba(0,0,0,0.04)',
+        paddingVertical: 14,
+        paddingHorizontal: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(0,0,0,0.06)',
+    },
+    noahBannerTitle: {
+        fontSize: 15,
+        fontWeight: '800',
+        color: SOUP_COLORS.text,
+        marginBottom: 2,
+    },
+    noahBannerReply: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: SOUP_COLORS.subtext,
+        marginBottom: 6,
+    },
+    noahBannerStatus: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: SOUP_COLORS.turquoise,
+        marginBottom: 8,
+    },
+    noahBannerCopy: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: SOUP_COLORS.subtext,
+        marginBottom: 2,
+    },
+    noahBannerEmail: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: SOUP_COLORS.turquoise,
     },
     header: {
         backgroundColor: '#fff',

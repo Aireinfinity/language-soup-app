@@ -366,9 +366,23 @@ Return strictly valid JSON: { "starter_phrases": [{"phrase": "<sentence in ${tar
             }
         }
 
-        // 3. Correct (Groq/Llama) — use normalized target language name for prompt (e.g. "French" from "French (Français)")
-        const targetLangName = (language && typeof language === 'string')
-            ? language.trim().split(/[\s*(\/\–\-]/)[0].trim() || 'English'
+        // 2b. Resolve target language from challenge/group if provided (so Language Soup / merged chat maps to the right language)
+        let resolvedLanguage: string | null = (language && typeof language === 'string') ? language.trim() : null
+        const ctx = context && typeof context === 'object' ? context as { challengeId?: string; groupId?: string; prompt?: string } : null
+        if (ctx?.challengeId) {
+            const { data: ch } = await supabase.from('app_challenges').select('group_id').eq('id', ctx.challengeId).single()
+            if (ch?.group_id) {
+                const { data: grp } = await supabase.from('app_groups').select('language').eq('id', ch.group_id).single()
+                if (grp?.language) resolvedLanguage = grp.language
+            }
+        } else if (ctx?.groupId) {
+            const { data: grp } = await supabase.from('app_groups').select('language').eq('id', ctx.groupId).single()
+            if (grp?.language) resolvedLanguage = grp.language
+        }
+
+        // 3. Correct (Groq/Llama) — use resolved or passed-in language; require minimal edits (word/phrase only)
+        const targetLangName = resolvedLanguage
+            ? resolvedLanguage.split(/[\s*(\/\–\-]/)[0].trim() || 'English'
             : 'English'
         const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY')
         const systemPrompt = `You are a Translanguaging Expert and an expert in ${targetLangName}. Correct this CASUAL voice message.
@@ -378,9 +392,9 @@ Target Language: ${targetLangName}
 Student's Known Languages: ${userLangString}
 
 RULES:
-1. Fix ONLY wrong words or unnatural phrasing.
+1. Make MINIMAL changes. Fix ONLY the exact word or short phrase that is wrong. Do NOT rewrite the whole sentence. Your "corrected" output must be the student's message with as few words changed as possible (ideally 1–2 words). If most of the sentence is correct, change only the wrong part.
 2. Keep it CASUAL (not classroom style).
-3. Explanation must be SHORT (max 1-2 sentences).
+3. Explanation must be SHORT (max 1-2 sentences). Explain only what you changed, not the whole sentence.
 4. Use translanguaging (explain in English, compare to ${userLangString}). The student is speaking in ${targetLangName}.
 
 Return strictly valid JSON: { "corrected": "...", "explanation": "...", "is_correct": boolean }`

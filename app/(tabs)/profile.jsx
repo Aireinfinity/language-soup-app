@@ -3,7 +3,8 @@ import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator, Text
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { Camera, Edit2, LogOut, MapPin, Globe, Award, Sparkles, Flag, Clock, Crown, Download, MessageCircle, Bell, HelpCircle, ChevronRight } from 'lucide-react-native';
+import { Camera, Edit2, LogOut, MapPin, Globe, Award, Sparkles, Flag, Clock, Crown, Download, MessageCircle, Bell, HelpCircle, ChevronRight, RefreshCw } from 'lucide-react-native';
+import * as Updates from 'expo-updates';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRouter } from 'expo-router';
@@ -43,6 +44,8 @@ const EXAMPLE_TAGLINES = [
     'polyglot in training',
 ];
 
+const NOAH_USER_ID = '32ac1943-aa68-4025-b4d9-3aa7ef129fb1';
+
 const SOUP_AVATARS = [
     { id: 'cereal', name: 'cereal soup', source: require('../../assets/images/avatars/cereal.png') },
     { id: 'tomato', name: 'tomato soup', source: require('../../assets/images/avatars/tomato_soup.png') },
@@ -80,7 +83,6 @@ export default function ProfileScreen() {
     const [uploading, setUploading] = useState(false);
     const [newSoupFlavor, setNewSoupFlavor] = useState('');
     const [statsTab, setStatsTab] = useState('input'); // 'input' | 'output'
-    const [showLevelsInfo, setShowLevelsInfo] = useState(false);
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
     const [previewAvatar, setPreviewAvatar] = useState(null); // For optimistic UI updates
     const [selectedSoupId, setSelectedSoupId] = useState(null);
@@ -132,11 +134,11 @@ export default function ProfileScreen() {
 
             const { data: groupData } = await supabase
                 .from('app_group_members')
-                .select('app_groups ( id, name, language )')
+                .select('app_groups ( id, name, language, member_count )')
                 .eq('user_id', authUser.id);
 
             if (groupData) {
-                const userGroups = groupData.map(item => item.app_groups);
+                const userGroups = groupData.map(item => item.app_groups).filter(Boolean);
                 setGroups(userGroups);
             }
 
@@ -494,7 +496,7 @@ export default function ProfileScreen() {
                 ) : null
             )}
 
-            {/* Progress bars only (name, tagline, then bars) */}
+            {/* Little level bars only (no big "out of the mouth / in the brain" block) */}
             {!editing && stats && (() => {
                 const totalSpeakSeconds = stats.total_speaking_seconds ?? 0;
                 const speakMinutes = totalSpeakSeconds / 60;
@@ -507,7 +509,7 @@ export default function ProfileScreen() {
                     <View style={styles.compactLevelsWrap}>
                         <View style={styles.compactLevelBar}>
                             <View style={styles.compactLevelBarHead}>
-                                <Text style={styles.compactLevelBarLabel}>🗣️ Out the Mouth</Text>
+                                <Text style={styles.compactLevelBarLabel}>Speak</Text>
                                 <View style={[styles.compactLevelBadge, { backgroundColor: SOUP_COLORS.pink }]}>
                                     <Text style={styles.compactLevelBadgeText}>Lv.{outLevel.level}</Text>
                                 </View>
@@ -518,7 +520,7 @@ export default function ProfileScreen() {
                         </View>
                         <View style={styles.compactLevelBar}>
                             <View style={styles.compactLevelBarHead}>
-                                <Text style={styles.compactLevelBarLabel}>🧠 In the Brain</Text>
+                                <Text style={styles.compactLevelBarLabel}>Listen</Text>
                                 <View style={[styles.compactLevelBadge, { backgroundColor: SOUP_COLORS.blue }]}>
                                     <Text style={styles.compactLevelBadgeText}>Lv.{inLevel.level}</Text>
                                 </View>
@@ -564,6 +566,36 @@ export default function ProfileScreen() {
                         <Text style={styles.bioTextInline}>{user.bio}</Text>
                     </View>
                 ) : null)
+            )}
+
+            {/* Noah only: support chat status (at my desk / on the go / sleeping) */}
+            {authUser?.id === NOAH_USER_ID && (
+                <View style={styles.noahStatusBlock}>
+                    <Text style={styles.inlineEditLabel}>support status</Text>
+                    <Text style={styles.noahStatusHint}>what users see when they open &quot;Chat with Noah&quot;</Text>
+                    <View style={styles.noahStatusRow}>
+                        {[
+                            { value: 'at_desk', label: 'at my desk' },
+                            { value: 'on_the_go', label: 'on the go' },
+                            { value: 'sleeping', label: 'sleeping' },
+                        ].map((opt) => (
+                            <Pressable
+                                key={opt.value}
+                                style={({ pressed }) => [styles.noahStatusBtn, (user?.availability_override || 'on_the_go') === opt.value && styles.noahStatusBtnSelected, pressed && { opacity: 0.8 }]}
+                                onPress={async () => {
+                                    try {
+                                        await supabase.from('app_users').update({ availability_override: opt.value }).eq('id', authUser.id);
+                                        setUser((prev) => (prev ? { ...prev, availability_override: opt.value } : prev));
+                                    } catch (e) {
+                                        console.warn('Noah availability update:', e);
+                                    }
+                                }}
+                            >
+                                <Text style={[(user?.availability_override || 'on_the_go') === opt.value ? styles.noahStatusBtnTextSelected : styles.noahStatusBtnText]}>{opt.label}</Text>
+                            </Pressable>
+                        ))}
+                    </View>
+                </View>
             )}
 
             {/* Profile visibility (public/private) - visible in view mode */}
@@ -897,6 +929,35 @@ export default function ProfileScreen() {
                     <ChevronRight size={18} color={SOUP_COLORS.subtext} />
                 </Pressable>
 
+                {__DEV__ ? null : (
+                    <Pressable
+                        style={({ pressed }) => [styles.whatsNewRow, pressed && { opacity: 0.85 }]}
+                        onPress={async () => {
+                            try {
+                                const runtimeVersion = Updates.runtimeVersion ?? 'unknown';
+                                const channel = Updates.channel ?? 'none';
+                                const update = await Updates.checkForUpdateAsync();
+                                if (update.isAvailable) {
+                                    await Updates.fetchUpdateAsync();
+                                    Alert.alert('Update ready', 'Reloading the app…', [{ text: 'OK' }]);
+                                    await Updates.reloadAsync();
+                                } else {
+                                    Alert.alert(
+                                        'No update found',
+                                        `Runtime: ${runtimeVersion}\nChannel: ${channel}\n\nIf you expected an update, check Expo dashboard: Deployments → your build’s channel must be linked to the branch you published to.`
+                                    );
+                                }
+                            } catch (e) {
+                                Alert.alert('Update check failed', e?.message || 'Try again later.');
+                            }
+                        }}
+                    >
+                        <RefreshCw size={20} color={SOUP_COLORS.blue} />
+                        <Text style={styles.whatsNewLabel}>check for updates</Text>
+                        <ChevronRight size={18} color={SOUP_COLORS.subtext} />
+                    </Pressable>
+                )}
+
                 {renderStats()}
                 {renderGroups()}
 
@@ -913,71 +974,6 @@ export default function ProfileScreen() {
             </ScrollView>
 
             <WhatsNewSheet visible={showWhatsNewSheet} onClose={() => setShowWhatsNewSheet(false)} />
-
-            {/* Levels Info Modal */}
-            <Modal
-                visible={showLevelsInfo}
-                animationType="fade"
-                transparent={true}
-                onRequestClose={() => setShowLevelsInfo(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.levelsInfoCard}>
-                        <Pressable
-                            style={styles.closeButton}
-                            onPress={() => setShowLevelsInfo(false)}
-                        >
-                            <Text style={styles.closeButtonText}>✕</Text>
-                        </Pressable>
-
-                        <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollContent}>
-                            <Text style={styles.levelsInfoTitle}>Understanding Your Levels 📊</Text>
-
-                            <View style={styles.comprehensibleExplainer}>
-                                <Text style={styles.comprehensibleTitle}>What is Comprehensible Input?</Text>
-                                <Text style={styles.comprehensibleText}>
-                                    Comprehensible input is language you can understand, even if you don't know every word. It's the foundation of language acquisition - you learn by listening and reading things just slightly above your level.
-                                </Text>
-                                <Text style={styles.comprehensibleText}>
-                                    <Text style={{ fontWeight: '700' }}>Input</Text> (listening) builds your understanding. <Text style={{ fontWeight: '700' }}>Output</Text> (speaking) keeps you motivated and helps you practice what you've learned. Both matter! 🍜
-                                </Text>
-                            </View>
-
-                            <View style={styles.levelTypeSection}>
-                                <Text style={styles.levelTypeTitle}>👂 Input (Listening)</Text>
-                                <Text style={styles.levelTypeDesc}>Estimated hours listening to others</Text>
-                                <View style={styles.levelsList}>
-                                    <Text style={styles.levelItem}>Lv.1 👂 Ear Training (0-3 hrs)</Text>
-                                    <Text style={styles.levelItem}>Lv.2 🎣 Word Catcher (3-10 hrs)</Text>
-                                    <Text style={styles.levelItem}>Lv.3 👑 Context King (10-30 hrs)</Text>
-                                    <Text style={styles.levelItem}>Lv.4 🧠 Comprehension Pro (30-100 hrs)</Text>
-                                    <Text style={styles.levelItem}>Lv.5 🚀 Native Speed (100-300 hrs)</Text>
-                                    <Text style={styles.levelItem}>Lv.6 🌍 Polyglot (300+ hrs)</Text>
-                                </View>
-                            </View>
-
-                            <View style={styles.levelTypeSection}>
-                                <Text style={styles.levelTypeTitle}>🎤 Output (Speaking)</Text>
-                                <Text style={styles.levelTypeDesc}>Measured in minutes of voice messages sent</Text>
-                                <View style={styles.levelsList}>
-                                    <Text style={styles.levelItem}>Lv.1 🌱 First Words (0-30 min)</Text>
-                                    <Text style={styles.levelItem}>Lv.2 🧱 Sentence Builder (30-120 min)</Text>
-                                    <Text style={styles.levelItem}>Lv.3 💬 Conversation Starter (120-300 min)</Text>
-                                    <Text style={styles.levelItem}>Lv.4 🍜 Daily Souper (300-600 min)</Text>
-                                    <Text style={styles.levelItem}>Lv.5 🎙️ Fluent Rambler (600-1200 min)</Text>
-                                    <Text style={styles.levelItem}>Lv.6 🌟 Native Vibes (1200+ min)</Text>
-                                </View>
-                            </View>
-
-                            <Text style={styles.levelsInfoFooter}>
-                                Early levels = quick wins! Later levels = real mastery. You listen way more than you speak, just like real life! 🍜
-                            </Text>
-                        </ScrollView>
-
-                        <Text style={styles.scrollPrompt}>👆 Scroll to see all levels</Text>
-                    </View>
-                </View>
-            </Modal>
 
             {/* Avatar Picker Modal */}
             <Modal
@@ -1313,6 +1309,13 @@ const styles = StyleSheet.create({
     compactLevelBadgeText: { fontSize: 12, fontWeight: '800', color: '#fff' },
     compactBarTrack: { height: 8, backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 4, overflow: 'hidden' },
     compactBarFill: { height: '100%', borderRadius: 4 },
+    noahStatusBlock: { width: '100%', marginTop: 20, paddingVertical: 12, paddingHorizontal: 4 },
+    noahStatusHint: { fontSize: 12, color: SOUP_COLORS.subtext, marginBottom: 10 },
+    noahStatusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    noahStatusBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(0,0,0,0.1)' },
+    noahStatusBtnSelected: { backgroundColor: SOUP_COLORS.turquoise + '22', borderColor: SOUP_COLORS.turquoise },
+    noahStatusBtnText: { fontSize: 14, fontWeight: '600', color: SOUP_COLORS.subtext },
+    noahStatusBtnTextSelected: { fontSize: 14, fontWeight: '700', color: SOUP_COLORS.turquoise },
     visibilityRow: { width: '100%', marginTop: 16 },
     visibilityValue: { fontSize: 15, fontWeight: '700', color: SOUP_COLORS.text, marginBottom: 4 },
     visibilityHint: { fontSize: 13, color: SOUP_COLORS.subtext },

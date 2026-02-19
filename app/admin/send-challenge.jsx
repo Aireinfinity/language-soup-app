@@ -49,7 +49,8 @@ export default function SendChallengeScreen() {
             const { data, error } = await query.order('name');
 
             if (error) throw error;
-            setGroups(data || []);
+            // Exclude DMs from the list — challenges should never be sent to DM group chats
+            setGroups((data || []).filter(g => g.name !== 'DM'));
         } catch (error) {
             console.error('Error loading groups:', error);
         } finally {
@@ -63,8 +64,9 @@ export default function SendChallengeScreen() {
             return;
         }
 
-        // Determine target groups
-        const targetGroups = broadcastToAll ? groups : groups.filter(g => g.id === selectedGroup);
+        // Determine target groups (never include DMs — challenges are for language groups only)
+        const candidateGroups = broadcastToAll ? groups : groups.filter(g => g.id === selectedGroup);
+        const targetGroups = candidateGroups.filter(g => g.name !== 'DM');
 
         if (targetGroups.length === 0) {
             Alert.alert('No Groups', 'Please select a group or enable broadcast mode');

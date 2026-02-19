@@ -13,10 +13,11 @@ Who to ask when testing new features, in order. Save this so we don't forget.
 
 ---
 
-## Power users (curated list)
+## Power users (curated list, ~20)
 
-People to prioritize for early feature tests and feedback. Add to a separate group if you want (e.g. "power users" or "soup kitchen insiders").
+People to prioritize for early feature tests and feedback. They are auto-added to the in-app group **"Power users"** (not app testers).
 
+- Noah
 - Miranda
 - Karen *(note: when we have Android / TestFlight isn’t on Android yet)*
 - Johnny
@@ -27,7 +28,7 @@ People to prioritize for early feature tests and feedback. Add to a separate gro
 - Scarlett
 - Abby
 - Felipe
-- Babka
+- Babka / BabkaZs
 - Diana (mom)
 - Ava
 - CJ
@@ -37,8 +38,21 @@ People to prioritize for early feature tests and feedback. Add to a separate gro
 - Josiah
 - Oshack
 - Adora
+- Aidan
+- hamza
 
-*(If you create a "power users" group in the app, add these by display name; you can match to IDs via Supabase or the dashboard.)*
+---
+
+## Power users group (in-app, auto-added)
+
+The script adds everyone above to a group named **"Power users"**. They do **not** have to click to join; once you run the script, the group appears in their app live.
+
+1. Open **Supabase → SQL Editor**.
+2. Run **`code/dashboard/scripts/add_power_user_chat.sql`** (paste its contents).
+3. The script creates **"Power users"** (hidden from browse), inserts each person into `app_group_members` by `display_name`. Only users who exist in `app_users` are added; duplicates are skipped.
+4. You and each power user see **Power users** in Your groups and can use it as a group chat.
+
+To add or remove people later: edit the script’s `display_name IN (...)` and re-run the insert part, or use Supabase Table Editor on `app_group_members`.
 
 ---
 

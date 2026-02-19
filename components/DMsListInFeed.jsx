@@ -170,7 +170,7 @@ export function DMsListInFeed({ onSelectGroup }) {
             <Pressable
                 style={({ pressed }) => [
                     styles.row,
-                    { borderLeftColor: accent },
+                    { backgroundColor: `${accent}18` },
                     item.unreadCount > 0 && styles.rowUnread,
                     pressed && { opacity: 0.9 },
                 ]}
@@ -262,11 +262,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: 12,
         paddingHorizontal: 14,
-        backgroundColor: '#fff',
         marginBottom: 8,
         borderRadius: 14,
-        borderLeftWidth: 4,
-        borderLeftColor: SOUP_COLORS.pink,
     },
     rowUnread: {
         borderLeftColor: SOUP_COLORS.blue,

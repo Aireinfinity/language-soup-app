@@ -306,7 +306,8 @@ export function useGroupChat(groupId, userId, options = {}) {
                     .catch(() => {});
             } catch (err) {
                 console.error('[useGroupChat] sendVoice:', err);
-                Alert.alert('Voice Message Failed', 'Could not upload. Check your connection and try again.', [{ text: 'OK' }]);
+                const message = err?.message ? `Could not upload: ${err.message}` : 'Could not upload. Check your connection and try again.';
+                Alert.alert('Voice Message Failed', message, [{ text: 'OK' }]);
                 setMessages((prev) => prev.filter((m) => m.id !== tempId));
                 throw err;
             }

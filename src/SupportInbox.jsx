@@ -37,51 +37,14 @@ function formatResponseTime(minutes) {
 const NOAH_USER_ID = '32ac1943-aa68-4025-b4d9-3aa7ef129fb1';
 const NOAH_SUPPORT_EMAIL = 'noah@languagesoup.com';
 const NOAH_TIMEZONE = 'America/Los_Angeles'; // 11pm–6am here = sleeping
-const NOAH_CODING_KEY = 'noah_at_desk'; // when true, show "Noah's coding"
-const NOAH_DESK_LOG_KEY = 'noah_desk_log'; // [{ d, h, dow }] for inferring default when you don't click
-const DESK_LOG_MAX = 50;
-
-function getNoahNow() {
-    const d = new Date(new Date().toLocaleString('en-US', { timeZone: NOAH_TIMEZONE }));
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return {
-        d: `${y}-${m}-${day}`,
-        h: d.getHours(),
-        dow: d.getDay(),
-    };
-}
-
-function getDeskLog() {
-    try {
-        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(NOAH_DESK_LOG_KEY) : null;
-        if (!raw) return [];
-        const log = JSON.parse(raw);
-        return Array.isArray(log) ? log.slice(-DESK_LOG_MAX) : [];
-    } catch (_) { return []; }
-}
-
-function inferProbablyCoding() {
-    const now = getNoahNow();
-    const log = getDeskLog();
-    if (log.length < 3) return false;
-    const match = log.filter((e) => Number(e.dow) === now.dow && Number(e.h) === now.h);
-    return match.length >= 2;
-}
-
-// Derive status: sleeping 11pm–6am; else your click (at desk) or inferred from history
-function getNoahStatus() {
-    const now = new Date();
-    const hour = new Date(now.toLocaleString('en-US', { timeZone: NOAH_TIMEZONE })).getHours();
+// Status comes from app_users.availability_override (set in Castle or here). Fallback: sleeping 11pm–6am LA else on the go.
+function getNoahStatusFromOverride(availabilityOverride) {
+    if (availabilityOverride === 'at_desk') return { label: "Noah's coding", sub: 'online, will reply' };
+    if (availabilityOverride === 'sleeping') return { label: "Noah's sleeping", sub: "will check when he's up" };
+    if (availabilityOverride === 'on_the_go') return { label: "Noah's on the go", sub: 'checking on phone' };
+    const hour = new Date(new Date().toLocaleString('en-US', { timeZone: NOAH_TIMEZONE })).getHours();
     const isSleeping = hour >= 23 || hour < 6;
     if (isSleeping) return { label: "Noah's sleeping", sub: "will check when he's up" };
-    try {
-        if (typeof localStorage !== 'undefined' && localStorage.getItem(NOAH_CODING_KEY) === 'true') {
-            return { label: "Noah's coding", sub: 'online, will reply' };
-        }
-        if (inferProbablyCoding()) return { label: "Noah's coding", sub: 'online, will reply (inferred)' };
-    } catch (_) {}
     return { label: "Noah's on the go", sub: 'checking on phone' };
 }
 
@@ -93,27 +56,10 @@ export default function SupportInbox() {
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
     const [responseTimeMinutes, setResponseTimeMinutes] = useState(null);
-    const [noahProfile, setNoahProfile] = useState(null);
-    const [noahStatus, setNoahStatus] = useState(getNoahStatus);
-    const [isAtDesk, setIsAtDesk] = useState(() => {
-        try {
-            return typeof localStorage !== 'undefined' && localStorage.getItem(NOAH_CODING_KEY) === 'true';
-        } catch (_) { return false; }
-    });
+    const [noahProfile, setNoahProfile] = useState(null); // { display_name, avatar_url, availability_override }
+    const noahStatus = noahProfile ? getNoahStatusFromOverride(noahProfile.availability_override) : getNoahStatusFromOverride(null);
+    const isAtDesk = noahProfile?.availability_override === 'at_desk';
     const messagesEndRef = useRef(null);
-
-    // Update status every minute so sleep/wake transitions show
-    useEffect(() => {
-        const update = () => {
-            setNoahStatus(getNoahStatus());
-            try {
-                setIsAtDesk(typeof localStorage !== 'undefined' && localStorage.getItem(NOAH_CODING_KEY) === 'true');
-            } catch (_) {}
-        };
-        update();
-        const interval = setInterval(update, 60 * 1000);
-        return () => clearInterval(interval);
-    }, []);
 
     useEffect(() => {
         loadThreads();
@@ -136,7 +82,7 @@ export default function SupportInbox() {
         try {
             const { data } = await supabase
                 .from('app_users')
-                .select('display_name, avatar_url')
+                .select('display_name, avatar_url, availability_override')
                 .eq('id', NOAH_USER_ID)
                 .single();
             setNoahProfile(data || null);
@@ -145,19 +91,13 @@ export default function SupportInbox() {
         }
     };
 
-    const toggleAtDesk = () => {
+    const setNoahAvailability = async (value) => {
         try {
-            const next = !isAtDesk;
-            localStorage.setItem(NOAH_CODING_KEY, next ? 'true' : 'false');
-            if (next) {
-                const now = getNoahNow();
-                const log = getDeskLog();
-                log.push({ d: now.d, h: now.h, dow: now.dow });
-                localStorage.setItem(NOAH_DESK_LOG_KEY, JSON.stringify(log.slice(-DESK_LOG_MAX)));
-            }
-            setIsAtDesk(next);
-            setNoahStatus(getNoahStatus());
-        } catch (_) {}
+            await supabase.from('app_users').update({ availability_override: value }).eq('id', NOAH_USER_ID);
+            setNoahProfile(prev => prev ? { ...prev, availability_override: value } : null);
+        } catch (err) {
+            console.error('Error setting Noah availability:', err);
+        }
     };
 
     const loadResponseTimeStats = async () => {
@@ -348,21 +288,24 @@ export default function SupportInbox() {
                                 </p>
                             </div>
                         </div>
-                        {/* Status: auto from time (11pm–6am = sleeping) + "at desk" = coding, else on the go */}
+                        {/* Status from Castle / app_users.availability_override. Quick toggle here too. */}
                         <div className="border-t border-[var(--soup-turquoise)]/10 px-4 py-2 bg-[var(--soup-linen)]/30 flex items-center justify-between gap-2">
                             <div>
                                 <p className="text-xs font-black text-[var(--soup-dark)] uppercase tracking-wide">{noahStatus.label}</p>
                                 <p className="text-[10px] font-bold text-[var(--soup-dark)]/50">{noahStatus.sub}</p>
                             </div>
-                            {noahStatus.label !== "Noah's sleeping" && (
-                                <button
-                                    type="button"
-                                    onClick={toggleAtDesk}
-                                    className={`text-[10px] font-bold px-2.5 py-1.5 rounded-lg border transition-colors ${isAtDesk ? 'bg-[var(--soup-turquoise)]/20 text-[var(--soup-turquoise)] border-[var(--soup-turquoise)]/30' : 'text-[var(--soup-dark)]/50 border-[var(--soup-dark)]/10 hover:bg-[var(--soup-linen)]/50'}`}
-                                >
-                                    at my desk
-                                </button>
-                            )}
+                            <div className="flex gap-1">
+                                {['at_desk', 'on_the_go', 'sleeping'].map((v) => (
+                                    <button
+                                        key={v}
+                                        type="button"
+                                        onClick={() => setNoahAvailability(v)}
+                                        className={`text-[10px] font-bold px-2 py-1 rounded border transition-colors ${noahProfile?.availability_override === v ? 'bg-[var(--soup-turquoise)]/20 text-[var(--soup-turquoise)] border-[var(--soup-turquoise)]/30' : 'text-[var(--soup-dark)]/50 border-[var(--soup-dark)]/10 hover:bg-[var(--soup-linen)]/50'}`}
+                                    >
+                                        {v === 'at_desk' ? 'desk' : v === 'on_the_go' ? 'go' : 'sleep'}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                         <div className="px-4 pb-3 pt-1">
                             <p className="text-[10px] font-bold text-[var(--soup-dark)]/50">

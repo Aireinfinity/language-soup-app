@@ -43,7 +43,8 @@
       },
       "cache": {
         "key": "android-no-read-media-v1"
-      }
+      },
+      "channel": "production"
     }
   },
   "submit": {

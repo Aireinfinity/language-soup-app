@@ -11,8 +11,8 @@ import { getAvatarSource } from '../utils/soupUtils';
 
 const COLLAPSED_KEY = 'benjamin_booking_banner_collapsed';
 const LEGACY_DISMISS_KEY = 'benjamin_booking_banner_dismissed';
-// Use Stripe Payment Link here; set "redirect after payment" in Stripe to your Calendly link.
-const BOOKING_URL = process.env.EXPO_PUBLIC_BENJAMIN_BOOKING_URL || 'https://calendly.com/noah-language-soup/benji-1-1';
+// Flow: Stripe first (pay), then Stripe redirects to Calendly. Set EXPO_PUBLIC_BENJAMIN_BOOKING_URL to your Stripe payment link; in Stripe set "redirect after payment" to your Calendly link.
+const BOOKING_URL = process.env.EXPO_PUBLIC_BENJAMIN_BOOKING_URL || '';
 
 const SOUP_COLORS = {
     turquoise: '#00ADEF',
@@ -71,7 +71,7 @@ export function BenjaminBookingBanner() {
             handleExpand();
             return;
         }
-        Linking.openURL(BOOKING_URL).catch(() => {});
+        if (BOOKING_URL) Linking.openURL(BOOKING_URL).catch(() => {});
     }, [collapsed]);
 
     const avatarSource = benjamin?.avatar_url ? getAvatarSource(benjamin.avatar_url) : null;
@@ -95,7 +95,7 @@ export function BenjaminBookingBanner() {
     // Expanded: full banner, tap to open booking; chevron to collapse
     return (
         <View style={styles.wrap}>
-            <Pressable style={({ pressed }) => [styles.contentWrap, pressed && styles.wrapPressed]} onPress={() => Linking.openURL(BOOKING_URL).catch(() => {})} accessibilityLabel="Book 1:1 with Benjamin">
+            <Pressable style={({ pressed }) => [styles.contentWrap, pressed && styles.wrapPressed]} onPress={() => { if (BOOKING_URL) Linking.openURL(BOOKING_URL).catch(() => {}); }} accessibilityLabel="Book 1:1 with Benjamin">
                 <View style={styles.content}>
                     <View style={styles.avatarWrap}>
                         {avatarSource ? (

@@ -177,8 +177,12 @@ serve(async (req) => {
             const cleanEnglish = rawText.replace(/^#challenge\s*/i, '').trim();
 
             for (const group of groups) {
-                // Skip test/internal groups — do not send scheduled challenges
+                // Skip DMs and test/internal groups — never send challenges to DM chats
                 const nameLower = (group.name || '').toLowerCase();
+                if (group.name === 'DM') {
+                    console.log(`⏭️ Skipping (DM): ${group.name}`);
+                    continue;
+                }
                 if (nameLower.includes('app testers') || nameLower.includes("noah's test group solo")) {
                     console.log(`⏭️ Skipping (excluded): ${group.name}`);
                     continue;
@@ -214,6 +218,7 @@ serve(async (req) => {
             const allUserIds = new Set<string>();
             for (const group of groups) {
                 const nameLower = (group.name || '').toLowerCase();
+                if (group.name === 'DM') continue;
                 if (nameLower.includes('app testers') || nameLower.includes("noah's test group solo")) continue;
                 const { data: members } = await supabase
                     .from('app_group_members')

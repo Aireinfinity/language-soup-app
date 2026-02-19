@@ -1,6 +1,6 @@
 # Language Soup: User feedback & interviews
 
-**All user feedback lives here** — interviews, support tickets, in-app feedback, whatever. One row per person per touchpoint so we can see how many people we're talking to. When you get new feedback or see something in the support center, add a row here (or paste name + issue and we'll add it). *Previously USER_FEEDBACK.md pointed here; that file is removed.*
+**All user feedback lives here** — interviews, support tickets, in-app feedback, whatever. One row per person per touchpoint so we can see how many people we're talking to. When you get new feedback or see something in the support center, add a row here (or paste name + issue and we'll add it). This doc is for synthesizing and understanding users in their own words (for Noah and for AI). *Previously USER_FEEDBACK.md pointed here; that file is removed.*
 
 ### User tiers (who was there when)
 
@@ -161,6 +161,20 @@ Keep track of who showed up at which stage so we can remember and reward them (e
 | 128 | Pietra MC | feedback (in-app) | Referred by Scarlett. Activated right away: downloaded the app and sent a message saying she loves the voice memos ("i dowloaded it!! i love the voice memos hehe"). | Referral (Scarlett). Fast activation. Voice memos. |
 | 129 | Nicki Bugliosi | check-in | "It's fun!!! I feel like I'm way more likely to use the app form vs WhatsApp." Mix of timing (holidays = had time, then vacation ended, work got busy). Glitches around sending voice memos; one bug: message said "sent" but then disappeared. Tried to report from app, not sure it worked. | App > WhatsApp for her. Voice/chat glitches (sent then disappears). In-app feedback may not have gone through. Life timing (busy). |
 | 130 | Oshack | feedback | No storage on phone; too many photos. Can't install or use app on phone. | Activation blocker. Storage. (See also #77: iPad/hostel; power user on WhatsApp, hasn't used app.) |
+| 131 | Ony | feedback | "Ahh it's hard for me to keep up with multiple apps I think lol. Like I use WhatsApp every now and then so i was on there more but I shall return!" | App vs WhatsApp. Multiple apps hard to keep up. Will return. (POWER.) |
+| 132 | Wesley | feedback (2/19/26) | "Yeah bro I don't know how you'd fix that. Definitely an issue tho. Cause that's the whole point of the app." (re: retention) | Retention. Acknowledges it's core to the product; doesn't have a fix. (See #46: Duo didn't work for him.) |
+| 133 | Josiah Laney | interview (text) | Noah: update app (TestFlight 32), play around, super buggy. Josiah: updated. Idea talk: masterclass/meetup for languages; cameos for influencers to record language classes. **Payment:** Noah asked historically — have you paid for language things (masterclass, meetup, tutoring, courses)? Josiah: max would be $5–10, ideally lower; didn't pay Duolingo premium. Personal challenge = time; async nice. Clarified: *have you* (past) not *would you*. Josiah: went to "language table" once or twice (Harvard). Hasn't paid for coaching/PDFs for Portuguese. **Practice now:** books in Portuguese (romance, history), music, then sees boyfriend (Matheus) and tries to practice; his family doesn't really speak English. | Payment: "have u" grounded in past behavior; hasn't paid for much (one class context). Practice: books, music, partner/family immersion. Creator economy idea (positive) but not a historical payer. Time = blocker; async preference. |
+| 134 | Aurelia | feedback | Ex power WhatsApp user. Was on before because it was fun to see what Noah and Nicki were saying (listening to friends' voice notes); now there's less of that. Sees a future where you can be in group chats with friends and/or make friends through the app. Will try to stick around more. *(See transcript below.)* | App vs WhatsApp. Friends' voice notes = appeal. Group chats with friends; make friends in app. Re-engagement. (POWER → less active.) |
+| 135 | chez.ems (TikTok @chez.ems) | feedback | Uses HelloTalk and Lingoda. | Competitors. HelloTalk. Lingoda. |
+| 136 | Adora | interview (voice memo 5 min, Noah's notes) | POWER USER. Loves Build #32: opening the app and having the challenge right there is nice, gave more incentive to do it immediately. Loves the big GC with every person's response to the challenge no matter what language. WhatsApp was better: seeing the challenge from the notification, not just "new challenge dropped" (Miranda said this too); when she sees the question she starts thinking about it and cooking it up in her head. Doesn't like vague notifications, doesn't give enough inertia; more steps involved, easiest when very few steps. WhatsApp was nice to see who was replying even if she didn't know who they were; seeing who is replying and that many people are replying is awesome. Suggests: remind people every 6 or 12 hours like Duolingo ("u still haven't done ur challenge"), annoying but necessary, like a bump. | Notifications: put challenge/topic in push. Social proof (who replied, how many). Fewer steps = more inertia. Bump/reminder (6–12h) like Duo. Build #32 wins. |
+| 137 | Eryn | feedback | Loves the update with everyone in the same chat using their languages; "it's so cute" 🥰. Really likes the groups on the left side. AI assistant "correct pronunciation" pronounces in English not Tagalog (bug). Likes having in-app help vs Google Translating. | Big GC / all languages. Groups on left. Positive Build #32. Correct pronunciation: should speak in target language (Tagalog). In-app help valued. (See also #105: Bridget — hints, correct me, pause/redo.) |
+| 138 | Noah | notes | **AI corrections in main chat (Eryn #137):** Whole Language Soup group chat is sent to AI as English. Need to verify/detect language per voice note when sent from main chat, tag the message with that language, and pass it to AI so corrections (e.g. correct pronunciation) are in the target language, not English. | BUILD_32_IOS_BUGS.md bug 11. Per-message language tagging. AI in target language. |
+| 139 | Noah | notes | When I text people they activate; we're getting new people who are activating better. Social proof is working. Need to monitor this. | Activation. Text = activation lever. Social proof. Monitor. |
+| 140 | (user) | feedback | "Honestly the WhatsApp groups were easier because they were right on my phone. With the app it's clunky and honestly there's just more steps involved." *(LinkedIn post quote, Build 32 week.)* | App vs WhatsApp. Friction. More steps. Clunky. |
+| 141 | Adora | feedback (text 2/19/26) | Asked how "need ingredients" (in-app translations + pronunciations) works; first time seeing it. Noah: click from Language Soup chat, broken in individual groups; beginner feature so people don't have to leave for Google Translate, OpenAI for translations/pronunciations. Adora: "wow that is so cool!" "so helpful for me." Only bug she noticed: can't see the word bank in individual language groups. *(Eryn, Diana, Noah also love this feature; were using Google Translate before.)* | Need ingredients / in-app help. Word bank broken in language groups (bug). Positive reaction. Replaces Google Translate. |
+| 142 | Noah | notes | In-app translations/pronunciations ("need ingredients"): Adora, Eryn, Diana, Noah all love it; Adora and Eryn were using Google Translate before. Fix: word bank visible in individual groups. | Need ingredients. Fix in groups. High value for beginners. |
+| 143 | Adora | feedback (text 2/19/26) | Asked what the symbol in the top right corner is (profile). Also: app won't save the edits she makes to her bio even after she hits save. | Profile. Symbol in top right (clarify). Bio edits don't persist (bug). BUILD_32_IOS_BUGS #12. |
+| 144 | Alexis | feedback | "Every time I see your posts I'm like FUCK I meant to start that." *(Noah: Kiwi said the same when I comment on her posts it reminds her to go to the app; someone else too. More notifications = better; people like reminders; me being active on socials is great for the brand.)* | Social / posts as reminder. Notifications. Noah active on socials = brand + re-engagement. |
 
 ### Abby Gardner follow-up (text convo transcript)
 
@@ -171,3 +185,42 @@ Keep track of who showed up at which stage so we can remember and reward them (e
 **Noah:** initial thoughts? OMG GET IN THERE PURRR ur not scared??? u got notify on?
 
 **Abby:** Yessssss Dude it's so cool And I love the silly little humorous things What a great idea and brilliant execution 😍
+
+### Josiah Laney interview (text convo transcript)
+
+**Noah:** update your app please! play around with it and let me know!  
+**Josiah:** Is it not updated?  
+**Noah:** it is! on ur testflight app (32) is the latest  
+**Josiah:** Yep it's updated  
+**Noah:** super buggy but if u tap around a lot u can play with it  
+**Josiah:** Like it glitches?  
+**Noah:** does it glitch? u tell me power user. texted ur bf in portuguese. with my translator.  
+**Josiah:** lol … i actually think he is gonna love this idea. its like masterclass or meetup for languages. he posts great videos he could make little courses in portuguese … people can pay $10 for it  
+**Josiah:** It is a great idea! Or like cameos for influencers you like to record language classss  
+**Noah:** but how many language things have u paid for. or how many events or online courses have u paid for  
+**Josiah:** Hm, I've considered. I think my max price would be 5–10$ ideally much lower like i didn't pay for the Duolingo premium or whatever  
+**Noah:** historically. no would u but have u. like masterclass. meetup.com. online tutoring? any kind of online event have u paid for  
+**Josiah:** I think maybe? My personal challenge is time. So it's nice when things are asychronous so I can do it on my own at whenever I get a sec. but we have to see if the interest is there  
+**Noah:** nah ur being nice to me. im startup interviewing u rn. if u haven't in the past then its a no  
+**Josiah:** Haha I'm giving you my honest answer … OH you're asking if I have. I thought u were asking if I would.  
+**Noah:** not would you but have u. would is too conditional. anyone would. have u is grounded in real things  
+**Josiah:** No.  
+**Noah:** have u paid for like coaching or pdfs or something  
+**Josiah:** I went to a "language table" once. Or twice. But it was hosted by Harvard.  
+**Noah:** have u paid for anything to help u speak with ur bf  
+**Josiah:** Technically yes bc I took that one class. But I haven't paid [for other stuff].  
+**Noah:** like paying for harvard and then u went to class hosted by harvard. what do u use rn to study portu. just bf?  
+**Josiah:** I have books in pt (like romance novels and hs history book) that I read and I listen to music. Then I see Matheus and try to practice. His family doesn't really speak English.
+
+### Vance Allen (follow-up)
+
+Just followed the insta  
+It's mainly the accent I'd be embarrassed about 🤣  
+The last time I spoke French was probably 5 years ago 😭  
+I do want to go to Paris at some point tho
+
+### Aurelia (follow-up; ex power WhatsApp user)
+
+Hi hi  
+
+Honestly I think the biggest thing was I was on before bc it was fun to see what you, Noah, and Nicki were saying and it was appealing bc I was listening to friends' voice notes whereas now there's less of that. Tho I can see a future where you can be in group chats w friends and/or make friends through the app.. so I will try to stick around more!

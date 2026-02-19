@@ -372,6 +372,11 @@ export const AuthProvider = ({ children }) => {
                     console.log('[Auth] Identity Claim Result:', claimResult);
                 }
 
+                if (claimResult?.error === 'ACCOUNT_EXISTS_NO_PASSWORD') {
+                    await supabase.auth.signOut();
+                    throw new Error('ACCOUNT_EXISTS_NO_PASSWORD');
+                }
+
                 // Profile is definitely ready now
                 setProfileChecked(true);
                 isNewUser = true;

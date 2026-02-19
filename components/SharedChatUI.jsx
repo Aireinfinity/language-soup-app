@@ -39,6 +39,7 @@ const SOUP_COLORS = {
  * @param {boolean} sending - Is currently sending
  * @param {ReactNode} headerComponent - Custom header component
  * @param {ReactNode} bannerComponent - Custom banner component
+ * @param {ReactNode} aboveInputComponent - Optional component rendered between reply preview and input bar (e.g. phrases & vocab panel)
  * @param {string} placeholderText - Placeholder for text input
  * @param {boolean} showLanguageFlags - Show language emoji flags in messages
  * @param {string} senderKey - Key to access sender data ('sender' or 'user')
@@ -70,6 +71,7 @@ export function SharedChatUI({
     sending,
     headerComponent,
     bannerComponent,
+    aboveInputComponent = null,
     placeholderText,
     showLanguageFlags = false,
     senderKey = "sender",
@@ -110,6 +112,7 @@ export function SharedChatUI({
     onResumeRecording,
     compact = false, // smaller messages so ~5–7 fit (e.g. Language Soup feed)
     theme, // 'whatsapp' = paper bg, simple date sep, light input bar
+    emptyStateDMPartner = null, // For DMs: display name (and optionally avatar) so empty state shows "start a DM with [name]"
 }) {
     // ========== INTERNAL STATE (Self-Contained) ==========
     const [replyTo, setReplyTo] = useState(null);
@@ -397,7 +400,7 @@ export function SharedChatUI({
                 onDelete={handleDelete}
                 groupId={groupId}
                 groupName={perMessageGroupName != null ? perMessageGroupName : groupName}
-                groupLanguage={groupLanguage}
+                groupLanguage={item.group_language ?? groupLanguage}
                 onAvatarPress={onAvatarPress}
                 onShowInspiration={onShowInspiration}
                 onGetTranscript={onGetTranscript}
@@ -444,7 +447,11 @@ export function SharedChatUI({
                 contentContainerStyle={[listContentStyle, { paddingBottom: 28 }]}
                 ListEmptyComponent={!loading && (!messages || messages.length === 0) ? (
                     <View style={styles.emptyWrap}>
-                        <Text style={styles.emptyTitle}>tap the mic to talk or type a message.</Text>
+                        {emptyStateDMPartner ? (
+                            <Text style={styles.emptyTitle}>start a DM with {emptyStateDMPartner}</Text>
+                        ) : (
+                            <Text style={styles.emptyTitle}>tap the mic to talk or type a message.</Text>
+                        )}
                     </View>
                 ) : null}
             />
@@ -461,6 +468,9 @@ export function SharedChatUI({
 
             {/* Typing Indicator */}
             {typingIndicatorComponent}
+
+            {/* Optional panel above input (e.g. phrases & vocab while recording) */}
+            {aboveInputComponent}
 
             {/* Reply/Edit Preview - WhatsApp Style */}
             {(replyTo || editingMessage) && (

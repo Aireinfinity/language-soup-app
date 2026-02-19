@@ -46,8 +46,11 @@ export default function ChallengesTab({ user }) {
                 .select('id, name, language, level, member_count')
                 .order('member_count', { ascending: false });
 
+            // Exclude DMs — challenges should never be sent to DM group chats
+            const groupsOnly = (groupsData || []).filter((g) => g.name !== 'DM');
+
             const groupsWithData = await Promise.all(
-                (groupsData || []).map(async (group) => {
+                groupsOnly.map(async (group) => {
                     const { data: lastChallenge } = await supabase
                         .from('app_challenges')
                         .select('created_at, id, created_by')

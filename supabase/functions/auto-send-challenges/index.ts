@@ -42,8 +42,9 @@ serve(async (req) => {
             // Use the pre-calculated translations saved in the database
             const translations = challenge.translations || {}
 
-            // Send to all groups with proper format (already calculated by dashboard)
+            // Send to all groups with proper format (already calculated by dashboard). Never send to DMs.
             for (const group of groups) {
+                if (group.name === 'DM') continue;
                 const finalText = translations[group.language] || challenge.challenge_text
 
                 await supabase.from('app_challenges').insert({

@@ -3,7 +3,7 @@
  * then loads full profile, levels, wall (reactions + posts) in the background.
  * Brand colors, bold design, collapsible wall, DM / Edit / Chat with Noah.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Pressable, StyleSheet, Image, ScrollView, ActivityIndicator, Alert, TextInput, KeyboardAvoidingView, Platform, Dimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -68,6 +68,7 @@ export default function UserProfileScreen() {
     const [wallDraft, setWallDraft] = useState('');
     const [postingWall, setPostingWall] = useState(false);
     const [userGroups, setUserGroups] = useState([]);
+    const scrollRef = useRef(null);
 
     const isOwnProfile = currentUser?.id && id && currentUser.id === id;
     const levels = !isBot && stats ? computeLevelsFromStats(stats) : (isBot ? { speakLevel: BOT_PRESET.speakLevel, listenLevel: BOT_PRESET.listenLevel, speakName: BOT_PRESET.speakName, listenName: BOT_PRESET.listenName } : null);
@@ -208,8 +209,9 @@ export default function UserProfileScreen() {
             setWallPosts(prev => [{ id: null, content, created_at: new Date().toISOString(), from_user_id: currentUser.id, authorName: currentUser.display_name || 'You' }, ...prev]);
             setWallDraft('');
         } catch (e) {
-            console.warn('Wall post failed:', e);
-            Alert.alert('Error', 'Could not post. Try again.');
+            console.warn('Wall post failed:', e?.message ?? e);
+            const msg = (e?.message && e.message.length < 80) ? e.message : 'Could not post. Try again.';
+            Alert.alert('Error', msg);
         } finally {
             setPostingWall(false);
         }
@@ -237,7 +239,11 @@ export default function UserProfileScreen() {
     }
 
     return (
-        <KeyboardAvoidingView style={[styles.container, { backgroundColor: SOUP_COLORS.cream }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView
+            style={[styles.container, { backgroundColor: SOUP_COLORS.cream }]}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? (insets.top + 56) : 0}
+        >
             <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
                 <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.8 }]}>
                     <ChevronLeft size={28} color={SOUP_COLORS.text} />
@@ -269,10 +275,12 @@ export default function UserProfileScreen() {
             )}
 
             <ScrollView
+                ref={scrollRef}
                 style={styles.scroll}
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
             >
                 {/* Hero: full-bleed avatar/placeholder (inspiration: Jane Foster / Miranda Jones) */}
                 <View style={[styles.heroWrap, { height: HERO_HEIGHT }]}>
@@ -464,6 +472,9 @@ export default function UserProfileScreen() {
                                         onChangeText={setWallDraft}
                                         maxLength={200}
                                         multiline
+                                        onFocus={() => {
+                                            setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300);
+                                        }}
                                     />
                                     <Pressable
                                         style={[styles.wallPostBtn, (!wallDraft.trim() || postingWall) && styles.wallPostBtnDisabled]}

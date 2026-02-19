@@ -82,6 +82,12 @@ export default function LoginScreen() {
                     'That name’s already in use. If it’s you, make sure you’re tapping the same 3 emojis you used before — they’re your password.',
                     [{ text: 'OK', onPress: () => setPassword([]) }]
                 );
+            } else if (error.message === 'ACCOUNT_EXISTS_NO_PASSWORD') {
+                Alert.alert(
+                    'That account already exists',
+                    "Someone with this name is already in the Soup but hasn't set an emoji password yet. Contact Noah to get back into that account instead of making a new one.",
+                    [{ text: 'OK', onPress: () => setPassword([]) }]
+                );
             } else if (error.message?.includes('Account exists but we couldn’t')) {
                 Alert.alert(
                     'Need to get you back in',

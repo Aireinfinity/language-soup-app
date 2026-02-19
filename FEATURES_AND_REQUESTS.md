@@ -114,6 +114,9 @@ NEW
 • After the challenge (countdown): surface podcast mode — e.g. "great, you did it — want to hear how others did it today?" Keep podcast mode always accessible (no unlock gate); also a place to listen if they just want to listen that day  
   Who: Noah
 
+• **Friend group chats / small groups** — group chats with friends (private or small groups) and/or make friends through the app; appeal of listening to friends' voice notes vs big language groups. Build later.  
+  Who: Aurelia (ex power WhatsApp user, 2/19)
+
 ---
 
 DONE

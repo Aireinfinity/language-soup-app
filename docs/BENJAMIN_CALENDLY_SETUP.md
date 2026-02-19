@@ -44,4 +44,4 @@ Calendly’s **free plan doesn’t allow team invitations**, so you can’t “i
 - **Option A:** Benjamin does the Calendly setup once, you send him Stripe + confirmation text. Best if his schedule changes.
 - **Option B:** You do everything; he only sends you his weekly hours. Fine for a test with one fixed window per week.
 
-**Plug the Calendly link** into Stripe’s Payment Link “redirect after payment” URL. **Plug the Stripe Payment Link** into the app (`EXPO_PUBLIC_BENJAMIN_BOOKING_URL`) and into `book-benjamin.html`.
+**Plug the Calendly link** into Stripe’s Payment Link “redirect after payment” URL. **Plug the Stripe Payment Link** into the app (`EXPO_PUBLIC_BENJAMIN_BOOKING_URL`) and into `book-benjamin.html`. **Flow: Stripe first, then Calendly.** The app must open the Stripe link (user pays); Stripe redirects to Calendly. So the env must be the Stripe payment link, not the Calendly link.

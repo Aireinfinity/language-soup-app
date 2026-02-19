@@ -6,6 +6,7 @@ import ChallengesTab from './ChallengesTab';
 import SupportInbox from './SupportInbox';
 import SupportTabSimplified from './SupportTabSimplified';
 import GoalsTab from './GoalsTab';
+import NoahAvailabilityCard from './NoahAvailabilityCard';
 import FinancesTab from './FinancesTab';
 import GrowthCharts from './GrowthCharts';
 import MarketingTab from './MarketingTab';
@@ -434,6 +435,11 @@ export default function App() {
 
               <div className="space-y-12">
                 <OverviewTab />
+                <div className="pt-8 border-t-2 border-[var(--soup-turquoise)]/20">
+                  <h3 className="text-2xl font-black text-[var(--soup-dark)] mb-4 flex items-center gap-2">Noah's availability</h3>
+                  <p className="text-[var(--soup-dark)]/60 font-bold text-sm mb-4">Clock in/out for support chat. Users see this in the app when they open &quot;Chat with Noah&quot;.</p>
+                  <NoahAvailabilityCard />
+                </div>
                 <div className="pt-8 border-t-2 border-[var(--soup-turquoise)]/20">
                   <h3 className="text-2xl font-black text-[var(--soup-dark)] mb-6 flex items-center gap-2">
                     <Target className="text-[var(--soup-turquoise)]" size={24} />

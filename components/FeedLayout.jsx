@@ -17,6 +17,7 @@ import GroupAvatar from './GroupAvatar';
 import { LevelsInfoSheet } from './LevelsInfoSheet';
 import { LevelsPill } from './LevelsPill';
 import WhatsNewSheet from './WhatsNewSheet';
+import { SecurityBanner } from './SecurityBanner';
 import { shouldShowWhatsNew, markWhatsNewAsSeen } from '../utils/versionTracking';
 
 const SOUP_COLORS = {
@@ -181,6 +182,11 @@ export function FeedLayout({ children }) {
                 </View>
             </View>
 
+            {isDMs && (
+                <View style={styles.dmTabBar}>
+                    <Text style={styles.dmTabBarText}>DMs</Text>
+                </View>
+            )}
             {currentGroup && !isLanguageSoup && !isDMs && (
                 <View style={styles.groupInfoBar}>
                     <Text style={styles.groupInfoName} numberOfLines={1}>{currentGroup.name || currentGroup.language || 'Group'}</Text>
@@ -188,6 +194,7 @@ export function FeedLayout({ children }) {
                 </View>
             )}
 
+            <SecurityBanner />
             <View style={styles.main}>
                 {children}
             </View>
@@ -204,7 +211,7 @@ export function FeedLayout({ children }) {
                                 onPress={() => { try { haptics.light(); } catch (_) {} setSelectedGroupId(null); setShowGroupPicker(false); }}
                             >
                                 <View style={[styles.pickerAvatarWrap, (selectedGroupId === null || selectedGroupId === LS_ID) && styles.pickerAvatarWrapActive]}>
-                                    <Text style={styles.pickerSoupEmoji}>🥣</Text>
+                                    <Image source={require('../assets/images/logo.png')} style={styles.pickerSoupLogo} />
                                 </View>
                                 <View style={{ flex: 1 }}>
                                     <Text style={[(selectedGroupId === null || selectedGroupId === LS_ID) ? styles.pickerLabelActive : styles.pickerLabel]} numberOfLines={1}>Language Soup</Text>
@@ -261,7 +268,7 @@ export function FeedLayout({ children }) {
                                             ) : (
                                                 <GroupAvatar language={g.language || g.name} size={42} />
                                             )}
-                                            <Text style={[styles.pickerLabel, selectedGroupId === g.id && styles.pickerLabelActive]} numberOfLines={1}>{(g.language || g.name || 'Group').trim()}</Text>
+                                            <Text style={[styles.pickerLabel, selectedGroupId === g.id && styles.pickerLabelActive]} numberOfLines={1}>{(g.name || g.language || 'Group').trim()}</Text>
                                         </Pressable>
                                     ))
                             )}
@@ -393,6 +400,20 @@ const styles = StyleSheet.create({
         borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: 'rgba(0,0,0,0.08)',
     },
+    dmTabBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-start',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        backgroundColor: SOUP_COLORS.turquoise,
+    },
+    dmTabBarText: {
+        fontSize: 14,
+        fontWeight: '800',
+        color: '#fff',
+        letterSpacing: -0.2,
+    },
     groupInfoName: {
         fontSize: 15,
         fontWeight: '700',
@@ -408,8 +429,11 @@ const styles = StyleSheet.create({
         paddingVertical: 4,
         paddingHorizontal: 4,
     },
-    pickerSoupEmoji: {
-        fontSize: 22,
+    pickerSoupLogo: {
+        width: 32,
+        height: 32,
+        borderRadius: 10,
+        resizeMode: 'contain',
     },
     pickerTitle: {
         fontSize: 16,

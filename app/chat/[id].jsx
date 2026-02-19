@@ -6,7 +6,7 @@ import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { ArrowLeft, Send, Mic, X, Trash2, Square, ChevronLeft, ChevronRight, MoreVertical, Check, Clock, Globe, Lightbulb, Play, Pause } from 'lucide-react-native';
 import { InspirationModal } from '../../components/InspirationModal';
-import { SoupPhrasesVocabModal } from '../../components/SoupPhrasesVocabModal';
+import { SoupPhrasesVocabPanel } from '../../components/SoupPhrasesVocabPanel';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AudioMessage } from '../../components/AudioMessage';
 import { LiveAudioWaveform } from '../../components/LiveAudioWaveform';
@@ -102,6 +102,7 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
     const [inspirationMetadata, setInspirationMetadata] = useState(null);
     const [showSoupPhrasesVocab, setShowSoupPhrasesVocab] = useState(false);
     const [mergedGroupLanguages, setMergedGroupLanguages] = useState([]);
+    const [mergedVoiceGroupId, setMergedVoiceGroupId] = useState(null); // real group id to send voice to when in merged view
     const [phrasesChallengePrompt, setPhrasesChallengePrompt] = useState(null);
     const [phrasesChallengeId, setPhrasesChallengeId] = useState(null);
 
@@ -656,6 +657,7 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
         if (!user?.id) return;
         try {
             setLoading(true);
+            setMergedVoiceGroupId(null); // clear until we have a group the user is actually in
             // User's groups: for phrases/vocab modal and English challenge only
             const { data: memberships, error: memberError } = await supabase
                 .from('app_group_members')
@@ -664,13 +666,13 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
             if (memberError) throw memberError;
             const userGroupIds = (memberships || []).map((m) => m.group_id).filter(Boolean);
 
-            // All non-DM groups: feed shows messages from every group so people see activity
+            // All non-DM groups: feed shows messages from every group so people see activity (exclude all DMs)
             const { data: allGroups, error: allGroupsError } = await supabase
                 .from('app_groups')
                 .select('id, name, language, member_count');
             if (allGroupsError) throw allGroupsError;
             const allGroupIds = (allGroups || [])
-                .filter((g) => !(g.name === 'DM' && g.member_count === 2))
+                .filter((g) => g.name !== 'DM')
                 .map((g) => g.id)
                 .filter(Boolean);
             if (allGroupIds.length === 0) {
@@ -689,18 +691,23 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
                     .in('id', userGroupIds);
                 groupsData = data || [];
             }
-            const langs = [...new Set((groupsData || [])
-                .filter((g) => g.id !== LANGUAGE_SOUP_GROUP_ID)
-                .map((g) => g.language)
-                .filter(Boolean))];
-            setMergedGroupLanguages(langs);
+            // Dedupe by base language so "English" and "English (US)" don't show twice
+            const langMap = new Map();
+            (groupsData || [])
+                .filter((g) => g.id !== LANGUAGE_SOUP_GROUP_ID && g.language)
+                .forEach((g) => {
+                    const l = (g.language || '').trim();
+                    const key = l.toLowerCase().split(/[\s(]+/)[0] || l;
+                    if (!langMap.has(key)) langMap.set(key, l);
+                });
+            setMergedGroupLanguages([...langMap.values()]);
 
-            // One challenge per day: use the English group's challenge only (default for Language Soup feed)
+            // One challenge per day: use the English group's challenge only (default for Language Soup feed).
+            // Only pick from the user's groups so we never send voice to a group they're not in.
             let englishChallenge = null;
             let englishGroupId = null;
-            if (oneChallengePerDayEnglish) {
-                const sourceGroups = (groupsData || []).length > 0 ? groupsData : (allGroups || []);
-                const englishGroup = sourceGroups.find(
+            if (oneChallengePerDayEnglish && (groupsData || []).length > 0) {
+                const englishGroup = (groupsData || []).find(
                     (g) =>
                         (g.language && String(g.language).toLowerCase().includes('english')) ||
                         (g.name && String(g.name).toLowerCase().includes('english'))
@@ -721,7 +728,12 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
                 setAllChallenges([englishChallenge]);
                 setCurrentChallenge(englishChallenge);
                 setVisibleChallenge(englishChallenge);
-            } else if (!oneChallengePerDayEnglish) {
+            }
+            // Always set mergedVoiceGroupId when user has an English group so they can send from the main Language Soup chat (even if no challenge yet)
+            if (oneChallengePerDayEnglish && englishGroupId) {
+                setMergedVoiceGroupId(englishGroupId);
+            }
+            if (!oneChallengePerDayEnglish) {
                 const { data: challenges } = await supabase
                     .from('app_challenges')
                     .select('id, prompt_text, created_at, metadata')
@@ -852,6 +864,11 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
     const sendMessage = async () => {
         if (!textInput.trim() || sending || !user) return;
         const messageText = textInput.trim();
+        const targetGroupId = merged && mergedVoiceGroupId ? mergedVoiceGroupId : groupId;
+        if (merged && !targetGroupId) {
+            Alert.alert('Message Failed', 'No group to send to. Join an English group from the picker first.', [{ text: 'OK' }]);
+            return;
+        }
         setTextInput('');
         setSending(true);
 
@@ -860,7 +877,7 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
         const optimisticMessage = {
             id: tempId,
             sender_id: user.id,
-            group_id: groupId,
+            group_id: targetGroupId,
             challenge_id: currentChallenge?.id || null,
             message_type: 'text',
             content: messageText,
@@ -877,7 +894,7 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
         try {
             const { data, error } = await supabase.from('app_messages').insert({
                 sender_id: user.id,
-                group_id: groupId,
+                group_id: targetGroupId,
                 challenge_id: currentChallenge?.id,
                 message_type: 'text',
                 content: messageText,
@@ -885,10 +902,10 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
             if (error) throw error;
             // Reply push notification: voice only (not for text), to avoid spam
             // Mark group as read so we never show unread from our own message
-            await supabase.from('app_group_members').update({ last_read_at: new Date().toISOString() }).eq('user_id', user.id).eq('group_id', groupId);
+            await supabase.from('app_group_members').update({ last_read_at: new Date().toISOString() }).eq('user_id', user.id).eq('group_id', targetGroupId);
             setMessages((prev) => prev.map((msg) => (msg.id === tempId ? { ...data, sender: optimisticMessage.sender } : msg)));
 
-            track(AnalyticsEvents.TEXT_SENT, { group_id: groupId });
+            track(AnalyticsEvents.TEXT_SENT, { group_id: targetGroupId });
 
             // Complete quest for first text message
             await completeQuest('first_text');
@@ -903,7 +920,8 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
             }
         } catch (error) {
             console.error('Send failed:', error);
-            Alert.alert('Message Failed', 'Could not send message. Please check your connection and try again.', [{ text: 'OK' }]);
+            const message = error?.message ? `Could not send: ${error.message}` : 'Could not send message. Please check your connection and try again.';
+            Alert.alert('Message Failed', message, [{ text: 'OK' }]);
             setMessages((prev) => prev.filter((msg) => msg.id !== tempId));
             setTextInput(messageText);
         } finally {
@@ -998,12 +1016,17 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
             if (currentChallenge?.id && permissionStatus !== 'granted') setShowNotificationCTA(true);
             return;
         }
+        const targetGroupId = merged && mergedVoiceGroupId ? mergedVoiceGroupId : groupId;
+        if (merged && !targetGroupId) {
+            Alert.alert('Voice Message Failed', 'No group to send to. Join an English group from the picker to use phrases & vocab.', [{ text: 'OK' }]);
+            return;
+        }
         const tempId = `temp-voice-${Date.now()}`;
 
         const optimisticMessage = {
             id: tempId,
             sender_id: user.id,
-            group_id: groupId,
+            group_id: targetGroupId,
             challenge_id: effectiveChallengeId || null,
             message_type: 'voice',
             media_url: audioUri,
@@ -1029,7 +1052,7 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
 
             const { data, error: insertError } = await supabase.from('app_messages').insert({
                 sender_id: user.id,
-                group_id: groupId,
+                group_id: targetGroupId,
                 challenge_id: effectiveChallengeId || null,
                 message_type: 'voice',
                 media_url: publicUrl,
@@ -1039,14 +1062,14 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
             if (insertError) throw insertError;
 
             if (effectiveChallengeId) {
-                supabase.functions.invoke('notify-challenge-reply', { body: { group_id: groupId, sender_id: user.id } }).catch(() => {});
+                supabase.functions.invoke('notify-challenge-reply', { body: { group_id: targetGroupId, sender_id: user.id } }).catch(() => {});
             }
             // Mark group as read so we never show unread from our own message
-            await supabase.from('app_group_members').update({ last_read_at: new Date().toISOString() }).eq('user_id', user.id).eq('group_id', groupId);
+            await supabase.from('app_group_members').update({ last_read_at: new Date().toISOString() }).eq('user_id', user.id).eq('group_id', targetGroupId);
 
             setMessages((prev) => prev.map((msg) => (msg.id === tempId ? { ...data, sender: optimisticMessage.sender } : msg)));
 
-            track(AnalyticsEvents.VOICE_SENT, { group_id: groupId });
+            track(AnalyticsEvents.VOICE_SENT, { group_id: targetGroupId });
 
             // Fire-and-forget: transcribe voice memo for reading when you can't listen
             supabase.functions.invoke('voice-feedback', { body: { task: 'transcribe_message', messageId: data.id } })
@@ -1067,7 +1090,8 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
         } catch (error) {
             console.error('❌ [VOICE] Complete error:', error);
             console.error('❌ [VOICE] Error details:', JSON.stringify(error, null, 2));
-            Alert.alert('Voice Message Failed', 'Could not upload voice message. Please check your connection and try again.', [{ text: 'OK' }]);
+            const message = error?.message ? `Could not upload: ${error.message}` : 'Could not upload voice message. Please check your connection and try again.';
+            Alert.alert('Voice Message Failed', message, [{ text: 'OK' }]);
             setMessages((prev) => prev.filter((msg) => msg.id !== tempId));
         }
     };
@@ -1111,6 +1135,11 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
             await chat.sendImage(media);
             return;
         }
+        const targetGroupId = merged && mergedVoiceGroupId ? mergedVoiceGroupId : groupId;
+        if (merged && !targetGroupId) {
+            Alert.alert('Message Failed', 'No group to send to. Join an English group from the picker first.', [{ text: 'OK' }]);
+            return;
+        }
         const mediaType = typeof media === 'string' ? 'image' : (media?.type || 'image');
         const caption = typeof media === 'string' ? '' : (media?.caption || '');
 
@@ -1118,7 +1147,7 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
         const optimisticMessage = {
             id: tempId,
             sender_id: user.id,
-            group_id: groupId,
+            group_id: targetGroupId,
             challenge_id: currentChallenge?.id || null,
             message_type: mediaType,
             media_url: imageUri,
@@ -1142,7 +1171,7 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
 
             const extension = mediaType === 'video' ? 'mp4' : 'jpg';
             const contentType = mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
-            const fileName = `chat-media/${groupId}/${user.id}/${mediaType}_${Date.now()}.${extension}`;
+            const fileName = `chat-media/${targetGroupId}/${user.id}/${mediaType}_${Date.now()}.${extension}`;
 
             const { error: uploadError } = await supabase.storage
                 .from('voice-memos')
@@ -1159,7 +1188,7 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
                 .from('app_messages')
                 .insert({
                     sender_id: user.id,
-                    group_id: groupId,
+                    group_id: targetGroupId,
                     challenge_id: currentChallenge?.id || null,
                     message_type: mediaType,
                     media_url: publicUrl,
@@ -1275,8 +1304,9 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
         <View style={styles.container}>
             <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
             <SharedChatUI
-                chatType="group"
+                chatType={isDM ? 'dm' : 'group'}
                 tableName="app_messages"
+                emptyStateDMPartner={isDM ? groupName : null}
                 reactionsTable="app_message_reactions"
                 userId={user?.id}
                 groupId={groupId}
@@ -1348,6 +1378,16 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
                 }}
                 flatListRef={merged ? flatListRef : chat.listRef}
                 theme="whatsapp"
+                aboveInputComponent={merged && (
+                    <SoupPhrasesVocabPanel
+                        visible={showSoupPhrasesVocab}
+                        onClose={() => { setShowSoupPhrasesVocab(false); setPhrasesChallengePrompt(null); setPhrasesChallengeId(null); }}
+                        prompt={phrasesChallengePrompt ?? visibleChallenge?.prompt_text}
+                        challengeId={phrasesChallengeId ?? visibleChallenge?.id}
+                        userId={user?.id}
+                        languages={mergedGroupLanguages}
+                    />
+                )}
                 headerComponent={embedded ? null : (() => {
                     const goGroup = () => onOpenGroupInfo ? onOpenGroupInfo() : router.push(`/group-info?id=${groupId}`);
                     const goPartner = () => partner?.id && router.push(`/user/${partner.id}`);
@@ -1366,7 +1406,13 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
                                     {(displayAvatar || displayIsDM) && (
                                         <View style={styles.headerAvatarContainer}>
                                             {displayAvatar ? (
-                                                <Image source={getAvatarSource(displayAvatar)} style={styles.headerAvatar} />
+                                                typeof displayAvatar === 'string' && displayAvatar.startsWith('emoji:') ? (
+                                                    <View style={[styles.headerAvatar, styles.headerAvatarEmoji]}>
+                                                        <Text style={styles.headerAvatarEmojiText}>{displayAvatar.replace(/^emoji:/, '')}</Text>
+                                                    </View>
+                                                ) : (
+                                                    <Image source={getAvatarSource(displayAvatar)} style={styles.headerAvatar} />
+                                                )
                                             ) : (
                                                 <View style={[styles.headerAvatar, styles.headerAvatarPlaceholder]}>
                                                     <Text style={styles.headerAvatarLetter}>{(displayName || '?')[0].toUpperCase()}</Text>
@@ -1376,7 +1422,7 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
                                     )}
                                     <View style={styles.headerInfo}>
                                         <Text style={styles.headerTitle} numberOfLines={1}>{displayName}</Text>
-                                        {!displayIsDM && (
+                                        {!displayIsDM && (merged ? memberCount : (chat.group?.member_count ?? 0)) !== 2 && (
                                             <Text style={styles.headerSubtitle}>
                                                 {(merged ? memberCount : (chat.group?.member_count ?? 0))} members · tap for group
                                             </Text>
@@ -1406,20 +1452,6 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
                 challengeId={phrasesChallengeId ?? visibleChallenge?.id}
             />
 
-            {merged && (
-                <SoupPhrasesVocabModal
-                    visible={showSoupPhrasesVocab}
-                    onClose={() => { setShowSoupPhrasesVocab(false); setPhrasesChallengePrompt(null); setPhrasesChallengeId(null); }}
-                    prompt={phrasesChallengePrompt ?? visibleChallenge?.prompt_text}
-                    challengeId={phrasesChallengeId ?? visibleChallenge?.id}
-                    userId={user?.id}
-                    languages={mergedGroupLanguages}
-                    onSendRecording={async (uri, durationSeconds) => {
-                        track(AnalyticsEvents.PHRASES_MODAL_RECORD_SENT, { group_id: groupId });
-                        await sendVoiceMemo(uri, durationSeconds, phrasesChallengeId ?? visibleChallenge?.id);
-                    }}
-                />
-            )}
 
             <FillProfileThenGroupsModal visible={false} onClose={() => {}} onComplete={() => {}} />
 
@@ -1475,6 +1507,14 @@ const styles = StyleSheet.create({
         backgroundColor: SOUP_COLORS.blue,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    headerAvatarEmoji: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'transparent',
+    },
+    headerAvatarEmojiText: {
+        fontSize: 28,
     },
     headerAvatarLetter: {
         fontSize: 20,

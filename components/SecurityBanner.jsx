@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet, Animated } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Lock, ShieldAlert, ArrowRight } from 'lucide-react-native';
-import { Colors } from '../constants/Colors';
+import { ShieldAlert, ArrowRight } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import SetEmojiPasswordSheet from './SetEmojiPasswordSheet';
 
 export const SecurityBanner = () => {
     const { user } = useAuth();
-    const router = useRouter();
     const [visible, setVisible] = useState(false);
+    const [showSetPassword, setShowSetPassword] = useState(false);
     const fadeAnim = useState(new Animated.Value(0))[0];
 
     useEffect(() => {
@@ -29,30 +28,44 @@ export const SecurityBanner = () => {
                     duration: 500,
                     useNativeDriver: true,
                 }).start();
+            } else {
+                setVisible(false);
             }
         };
 
         checkSecurity();
     }, [user]);
 
+    const handleSuccess = () => {
+        setVisible(false);
+        setShowSetPassword(false);
+    };
+
     if (!visible) return null;
 
     return (
-        <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-            <Pressable
-                style={styles.content}
-                onPress={() => router.push('/login')} // Redirect to login screen which will handle the "claim" flow
-            >
-                <View style={styles.iconCircle}>
-                    <ShieldAlert size={20} color="#856404" />
-                </View>
-                <View style={styles.textContainer}>
-                    <Text style={styles.title}>Secure your Soup! 🍲</Text>
-                    <Text style={styles.subtitle}>Set an emoji password to save your progress.</Text>
-                </View>
-                <ArrowRight size={20} color="#856404" />
-            </Pressable>
-        </Animated.View>
+        <>
+            <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+                <Pressable
+                    style={styles.content}
+                    onPress={() => setShowSetPassword(true)}
+                >
+                    <View style={styles.iconCircle}>
+                        <ShieldAlert size={20} color="#856404" />
+                    </View>
+                    <View style={styles.textContainer}>
+                        <Text style={styles.title}>Secure your Soup! 🍲</Text>
+                        <Text style={styles.subtitle}>Set an emoji password so you never lose access (same name + same 3 emojis = you're back in).</Text>
+                    </View>
+                    <ArrowRight size={20} color="#856404" />
+                </Pressable>
+            </Animated.View>
+            <SetEmojiPasswordSheet
+                visible={showSetPassword}
+                onClose={() => setShowSetPassword(false)}
+                onSuccess={handleSuccess}
+            />
+        </>
     );
 };
 

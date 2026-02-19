@@ -900,8 +900,9 @@ export default function QueueTab({ user, groups = [], getDeepLLangCode, getGoogl
             const translationPairs = await Promise.all(translationPromises);
             const translationResults = Object.fromEntries(translationPairs);
 
-            // Send to all groups with proper format
+            // Send to all groups with proper format (never send to DMs)
             for (const group of groups) {
+                if (group.name === 'DM') continue;
                 const translation = translationResults[group.language];
 
                 // Format: #challenge\n[english]\n[translation]

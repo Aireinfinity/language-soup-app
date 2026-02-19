@@ -525,7 +525,12 @@ function MessageBubble({
                                     language={groupLanguage}
                                     userId={currentUserId}
                                     groupLanguage={groupLanguage}
-                                    challengeContext={{ prompt: message.challenge_prompt || currentChallenge?.prompt_text, starter_phrase: null }}
+                                    challengeContext={{
+                                        prompt: message.challenge_prompt || currentChallenge?.prompt_text,
+                                        starter_phrase: null,
+                                        challengeId: message.challenge_id,
+                                        groupId: message.group_id,
+                                    }}
                                     iconOnly
                                     greenPill
                                 />
