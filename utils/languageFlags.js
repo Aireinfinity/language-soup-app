@@ -121,7 +121,34 @@ export const languageFlags = {
     'Mooré': '🇧🇫',
     'Moore': '🇧🇫',
     'Mossi': '🇧🇫',
-
+    'Kazakh': '🇰🇿',
+    'Қазақ': '🇰🇿',
+    'Uzbek': '🇺🇿',
+    'O\'zbek': '🇺🇿',
+    'Nepali': '🇳🇵',
+    'नेपाली': '🇳🇵',
+    'Sinhala': '🇱🇰',
+    'Tamil': '🇱🇰',
+    'Marathi': '🇮🇳',
+    'मराठी': '🇮🇳',
+    'Punjabi': '🇮🇳',
+    'ਪੰਜਾਬੀ': '🇮🇳',
+    'Gujarati': '🇮🇳',
+    'ગુજરાતી': '🇮🇳',
+    'Kannada': '🇮🇳',
+    'ಕನ್ನಡ': '🇮🇳',
+    'Telugu': '🇮🇳',
+    'తెలుగు': '🇮🇳',
+    'Malayalam': '🇮🇳',
+    'മലയാളം': '🇮🇳',
+    'Lao': '🇱🇦',
+    'ພາສາລາວ': '🇱🇦',
+    'Khmer': '🇰🇭',
+    'ភាសាខ្មែរ': '🇰🇭',
+    'Burmese': '🇲🇲',
+    'Myanmar': '🇲🇲',
+    'Mongolian': '🇲🇳',
+    'Монгол': '🇲🇳',
 
     // Sign languages - use hand emoji
     'ASL': '🤟',
@@ -149,26 +176,59 @@ export const languageFlags = {
     'International Sign': '🤟',
 };
 
-// Helper to get flag for a language
+const FALLBACK_FLAG = '🌐';
+
+// First 2 letters for profile "language soup" (no flags: e.g. Portuguese = Brazil vs Portugal)
+const languageAbbrevs = {
+    English: 'En', Español: 'Es', Spanish: 'Es', French: 'Fr', Français: 'Fr', German: 'De', Deutsch: 'De',
+    Italian: 'It', Italiano: 'It', Portuguese: 'Pt', Português: 'Pt', Russian: 'Ru', Русский: 'Ru',
+    Chinese: 'Zh', Mandarin: 'Zh', 中文: 'Zh', Japanese: 'Ja', 日本語: 'Ja', Korean: 'Ko', 한국어: 'Ko',
+    Arabic: 'Ar', العربية: 'Ar', Hindi: 'Hi', Tagalog: 'Tl', Filipino: 'Tl', Vietnamese: 'Vi',
+    Thai: 'Th', ไทย: 'Th', Indonesian: 'Id', Dutch: 'Nl', Turkish: 'Tr', Polish: 'Pl', Swedish: 'Sv',
+    Hungarian: 'Hu', Magyar: 'Hu', Greek: 'El', Czech: 'Cs', Romanian: 'Ro', Hebrew: 'He',
+    Ukrainian: 'Uk', Persian: 'Fa', Farsi: 'Fa', Urdu: 'Ur', Malay: 'Ms', Bengali: 'Bn',
+};
+
+export const getLanguageAbbrev = (language) => {
+    if (!language) return '';
+    const s = String(language).trim();
+    if (languageAbbrevs[s]) return languageAbbrevs[s];
+    const base = s.split('(')[0].trim();
+    if (languageAbbrevs[base]) return languageAbbrevs[base];
+    const lower = s.toLowerCase();
+    for (const [key, ab] of Object.entries(languageAbbrevs)) {
+        if (key.toLowerCase() === lower) return ab;
+    }
+    return s.slice(0, 2);
+};
+
+// Helper to get flag for a language (always returns a string so every language has a flag)
 export const getLanguageFlag = (language) => {
-    if (!language) return null;
+    if (!language) return FALLBACK_FLAG;
 
-    // Try exact match first
-    if (languageFlags[language]) {
-        return languageFlags[language];
+    const normalized = String(language).trim();
+    if (languageFlags[normalized]) return languageFlags[normalized];
+
+    const baseLanguage = normalized.split('(')[0].trim();
+    if (languageFlags[baseLanguage]) return languageFlags[baseLanguage];
+
+    const nativeMatch = normalized.match(/\(([^)]+)\)/);
+    if (nativeMatch && languageFlags[nativeMatch[1].trim()]) return languageFlags[nativeMatch[1].trim()];
+
+    const lower = normalized.toLowerCase();
+    for (const [key, flag] of Object.entries(languageFlags)) {
+        if (key.toLowerCase() === lower) return flag;
     }
 
-    // Try to extract base language (e.g., "Spanish (Español)" -> "Spanish")
-    const baseLanguage = language.split('(')[0].trim();
-    if (languageFlags[baseLanguage]) {
-        return languageFlags[baseLanguage];
+    // First word only (e.g. "Korean (한국어)" -> "Korean")
+    const firstWord = normalized.split(/\s+/)[0];
+    if (firstWord && languageFlags[firstWord]) return languageFlags[firstWord];
+    if (firstWord) {
+        const fwLower = firstWord.toLowerCase();
+        for (const [key, flag] of Object.entries(languageFlags)) {
+            if (key.toLowerCase() === fwLower) return flag;
+        }
     }
 
-    // Try to extract native name (e.g., "Spanish (Español)" -> "Español")
-    const nativeMatch = language.match(/\(([^)]+)\)/);
-    if (nativeMatch && languageFlags[nativeMatch[1]]) {
-        return languageFlags[nativeMatch[1]];
-    }
-
-    return null;
+    return FALLBACK_FLAG;
 };

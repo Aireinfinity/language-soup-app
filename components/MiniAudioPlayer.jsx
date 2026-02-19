@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import Animated, { FadeIn, SlideInDown, SlideOutDown } from 'react-native-reanimated';
-import { Play, Pause, X, MessageCircle, SkipBack, SkipForward, ChevronUp } from 'lucide-react-native';
+import { Play, Pause, X, SkipBack, SkipForward, ChevronUp } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { useAudioPlayer } from '../contexts/AudioPlayerContext';
 import * as Haptics from 'expo-haptics';
 import { getAvatarSource } from '../utils/soupUtils';
@@ -20,7 +19,6 @@ const SOUP_COLORS = {
  */
 export function MiniAudioPlayer() {
     const insets = useSafeAreaInsets();
-    const router = useRouter();
     const {
         currentAudio,
         isPlaying,
@@ -179,21 +177,6 @@ export function MiniAudioPlayer() {
                             </Animated.Text>
                         </Pressable>
 
-                        {currentAudio?.groupId ? (
-                            <Pressable
-                                onPress={(e) => {
-                                    e.stopPropagation();
-                                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                    const query = currentAudio.messageId ? `?messageId=${currentAudio.messageId}` : '';
-                                    router.push(`/chat/${currentAudio.groupId}${query}`);
-                                }}
-                                style={styles.reactButton}
-                                hitSlop={8}
-                            >
-                                <MessageCircle size={18} color={SOUP_COLORS.blue} />
-                            </Pressable>
-                        ) : null}
-
                         <Pressable
                             onPress={(e) => {
                                 e.stopPropagation();
@@ -329,11 +312,6 @@ const styles = StyleSheet.create({
     },
     skipIconBtn: {
         padding: 4,
-    },
-    reactButton: {
-        padding: 6,
-        backgroundColor: 'rgba(0, 173, 239, 0.12)',
-        borderRadius: 8,
     },
     iconButton: {
         padding: 4,

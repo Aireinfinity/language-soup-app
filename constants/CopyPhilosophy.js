@@ -15,6 +15,27 @@ export function pickRandom(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
 
+// —— Chat input placeholder (one per session; pick in parent or use default) ———
+export const INPUT_PLACEHOLDER_OPTIONS = [
+    'say something…',
+    'type or tap mic…',
+    'message…',
+    'drop a line…',
+    'what\'s on your mind?',
+    'send a voice note…',
+    'reply here…',
+];
+
+// —— Empty chat (first message) ———
+export const EMPTY_CHAT_TITLE_OPTIONS = [
+    'no messages yet',
+    'nothing here yet',
+];
+export const EMPTY_CHAT_SUB_OPTIONS = [
+    'say something, send a voice note, or share a photo',
+    'tap the mic or type below to start',
+];
+
 // —— Transcript (voice memo → text) ———
 export const GET_TRANSCRIPT_LABELS = [
     'get transcript',

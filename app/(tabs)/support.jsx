@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Platform, LayoutAnimation, UIManager, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Linking from 'expo-linking';
-import { LifeBuoy, ChevronDown, ChevronUp, Mail, MessageSquare, Bug, ExternalLink, MessageCircle } from 'lucide-react-native';
+import { LifeBuoy, ChevronDown, ChevronUp, Mail, MessageSquare, Bug, ExternalLink, MessageCircle, Instagram, Linkedin, Music2 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -244,6 +244,26 @@ export default function SupportScreen() {
                     </Pressable>
                 </View>
 
+                {/* Follow us */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>follow us</Text>
+                    <Text style={styles.followSubtitle}>we're on the gram, linkedin, and tiktok. say hi.</Text>
+                    <View style={styles.socialRow}>
+                        <Pressable style={({ pressed }) => [styles.socialCard, pressed && { opacity: 0.9 }]} onPress={() => Linking.openURL('https://www.instagram.com/languagesoup/')}>
+                            <Instagram size={24} color={SOUP_COLORS.pink} />
+                            <Text style={styles.socialLabel}>Instagram</Text>
+                        </Pressable>
+                        <Pressable style={({ pressed }) => [styles.socialCard, pressed && { opacity: 0.9 }]} onPress={() => Linking.openURL('https://www.linkedin.com/in/noahaire/')}>
+                            <Linkedin size={24} color={SOUP_COLORS.blue} />
+                            <Text style={styles.socialLabel}>LinkedIn</Text>
+                        </Pressable>
+                        <Pressable style={({ pressed }) => [styles.socialCard, pressed && { opacity: 0.9 }]} onPress={() => Linking.openURL('https://www.tiktok.com/@language.soup')}>
+                            <Music2 size={24} color={SOUP_COLORS.text} />
+                            <Text style={styles.socialLabel}>TikTok</Text>
+                        </Pressable>
+                    </View>
+                </View>
+
                 {/* Version Info */}
                 <View style={styles.footer}>
                     <Text style={styles.versionText}>Language Soup v1.0.0 (Beta)</Text>
@@ -411,6 +431,35 @@ const styles = StyleSheet.create({
     actionSubtitle: {
         fontSize: 13,
         color: SOUP_COLORS.subtext,
+    },
+    followSubtitle: {
+        fontSize: 14,
+        color: SOUP_COLORS.subtext,
+        marginBottom: 14,
+    },
+    socialRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 12,
+    },
+    socialCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 14,
+        gap: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 6,
+        elevation: 2,
+    },
+    socialLabel: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: SOUP_COLORS.text,
     },
     // Footer
     footer: {

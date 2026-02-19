@@ -5,45 +5,51 @@ const SOUP_COLORS = {
     blue: '#00adef',
     pink: '#ec008b',
     cream: '#FDF5E6',
+    green: '#19b091',
 };
 
+const VOICE_BUBBLE_MAX_WIDTH = 300;
+
 export const ChatStyles = StyleSheet.create({
-    // Container (warm cream, fun and readable)
+    // Container (bold, warm, room to breathe)
     messagesList: {
-        paddingHorizontal: 24,
-        paddingVertical: 20,
+        paddingHorizontal: 16,
+        paddingVertical: 16,
         backgroundColor: SOUP_COLORS.cream,
     },
 
-    // Date Separator (fun, brand accent)
+    // Date Separator (bold brand accent)
     dateSeparator: {
         alignItems: 'center',
-        marginVertical: 24
+        marginVertical: 20
     },
     dateSeparatorBadge: {
         backgroundColor: '#fff',
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 20,
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        borderRadius: 24,
         borderWidth: 2,
         borderColor: SOUP_COLORS.pink,
         shadowColor: SOUP_COLORS.pink,
         shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.15,
-        shadowRadius: 4,
-        elevation: 2,
+        shadowOpacity: 0.2,
+        shadowRadius: 6,
+        elevation: 3,
     },
     dateSeparatorText: {
-        fontSize: 13,
+        fontSize: 14,
         color: SOUP_COLORS.pink,
-        fontWeight: '700'
+        fontWeight: '800'
     },
 
-    // Message Rows
+    // Message Rows (faces first; voice rows get more space)
     messageRow: {
         flexDirection: 'row',
-        marginBottom: 22,
+        marginBottom: 14,
         alignItems: 'flex-end'
+    },
+    messageRowVoice: {
+        marginBottom: 18
     },
     rowMe: {
         justifyContent: 'flex-end'
@@ -53,49 +59,52 @@ export const ChatStyles = StyleSheet.create({
         alignItems: 'flex-end'
     },
 
-    // Avatars (square cards, bigger, no ring)
+    // Avatars (smaller so messages feel longer and less chunky)
     avatarContainer: {
-        marginRight: 12
+        marginRight: 10
     },
     avatar: {
-        width: 72,
-        height: 72,
-        borderRadius: 10
+        width: 52,
+        height: 52,
+        borderRadius: 12
     },
     avatarPlaceholder: {
-        backgroundColor: Colors.primary,
+        backgroundColor: SOUP_COLORS.blue,
         justifyContent: 'center',
         alignItems: 'center'
     },
     avatarText: {
         color: '#fff',
-        fontSize: 14,
-        fontWeight: 'bold'
+        fontSize: 20,
+        fontWeight: '800'
     },
 
-    // Message Bubbles (blue = them, green = me; them same width feel as me)
+    // Message Bubbles (thinner: less padding, wider so messages feel slim and readable)
     bubble: {
-        paddingVertical: 10,
-        paddingHorizontal: 14,
-        maxWidth: '85%',
-        minWidth: 100,
-        borderRadius: 20,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        maxWidth: '90%',
+        minWidth: 56,
+        borderRadius: 18,
+        borderBottomRightRadius: 6,
+        borderBottomLeftRadius: 6,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.06,
-        shadowRadius: 3,
+        shadowRadius: 2,
         elevation: 2
     },
     bubbleVoice: {
-        paddingVertical: 8,
-        paddingHorizontal: 12,
+        paddingVertical: 5,
+        paddingHorizontal: 10,
+        maxWidth: VOICE_BUBBLE_MAX_WIDTH,
     },
     bubbleMe: {
-        backgroundColor: '#19b091',
+        backgroundColor: SOUP_COLORS.green,
         borderBottomRightRadius: 6
     },
     bubbleThem: {
-        backgroundColor: Colors.primary,
+        backgroundColor: SOUP_COLORS.blue,
         borderBottomLeftRadius: 6,
         borderWidth: 0,
     },
@@ -108,15 +117,15 @@ export const ChatStyles = StyleSheet.create({
         opacity: 0.7
     },
 
-    // Text (larger, easier to read in the main chat focus)
+    // Text (bold: who said it, easy to read)
     senderName: {
-        fontSize: 14,
-        fontWeight: '700',
+        fontSize: 15,
+        fontWeight: '800',
         color: SOUP_COLORS.pink,
-        marginBottom: 8
+        marginBottom: 6
     },
     senderNameThem: {
-        color: '#fff',
+        color: 'rgba(255,255,255,0.95)',
     },
     senderNameBot: {
         color: '#fff',
@@ -124,7 +133,8 @@ export const ChatStyles = StyleSheet.create({
     messageText: {
         fontSize: 17,
         color: '#000',
-        lineHeight: 26
+        lineHeight: 26,
+        fontWeight: '500'
     },
     messageTextMe: {
         color: '#fff'
@@ -174,17 +184,13 @@ export const ChatStyles = StyleSheet.create({
     dot2: { opacity: 0.6 },
     dot3: { opacity: 0.8 },
 
-    // Input Area
+    // Input Area: cream with green accents (no gray outline)
     inputContainer: {
         backgroundColor: SOUP_COLORS.cream,
-        paddingHorizontal: 16,
-        paddingTop: 12,
-        paddingBottom: 4
-    },
-    standardInputBar: {
-        flexDirection: 'row',
-        alignItems: 'flex-end',
-        gap: 10
+        paddingHorizontal: 0,
+        paddingTop: 0,
+        paddingBottom: 0,
+        borderWidth: 0,
     },
     textInput: {
         flex: 1,
@@ -194,7 +200,8 @@ export const ChatStyles = StyleSheet.create({
         paddingVertical: 14,
         fontSize: 17,
         maxHeight: 100,
-        color: '#000'
+        color: '#000',
+        borderWidth: 0,
     },
     textInputEditing: {
         backgroundColor: 'rgba(236, 0, 139, 0.05)', // Subtle pink background when editing
@@ -203,23 +210,14 @@ export const ChatStyles = StyleSheet.create({
         borderTopLeftRadius: 0,
         borderTopRightRadius: 0,
     },
-    micContainer: {
-        alignItems: 'center',
-        gap: 2
-    },
     micButton: {
         padding: 8
-    },
-    tapHint: {
-        fontSize: 9,
-        color: Colors.textLight,
-        fontWeight: '500'
     },
     sendButton: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: SOUP_COLORS.blue,
+        backgroundColor: '#fff',
         justifyContent: 'center',
         alignItems: 'center'
     },
@@ -279,17 +277,17 @@ export const ChatStyles = StyleSheet.create({
         flex: 1
     },
 
-    // Reply/Edit Preview Styles (WhatsApp Parity)
+    // Reply/Edit Preview (no heavy bar above input)
     previewContainerMerged: {
-        backgroundColor: '#fff',
-        borderTopWidth: StyleSheet.hairlineWidth,
-        borderTopColor: 'rgba(0,0,0,0.1)',
+        backgroundColor: 'rgba(253,249,244,0.98)',
+        paddingVertical: 6,
+        paddingHorizontal: 12,
     },
     editPreviewInline: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(0,0,0,0.03)',
-        paddingVertical: 10,
+        backgroundColor: 'rgba(236,0,139,0.04)',
+        paddingVertical: 12,
         paddingHorizontal: 16,
     },
     editBarInline: {
@@ -333,12 +331,14 @@ export const ChatStyles = StyleSheet.create({
         borderRadius: 10,
         overflow: 'hidden',
     },
-    // Image/Video Messages
+    // Image/Video Messages (inline, WhatsApp-style)
     messageImage: {
-        width: 250,
-        height: 250,
-        borderRadius: 12,
+        width: 260,
+        maxWidth: '100%',
+        height: 260,
+        borderRadius: 18,
         marginBottom: 4,
+        overflow: 'hidden',
     },
 });
 
@@ -373,9 +373,9 @@ export const CompactChatOverrides = StyleSheet.create({
         fontSize: 11,
     },
     bubble: {
-        paddingVertical: 6,
-        paddingHorizontal: 10,
-        borderRadius: 14,
+        paddingVertical: 5,
+        paddingHorizontal: 8,
+        borderRadius: 12,
     },
     bubbleVoice: {
         paddingVertical: 2,

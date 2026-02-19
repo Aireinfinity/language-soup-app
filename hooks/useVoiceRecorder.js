@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Audio } from 'expo-av';
 import { Alert } from 'react-native';
 
@@ -11,35 +11,39 @@ export const useVoiceRecorder = () => {
     const [recordingDuration, setRecordingDuration] = useState(0);
     const [metering, setMetering] = useState(-160); // Decibels, -160 is silence
 
+    const lastStatusUpdateRef = useRef(0);
+    const THROTTLE_MS = 60;
+
     // Cleanup on unmount to prevent zombie recordings
     useEffect(() => {
         return () => {
             if (globalRecording) {
                 try {
-                    console.log('[useVoiceRecorder] Unmounting, cleaning up active recording');
                     globalRecording.stopAndUnloadAsync();
                     globalRecording = null;
-                } catch (e) {
-                    console.warn('[useVoiceRecorder] Cleanup error:', e);
-                }
+                } catch (_) {}
             }
         };
     }, []);
 
     const startRecording = async () => {
+        // Show recording UI immediately so it doesn't feel like tap-wait (premium: instant feedback)
+        setIsRecording(true);
+        setIsPaused(false);
+        setRecordingDuration(0);
+        setMetering(-160);
+
         try {
-            // Clean up any existing recording first
             if (globalRecording) {
                 try {
                     await globalRecording.stopAndUnloadAsync();
-                } catch (e) {
-                    console.log('Error cleaning up previous recording:', e);
-                }
+                } catch (_) {}
                 globalRecording = null;
             }
 
             const { status } = await Audio.requestPermissionsAsync();
             if (status !== 'granted') {
+                setIsRecording(false);
                 Alert.alert(
                     'Microphone Access Required',
                     'Please enable microphone access in your device settings to record voice messages.',
@@ -48,7 +52,6 @@ export const useVoiceRecorder = () => {
                 return;
             }
 
-            // IMPORTANT: Set audio mode BEFORE creating recording
             await Audio.setAudioModeAsync({
                 allowsRecordingIOS: true,
                 playsInSilentModeIOS: true,
@@ -57,8 +60,8 @@ export const useVoiceRecorder = () => {
                 playThroughEarpieceAndroid: false,
             });
 
-            // Small delay to let audio mode settle (fixes "prepare encountered an error")
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // Minimal delay so recording starts quickly (session often already warm from prepareAudioSession)
+            await new Promise(resolve => setTimeout(resolve, 80));
 
             const { recording } = await Audio.Recording.createAsync(
                 {
@@ -66,37 +69,43 @@ export const useVoiceRecorder = () => {
                     isMeteringEnabled: true,
                 },
                 (status) => {
-                    // Only update if actively recording (not paused)
-                    if (status.isRecording) {
-                        setRecordingDuration(status.durationMillis / 1000);
-                        if (status.metering !== undefined) {
-                            setMetering(status.metering);
-                        }
-                    }
+                    if (!status.isRecording) return;
+                    const now = Date.now();
+                    if (now - lastStatusUpdateRef.current < THROTTLE_MS) return;
+                    lastStatusUpdateRef.current = now;
+                    setRecordingDuration(status.durationMillis / 1000);
+                    if (status.metering !== undefined) setMetering(status.metering);
                 },
-                50 // Update every 50ms for smoother waveform
+                80
             );
 
             globalRecording = recording;
-            setIsRecording(true);
-            setIsPaused(false);
-            console.log('[Recorder] Started successfully');
 
         } catch (err) {
             console.error('Failed to start recording:', err);
-            // Retry once if it fails (common on Android)
+            setIsRecording(false);
             try {
                 if (globalRecording) {
                     await globalRecording.stopAndUnloadAsync();
                     globalRecording = null;
                 }
-                // Try one more time without the delay
+                await new Promise(resolve => setTimeout(resolve, 80));
                 const { recording } = await Audio.Recording.createAsync(
-                    Audio.RecordingOptionsPresets.HIGH_QUALITY
+                    {
+                        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+                        isMeteringEnabled: true,
+                    },
+                    (status) => {
+                        if (!status.isRecording) return;
+                        const now = Date.now();
+                        if (now - lastStatusUpdateRef.current < THROTTLE_MS) return;
+                        lastStatusUpdateRef.current = now;
+                        setRecordingDuration(status.durationMillis / 1000);
+                        if (status.metering !== undefined) setMetering(status.metering);
+                    },
+                    80
                 );
                 globalRecording = recording;
-                setIsRecording(true);
-                console.log('[Recorder] Started on retry');
             } catch (retryErr) {
                 console.error('Retry failed:', retryErr);
                 Alert.alert(
@@ -108,6 +117,22 @@ export const useVoiceRecorder = () => {
             }
         }
     };
+
+    // Call when chat mounts so first tap has session already in recording mode (avoids "cannot record audio")
+    const prepareAudioSession = useCallback(async () => {
+        try {
+            const { status } = await Audio.requestPermissionsAsync();
+            if (status !== 'granted') return;
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: true,
+                playsInSilentModeIOS: true,
+                staysActiveInBackground: false,
+                shouldDuckAndroid: true,
+                playThroughEarpieceAndroid: false,
+            });
+            await new Promise(resolve => setTimeout(resolve, 150));
+        } catch (_) {}
+    }, []);
 
     const pauseRecording = async () => {
         try {
@@ -182,6 +207,7 @@ export const useVoiceRecorder = () => {
         recordingDuration,
         metering,
         startRecording,
+        prepareAudioSession,
         pauseRecording,
         resumeRecording,
         stopRecording,

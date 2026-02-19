@@ -5,6 +5,9 @@ import { X, Send } from 'lucide-react-native';
 import { BlurView } from 'expo-blur';
 import { pickRandom, SEND_BUTTON_LABELS, SENDING_LABELS } from '../constants/CopyPhilosophy';
 
+function triggerHaptic() { try { require('../utils/haptics').haptics.light(); } catch (_) {} }
+function triggerSuccess() { try { require('../utils/haptics').haptics.success(); } catch (_) {} }
+
 const SOUP_COLORS = {
     blue: '#00adef',
     pink: '#ec008b',
@@ -24,6 +27,7 @@ export function ImagePreview({ visible, imageUri, mediaType = 'image', onSend, o
         if (isSending) return; // Prevent double-tap
         setIsSending(true);
         try {
+            triggerSuccess();
             await onSend(caption);
             setCaption(''); // Clear caption after sending
         } finally {
@@ -52,7 +56,11 @@ export function ImagePreview({ visible, imageUri, mediaType = 'image', onSend, o
                 <BlurView intensity={95} tint="dark" style={styles.blur}>
                     {/* Header with cancel button */}
                     <View style={styles.header}>
-                        <Pressable onPress={handleCancel} style={styles.cancelButton} disabled={isSending}>
+                        <Pressable
+                            onPress={() => { triggerHaptic(); handleCancel(); }}
+                            style={({ pressed }) => [styles.cancelButton, pressed && { opacity: 0.85 }]}
+                            disabled={isSending}
+                        >
                             <X size={28} color="#fff" />
                         </Pressable>
                     </View>
@@ -80,7 +88,7 @@ export function ImagePreview({ visible, imageUri, mediaType = 'image', onSend, o
                     <View style={styles.captionContainer}>
                         <TextInput
                             style={styles.captionInput}
-                            placeholder="Add a caption..."
+                            placeholder="add a caption..."
                             placeholderTextColor="rgba(255,255,255,0.6)"
                             value={caption}
                             onChangeText={setCaption}
@@ -94,7 +102,11 @@ export function ImagePreview({ visible, imageUri, mediaType = 'image', onSend, o
                     <View style={styles.footer}>
                         <Pressable
                             onPress={handleSend}
-                            style={[styles.sendButton, isSending && styles.sendButtonDisabled]}
+                            style={({ pressed }) => [
+                                styles.sendButton,
+                                isSending && styles.sendButtonDisabled,
+                                !isSending && pressed && { opacity: 0.9 },
+                            ]}
                             disabled={isSending}
                         >
                             {isSending ? (

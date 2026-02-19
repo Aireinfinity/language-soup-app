@@ -11,7 +11,7 @@ export default function GroupSelectionScreen() {
     const router = useRouter();
 
     useEffect(() => {
-        router.replace('/onboarding/your-groups');
+        router.replace('/(tabs)/feed');
     }, [router]);
 
     return (

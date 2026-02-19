@@ -20,6 +20,24 @@ const SOUP_COLORS = {
 
 const LANGUAGE_SOUP_GROUP_ID = '00000000-0000-0000-0000-000000000000';
 
+const DM_ACCENT_COLORS = [SOUP_COLORS.pink, SOUP_COLORS.green, SOUP_COLORS.blue];
+
+function formatListTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMs = now - d;
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'now';
+    if (diffMins < 60) return `${diffMins}m`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'yesterday';
+    if (diffDays < 7) return `${diffDays}d`;
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 export default function YourGroupsScreen() {
     const { user } = useAuth();
     const router = useRouter();
@@ -84,11 +102,13 @@ export default function YourGroupsScreen() {
             const allSenderIds = [...new Set([...senderIds, ...recentSpeakerIds])];
             const senderNames = {};
             const senderAvatars = {};
+            const senderTaglines = {};
             if (allSenderIds.length > 0) {
-                const { data: senders } = await supabase.from('app_users').select('id, display_name, avatar_url').in('id', allSenderIds);
+                const { data: senders } = await supabase.from('app_users').select('id, display_name, avatar_url, status_text').in('id', allSenderIds);
                 (senders || []).forEach(s => {
                     senderNames[s.id] = s.display_name || 'Unknown';
                     senderAvatars[s.id] = s.avatar_url ?? null;
+                    senderTaglines[s.id] = s.status_text || null;
                 });
             }
 
@@ -114,6 +134,7 @@ export default function YourGroupsScreen() {
                         content: lastMsg.content,
                         type: lastMsg.message_type,
                         senderName: senderNames[lastMsg.sender_id] || 'Unknown',
+                        senderTagline: senderTaglines[lastMsg.sender_id] || null,
                         time: lastMsg.created_at
                     } : null,
                     unreadCount: unreadCountByGroup[group.id] || 0
@@ -142,6 +163,7 @@ export default function YourGroupsScreen() {
                         content: lastMessageByGroup[LANGUAGE_SOUP_GROUP_ID].content,
                         type: lastMessageByGroup[LANGUAGE_SOUP_GROUP_ID].message_type,
                         senderName: senderNames[lastMessageByGroup[LANGUAGE_SOUP_GROUP_ID].sender_id] || 'Unknown',
+                        senderTagline: senderTaglines[lastMessageByGroup[LANGUAGE_SOUP_GROUP_ID].sender_id] || null,
                         time: lastMessageByGroup[LANGUAGE_SOUP_GROUP_ID].created_at
                     } : null,
                     unreadCount: unreadCountByGroup[LANGUAGE_SOUP_GROUP_ID] || 0
@@ -152,23 +174,23 @@ export default function YourGroupsScreen() {
                 groupsWithDetails = [ls, ...groupsWithDetails.filter(g => g.id !== LANGUAGE_SOUP_GROUP_ID)];
             }
 
-            const dmGroups = groupsWithDetails.filter(g => g.name === 'DM' && g.memberCount === 2);
+            const dmGroups = groupsWithDetails.filter(g => g.name === 'DM');
             const dmGroupIds = dmGroups.map(g => g.id);
             if (dmGroupIds.length > 0) {
                 const { data: partners } = await supabase
                     .from('app_group_members')
-                    .select('group_id, app_users(id, display_name, avatar_url)')
+                    .select('group_id, app_users(id, display_name, avatar_url, status_text)')
                     .in('group_id', dmGroupIds)
                     .neq('user_id', user.id);
                 const partnerMap = {};
-                partners?.forEach(p => {
+                (partners || []).forEach(p => {
                     const u = p.app_users;
                     if (u) partnerMap[p.group_id] = Array.isArray(u) ? u[0] : u;
                 });
                 groupsWithDetails.forEach(g => {
-                    if (g.name === 'DM' && g.memberCount === 2) {
+                    if (g.name === 'DM') {
                         g.isDM = true;
-                        g.partner = partnerMap[g.id] || { display_name: 'Unknown', avatar_url: null };
+                        g.partner = partnerMap[g.id] || { display_name: 'Unknown', avatar_url: null, status_text: null };
                     }
                 });
             }
@@ -238,61 +260,92 @@ export default function YourGroupsScreen() {
         router.push(`/chat/${item.id}`);
     }, [router]);
 
-    const renderItem = ({ item }) => (
-        <Pressable
-            style={({ pressed }) => [
-                styles.row,
-                item.isDM && styles.rowDM,
-                item.unreadCount > 0 && styles.rowUnread,
-                pressed && { opacity: 0.9 },
-            ]}
-            onPress={() => onPressGroup(item)}
-        >
-            <View style={styles.avatarWrap}>
-                {item.isDM ? (
-                    item.partner?.avatar_url ? (
-                        <Image source={getAvatarSource(item.partner.avatar_url)} style={[styles.avatar, styles.avatarDM]} />
-                    ) : (
-                        <View style={[styles.avatar, styles.avatarDM, styles.placeholderAvatar]}>
-                            <Text style={styles.placeholderText}>{(item.partner?.display_name || '?')[0].toUpperCase()}</Text>
-                        </View>
-                    )
-                ) : (item.recentSpeakers?.length > 0 || item.groupMemberFaces?.length > 0) ? (
-                    <View style={styles.recentSpeakersRow}>
-                        {(item.recentSpeakers?.length > 0 ? item.recentSpeakers : item.groupMemberFaces).slice(0, 3).map((person, i) => (
-                            <View key={person.id} style={[styles.recentSpeakerWrap, { marginLeft: i > 0 ? -8 : 0, zIndex: 3 - i }]}>
-                                {person.avatar_url ? (
-                                    <Image source={getAvatarSource(person.avatar_url)} style={styles.recentSpeakerAvatar} />
-                                ) : (
-                                    <View style={[styles.recentSpeakerAvatar, styles.placeholderAvatar]}>
-                                        <Text style={styles.placeholderText}>{person.display_name?.[0]?.toUpperCase() || '?'}</Text>
-                                    </View>
-                                )}
+    const formatListTime = (iso) => {
+        if (!iso) return '';
+        const d = new Date(iso);
+        const now = new Date();
+        const diffMs = now - d;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+        if (diffMins < 1) return 'now';
+        if (diffMins < 60) return `${diffMins}m`;
+        if (diffHours < 24) return `${diffHours}h`;
+        if (diffDays === 1) return 'yesterday';
+        if (diffDays < 7) return d.toLocaleDateString('en-US', { weekday: 'short' });
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+
+    const DM_ACCENT = [SOUP_COLORS.pink, SOUP_COLORS.green, SOUP_COLORS.blue];
+
+    const renderItem = ({ item, index }) => {
+        const dmAccent = item.isDM ? DM_ACCENT[index % 3] : null;
+        return (
+            <Pressable
+                style={({ pressed }) => [
+                    styles.row,
+                    item.isDM && { ...styles.rowDM, borderLeftColor: dmAccent },
+                    item.unreadCount > 0 && styles.rowUnread,
+                    pressed && { opacity: 0.9 },
+                ]}
+                onPress={() => onPressGroup(item)}
+            >
+                <View style={styles.avatarWrap}>
+                    {item.isDM ? (
+                        item.partner?.avatar_url ? (
+                            <Image source={getAvatarSource(item.partner.avatar_url)} style={[styles.avatar, styles.avatarDM]} />
+                        ) : (
+                            <View style={[styles.avatar, styles.avatarDM, styles.placeholderAvatar, dmAccent && { backgroundColor: dmAccent }]}>
+                                <Text style={styles.placeholderText}>{(item.partner?.display_name || '?')[0].toUpperCase()}</Text>
                             </View>
-                        ))}
+                        )
+                    ) : (item.recentSpeakers?.length > 0 || item.groupMemberFaces?.length > 0) ? (
+                        <View style={styles.recentSpeakersRow}>
+                            {(item.recentSpeakers?.length > 0 ? item.recentSpeakers : item.groupMemberFaces).slice(0, 3).map((person, i) => (
+                                <View key={person.id} style={[styles.recentSpeakerWrap, { marginLeft: i > 0 ? -8 : 0, zIndex: 3 - i }]}>
+                                    {person.avatar_url ? (
+                                        <Image source={getAvatarSource(person.avatar_url)} style={styles.recentSpeakerAvatar} />
+                                    ) : (
+                                        <View style={[styles.recentSpeakerAvatar, styles.placeholderAvatar]}>
+                                            <Text style={styles.placeholderText}>{person.display_name?.[0]?.toUpperCase() || '?'}</Text>
+                                        </View>
+                                    )}
+                                </View>
+                            ))}
+                        </View>
+                    ) : (
+                        <GroupAvatar language={item.language} size={48} />
+                    )}
+                    {item.unreadCount > 0 && (
+                        <View style={[styles.unreadBadge, { backgroundColor: SOUP_COLORS.pink }]}>
+                            <Text style={styles.unreadText}>{item.unreadCount}</Text>
+                        </View>
+                    )}
+                </View>
+                <View style={styles.rowContent}>
+                    <View style={styles.rowTop}>
+                        <Text style={styles.rowName} numberOfLines={1}>
+                            {item.isDM ? (item.partner?.display_name || 'User') : item.name}
+                        </Text>
+                        {item.lastMessage?.time && (
+                            <Text style={styles.rowTime}>{formatListTime(item.lastMessage.time)}</Text>
+                        )}
                     </View>
-                ) : (
-                    <GroupAvatar language={item.language} size={48} />
-                )}
-                {item.unreadCount > 0 && (
-                    <View style={[styles.unreadBadge, { backgroundColor: SOUP_COLORS.pink }]}>
-                        <Text style={styles.unreadText}>{item.unreadCount}</Text>
-                    </View>
-                )}
-            </View>
-            <View style={styles.rowContent}>
-                <Text style={styles.rowName} numberOfLines={1}>
-                    {item.isDM ? (item.partner?.display_name || 'User') : item.name}
-                </Text>
-                <Text style={styles.rowPreview} numberOfLines={1}>
-                    {item.lastMessage
-                        ? (item.lastMessage.type === 'voice' ? '🎤 voice' : item.lastMessage.content || '')
-                        : 'no messages yet'}
-                </Text>
-            </View>
-            <ChevronRight size={20} color={SOUP_COLORS.subtext} />
-        </Pressable>
-    );
+                    {(item.isDM ? item.partner?.status_text : item.lastMessage?.senderTagline) ? (
+                        <Text style={styles.rowTagline} numberOfLines={1}>
+                            "{item.isDM ? item.partner?.status_text : item.lastMessage?.senderTagline}"
+                        </Text>
+                    ) : null}
+                    <Text style={styles.rowPreview} numberOfLines={1}>
+                        {item.lastMessage
+                            ? (item.lastMessage.type === 'voice' ? '🎤 voice' : item.lastMessage.content || '')
+                            : 'no messages yet'}
+                    </Text>
+                </View>
+                <ChevronRight size={20} color={SOUP_COLORS.subtext} />
+            </Pressable>
+        );
+    };
 
     if (loading && groups.length === 0) {
         return (
@@ -317,6 +370,9 @@ export default function YourGroupsScreen() {
                     <ArrowLeft size={24} color={SOUP_COLORS.text} />
                 </Pressable>
                 <Text style={styles.headerTitle}>your groups</Text>
+                <Pressable onPress={() => router.push('/group-selection')} style={({ pressed }) => [styles.findGroupsButton, pressed && { opacity: 0.9 }]}>
+                    <Text style={styles.findGroupsText}>find groups</Text>
+                </Pressable>
             </View>
 
             {loadError ? (
@@ -365,9 +421,19 @@ const styles = StyleSheet.create({
         marginRight: 8,
     },
     headerTitle: {
+        flex: 1,
         fontSize: 18,
         fontWeight: '700',
         color: SOUP_COLORS.text,
+    },
+    findGroupsButton: {
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+    },
+    findGroupsText: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: SOUP_COLORS.blue,
     },
     center: {
         flex: 1,
@@ -459,10 +525,27 @@ const styles = StyleSheet.create({
         flex: 1,
         minWidth: 0,
     },
+    rowTop: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+        marginBottom: 2,
+    },
     rowName: {
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '700',
         color: SOUP_COLORS.text,
+        flex: 1,
+    },
+    rowTime: {
+        fontSize: 12,
+        color: SOUP_COLORS.subtext,
+    },
+    rowTagline: {
+        fontSize: 13,
+        fontStyle: 'italic',
+        color: SOUP_COLORS.blue,
         marginBottom: 2,
     },
     rowPreview: {

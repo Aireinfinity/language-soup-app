@@ -18,8 +18,8 @@ export const Colors = {
     success: '#19b091',      // teal for success
     warning: '#ff9500',      // orange for warnings
 
-    // Chat colors (WhatsApp-inspired)
+    // Chat colors (green = me, blue = them; both white text)
     chatBackground: '#ECE5DD',
-    bubbleMe: '#00adef',     // blue for sender
-    bubbleThem: '#FFFFFF',   // white for receiver
+    bubbleMe: '#19b091',
+    bubbleThem: '#00adef',
 };

@@ -36,10 +36,41 @@ function formatResponseTime(minutes) {
 
 const NOAH_USER_ID = '32ac1943-aa68-4025-b4d9-3aa7ef129fb1';
 const NOAH_SUPPORT_EMAIL = 'noah@languagesoup.com';
-const NOAH_TIMEZONE = 'America/New_York'; // 11pm–6am here = sleeping
+const NOAH_TIMEZONE = 'America/Los_Angeles'; // 11pm–6am here = sleeping
 const NOAH_CODING_KEY = 'noah_at_desk'; // when true, show "Noah's coding"
+const NOAH_DESK_LOG_KEY = 'noah_desk_log'; // [{ d, h, dow }] for inferring default when you don't click
+const DESK_LOG_MAX = 50;
 
-// Derive status: sleeping 11pm–6am Noah's timezone; else "coding" if at desk, else "on the go"
+function getNoahNow() {
+    const d = new Date(new Date().toLocaleString('en-US', { timeZone: NOAH_TIMEZONE }));
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return {
+        d: `${y}-${m}-${day}`,
+        h: d.getHours(),
+        dow: d.getDay(),
+    };
+}
+
+function getDeskLog() {
+    try {
+        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(NOAH_DESK_LOG_KEY) : null;
+        if (!raw) return [];
+        const log = JSON.parse(raw);
+        return Array.isArray(log) ? log.slice(-DESK_LOG_MAX) : [];
+    } catch (_) { return []; }
+}
+
+function inferProbablyCoding() {
+    const now = getNoahNow();
+    const log = getDeskLog();
+    if (log.length < 3) return false;
+    const match = log.filter((e) => Number(e.dow) === now.dow && Number(e.h) === now.h);
+    return match.length >= 2;
+}
+
+// Derive status: sleeping 11pm–6am; else your click (at desk) or inferred from history
 function getNoahStatus() {
     const now = new Date();
     const hour = new Date(now.toLocaleString('en-US', { timeZone: NOAH_TIMEZONE })).getHours();
@@ -49,6 +80,7 @@ function getNoahStatus() {
         if (typeof localStorage !== 'undefined' && localStorage.getItem(NOAH_CODING_KEY) === 'true') {
             return { label: "Noah's coding", sub: 'online, will reply' };
         }
+        if (inferProbablyCoding()) return { label: "Noah's coding", sub: 'online, will reply (inferred)' };
     } catch (_) {}
     return { label: "Noah's on the go", sub: 'checking on phone' };
 }
@@ -117,6 +149,12 @@ export default function SupportInbox() {
         try {
             const next = !isAtDesk;
             localStorage.setItem(NOAH_CODING_KEY, next ? 'true' : 'false');
+            if (next) {
+                const now = getNoahNow();
+                const log = getDeskLog();
+                log.push({ d: now.d, h: now.h, dow: now.dow });
+                localStorage.setItem(NOAH_DESK_LOG_KEY, JSON.stringify(log.slice(-DESK_LOG_MAX)));
+            }
             setIsAtDesk(next);
             setNoahStatus(getNoahStatus());
         } catch (_) {}

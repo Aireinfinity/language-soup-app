@@ -1,17 +1,20 @@
 import React, { createContext, useContext, useState, useMemo } from 'react';
 
 const LANGUAGE_SOUP_GROUP_ID = '00000000-0000-0000-0000-000000000000';
+/** Special id: show DMs list in feed instead of a group chat */
+const DM_LIST_ID = 'dms';
 
 const FeedContext = createContext({
     selectedGroupId: null,
     setSelectedGroupId: () => {},
     LANGUAGE_SOUP_GROUP_ID,
+    DM_LIST_ID,
 });
 
 export function FeedProvider({ children }) {
     const [selectedGroupId, setSelectedGroupId] = useState(null);
     const value = useMemo(
-        () => ({ selectedGroupId, setSelectedGroupId, LANGUAGE_SOUP_GROUP_ID }),
+        () => ({ selectedGroupId, setSelectedGroupId, LANGUAGE_SOUP_GROUP_ID, DM_LIST_ID }),
         [selectedGroupId]
     );
     return (
@@ -27,4 +30,4 @@ export function useFeed() {
     return ctx;
 }
 
-export { LANGUAGE_SOUP_GROUP_ID };
+export { LANGUAGE_SOUP_GROUP_ID, DM_LIST_ID };

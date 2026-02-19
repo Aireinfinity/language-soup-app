@@ -20,7 +20,6 @@ import { AppErrorBoundary } from '../components/AppErrorBoundary';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
-console.log('[Layout] Root Layout Mounted');
 
 // Note: Firebase Crashlytics initialization removed for Expo Go compatibility
 // It will be automatically initialized via app.json plugins in production builds
@@ -48,12 +47,14 @@ function RootLayoutNav() {
                 gestureEnabled: true,
                 animation: 'default',
             }}>
-                <Stack.Screen name="index" />
+                <Stack.Screen name="index" options={{ gestureEnabled: false }} />
                 <Stack.Screen name="login" options={{ gestureEnabled: false }} />
                 <Stack.Screen name="how-it-works" />
+                <Stack.Screen name="ground-rules" options={{ gestureEnabled: false }} />
                 <Stack.Screen name="profile-creation" />
                 <Stack.Screen name="group-selection" />
                 <Stack.Screen name="browse-groups" />
+                <Stack.Screen name="add-language" />
                 <Stack.Screen name="your-groups" />
                 <Stack.Screen name="group-info" />
                 <Stack.Screen name="native-speakers" />
@@ -63,11 +64,6 @@ function RootLayoutNav() {
                 <Stack.Screen name="(tabs)" />
                 <Stack.Screen name="profile-modal" options={{ presentation: 'modal', headerShown: false }} />
                 <Stack.Screen name="chat/[id]" options={{ animation: 'default' }} />
-                <Stack.Screen name="onboarding/avatar" />
-                <Stack.Screen name="onboarding/conversational" />
-                <Stack.Screen name="onboarding/learning" />
-                <Stack.Screen name="onboarding/tagline" />
-                <Stack.Screen name="onboarding/your-groups" />
             </Stack>
             <MiniAudioPlayer />
             <PodcastPlayerExpanded />

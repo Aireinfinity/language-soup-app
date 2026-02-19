@@ -9,7 +9,6 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
  * Shows who reacted with their avatar and username, filtered by emoji tabs
  */
 export function ReactionViewerModal({ visible, reactions, users, onClose }) {
-    console.log('[ReactionViewerModal] Render:', { visible, reactionsCount: reactions?.length, usersCount: users?.length });
     const [activeTab, setActiveTab] = useState('All');
 
     const reactionsList = reactions || [];

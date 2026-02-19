@@ -1,11 +1,14 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { View, StyleSheet, Dimensions, TouchableOpacity, BackHandler } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemedText } from '../components/ThemedText';
 import SoupBowlAnimation from '../components/SoupBowlAnimation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
+
+const GROUND_RULES_SEEN_KEY = 'ground_rules_seen';
 
 const { height } = Dimensions.get('window');
 
@@ -25,6 +28,7 @@ export default function BootScreen() {
     const { setBootScreenShown, user } = useAuth();
     const insets = useSafeAreaInsets();
     const [ready, setReady] = useState(true);
+    const [groundRulesSeen, setGroundRulesSeen] = useState(null);
     const isMounted = useRef(true);
 
     useEffect(() => {
@@ -32,30 +36,42 @@ export default function BootScreen() {
     }, []);
 
     useEffect(() => {
-        if (user) {
-            console.log('[Boot] User found, showing minimalist splash and auto-advancing in 500ms...');
-            const timer = setTimeout(() => handleSkip(), 500);
-            return () => clearTimeout(timer);
-        }
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
+        return () => sub.remove();
+    }, []);
+
+    useEffect(() => {
+        if (!user) return;
+        AsyncStorage.getItem(GROUND_RULES_SEEN_KEY).then((v) => {
+            if (isMounted.current) setGroundRulesSeen(v === '1');
+        });
     }, [user]);
 
-    const handleSkip = async () => {
+    const handleSkip = useCallback(async () => {
         if (!isMounted.current) return;
         setBootScreenShown(true);
-
         try {
             if (!user) {
-                router.replace('/how-it-works');
+                router.replace('/login');
             } else {
-                // User found? Send 'em home! Skip language/group selection checks for veterans.
-                router.replace('/(tabs)/feed');
+                if (groundRulesSeen === false) {
+                    router.replace('/ground-rules');
+                } else {
+                    router.replace('/(tabs)/feed');
+                }
             }
         } catch (err) {
             console.error('[Boot] Critical navigation error:', err);
-            // Panic button: if everything fails, send back to home/intro
             if (isMounted.current) router.replace('/');
         }
-    };
+    }, [user, groundRulesSeen, router]);
+
+    useEffect(() => {
+        if (user && groundRulesSeen === true) {
+            const t = setTimeout(handleSkip, 500);
+            return () => clearTimeout(t);
+        }
+    }, [user, groundRulesSeen, handleSkip]);
 
     if (!ready) return <View style={styles.container} />;
 
@@ -67,7 +83,7 @@ export default function BootScreen() {
         >
             <LinearGradient colors={BOOT_GRADIENT} style={StyleSheet.absoluteFill} />
             <View style={styles.contentWrapper}>
-                {!user ? (
+                {(!user || groundRulesSeen === false) ? (
                     <View style={styles.textBlock}>
                         <ThemedText style={styles.headword}>language soup</ThemedText>
                         <ThemedText style={styles.phonetic}>/ˈlæŋɡwɪdʒ suːp/</ThemedText>
@@ -89,9 +105,9 @@ export default function BootScreen() {
                     <View style={styles.minimalSplash} />
                 )}
 
-                <View style={[styles.buttonContainer, user && styles.buttonContainerMinimal]}>
+                <View style={[styles.buttonContainer, user && groundRulesSeen === true && styles.buttonContainerMinimal]}>
                     <SoupBowlAnimation onPress={handleSkip} />
-                    {!user && <ThemedText style={styles.tapHint}>tap to continue</ThemedText>}
+                    {(!user || groundRulesSeen === false) && <ThemedText style={styles.tapHint}>tap to continue</ThemedText>}
                 </View>
             </View>
         </TouchableOpacity>

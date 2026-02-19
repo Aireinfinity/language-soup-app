@@ -1,19 +1,20 @@
-# Language Soup App (Expo) 🍜
+# Language Soup — App + Admin 🍜
 
-This folder contains the **main Language Soup user app**, built with **Expo + React Native**.
+This folder contains **two things** in one repo:
 
-## What lives here
+1. **Expo app** (React Native): the mobile app users install. Lives in `app/`, `components/`, `contexts/`, etc. Run with `npm run start` (or `npm run start:dev` for dev client).
+2. **Admin dashboard** (Vite): the web dashboard for support, growth, queue. Lives in `src/`. Run with `npm run dev`.
 
-- The mobile app that users install on **iOS** and **Android** (and optionally run on web).
-- Screens, components, and logic for challenges, groups, and day-to-day usage.
-- Expo/EAS configuration and scripts for starting the app and running builds.
+## What lives where
+
+- **App:** `app/`, `components/`, `contexts/`, `constants/`, `hooks/`, `lib/`, `utils/` — screens, feed, chat, profile, onboarding.
+- **Admin:** `src/` — SupportInbox, GrowthCharts, QueueTab, etc.
+- **Shared:** Supabase config, some constants. Both talk to the same Supabase project.
 
 ## How it connects
 
 - Talks directly to **Supabase** for users, groups, messages, and more.
-- Works alongside:
-  - The web admin dashboard in `code/app-dashboard`.
-  - The marketing website in `code/website`.
+- Marketing website (if present) lives in `code/website`.
 
 ## Deployment (high level)
 

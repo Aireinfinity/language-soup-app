@@ -6,6 +6,7 @@ import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import { ArrowLeft, Send, Mic, X, Trash2, Square, ChevronLeft, ChevronRight, MoreVertical, Check, Clock, Globe, Lightbulb, Play, Pause } from 'lucide-react-native';
 import { InspirationModal } from '../../components/InspirationModal';
+import { SoupPhrasesVocabModal } from '../../components/SoupPhrasesVocabModal';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AudioMessage } from '../../components/AudioMessage';
 import { LiveAudioWaveform } from '../../components/LiveAudioWaveform';
@@ -15,10 +16,12 @@ import { Audio } from 'expo-av';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
+import { useGroupChat } from '../../hooks/useGroupChat';
 import { getLanguageFlag } from '../../utils/languageFlags';
 import { SharedChatUI } from '../../components/SharedChatUI';
 import { ReactionViewerModal } from '../../components/ReactionViewerModal';
 import { ChatStyles } from '../../constants/ChatStyles';
+import { WhatsAppChatStyles, whatsAppHeaderBorder } from '../../constants/WhatsAppChatStyles';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { decode } from 'base64-arraybuffer';
@@ -26,6 +29,9 @@ import { haptics } from '../../utils/haptics';
 import { useQuests } from '../../contexts/QuestContext';
 import { useAudioPlayer } from '../../contexts/AudioPlayerContext';
 import { getAvatarSource } from '../../utils/soupUtils';
+import { track, AnalyticsEvents } from '../../lib/analytics';
+import { BenjaminBookingBanner } from '../../components/BenjaminBookingBanner';
+import { FillProfileThenGroupsModal } from '../../components/FillProfileThenGroupsModal';
 
 const SOUP_COLORS = {
     blue: '#00adef',
@@ -81,16 +87,23 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
     const lastTypingSent = useRef(0);
     const { completeQuest } = useQuests();
     const { stopAudio } = useAudioPlayer();
+    const stopAudioRef = useRef(stopAudio);
+    stopAudioRef.current = stopAudio;
     const { permissionStatus, openSettings } = useNotifications();
 
     useFocusEffect(
         React.useCallback(() => {
-            return () => { stopAudio(); };
-        }, [stopAudio])
+            if (groupId) track(AnalyticsEvents.CHAT_VIEW, { group_id: groupId });
+            return () => { stopAudioRef.current?.(); };
+        }, [groupId])
     );
 
     const [showInspiration, setShowInspiration] = useState(false);
     const [inspirationMetadata, setInspirationMetadata] = useState(null);
+    const [showSoupPhrasesVocab, setShowSoupPhrasesVocab] = useState(false);
+    const [mergedGroupLanguages, setMergedGroupLanguages] = useState([]);
+    const [phrasesChallengePrompt, setPhrasesChallengePrompt] = useState(null);
+    const [phrasesChallengeId, setPhrasesChallengeId] = useState(null);
 
     const [messages, setMessages] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -104,13 +117,15 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
     const [partner, setPartner] = useState(null);
     const [currentChallenge, setCurrentChallenge] = useState(null);
     currentChallengeRef.current = currentChallenge;
+    const chat = useGroupChat(merged ? null : groupId, user?.id, { currentChallengeId: currentChallenge?.id });
     const [allChallenges, setAllChallenges] = useState([]);
     const [visibleChallenge, setVisibleChallenge] = useState(null);
     const [typingUsers, setTypingUsers] = useState({});
     const [recordingUsers, setRecordingUsers] = useState({});
     const [userProfile, setUserProfile] = useState(null);
-    const [reactions, setReactions] = useState({}); // { messageId: [{ user_id, reaction, created_at }] }
+    const [reactions, setReactions] = useState({});
     const [showNotificationCTA, setShowNotificationCTA] = useState(false);
+    const [groupMembersReadAt, setGroupMembersReadAt] = useState([]); // { user_id, last_read_at }[] for "Seen"
     // Voice Preview State (listen before sending)
     const [previewAudio, setPreviewAudio] = useState(null); // { uri, duration }
     const [isPlayingPreview, setIsPlayingPreview] = useState(false);
@@ -135,7 +150,7 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
         markAsRead();
     }, [groupId, user?.id]);
 
-    // Load data when group or user changes (use user?.id to avoid infinite re-runs from object reference)
+    // Load data when group or user changes. When !merged, useGroupChat hook loads messages; we only run merged path or load challenges here.
     useEffect(() => {
         if (!user?.id) {
             setLoading(false);
@@ -143,14 +158,27 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
         }
         if (merged) {
             loadMergedMessages();
-        } else if (groupId) {
-            loadChatData();
-        } else {
+        } else if (!groupId) {
             setLoading(false);
-            return;
         }
         loadUserProfile();
     }, [groupId, user?.id, merged]);
+
+    // When !merged: load challenges for this group (for send payload + inspiration). Hook handles messages.
+    useEffect(() => {
+        if (merged || !groupId || !user?.id) return;
+        let cancelled = false;
+        (async () => {
+            const { data } = await supabase
+                .from('app_challenges')
+                .select('id, prompt_text, created_at, metadata')
+                .eq('group_id', groupId)
+                .order('created_at', { ascending: false })
+                .limit(1);
+            if (!cancelled && data?.length) setCurrentChallenge(data[0]);
+        })();
+        return () => { cancelled = true; };
+    }, [groupId, merged, user?.id]);
 
     const loadUserProfile = async () => {
         const { data } = await supabase
@@ -171,7 +199,17 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
         cancelRecording,
         pauseRecording,
         resumeRecording,
+        prepareAudioSession,
     } = useVoiceRecorder();
+
+    // Prepare recording session on mount so first mic tap works (no "cannot record audio")
+    useEffect(() => {
+        let cancelled = false;
+        prepareAudioSession().catch((e) => {
+            if (!cancelled) { /* warm-up best-effort */ }
+        });
+        return () => { cancelled = true; };
+    }, [prepareAudioSession]);
 
     const startRecording = async () => {
         // Clear any existing preview first
@@ -399,14 +437,12 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
                 schema: 'public',
                 table: 'app_message_reactions',
             }, (payload) => {
-                console.log('[REACTIONS REALTIME] INSERT event:', payload.new);
+                const messageId = payload.new.message_id;
+                const nu = payload.new;
                 setReactions(prev => {
-                    const messageId = payload.new.message_id;
                     const existing = prev[messageId] || [];
-                    return {
-                        ...prev,
-                        [messageId]: [...existing, payload.new]
-                    };
+                    const withoutOptimistic = existing.filter(r => !(String(r.id).startsWith('opt-') && r.user_id === nu.user_id && r.emoji === nu.emoji));
+                    return { ...prev, [messageId]: [...withoutOptimistic, nu] };
                 });
             })
             .on('postgres_changes', {
@@ -414,7 +450,6 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
                 schema: 'public',
                 table: 'app_message_reactions',
             }, (payload) => {
-                console.log('[REACTIONS REALTIME] DELETE event:', payload.old);
                 setReactions(prev => {
                     const messageId = payload.old.message_id;
                     const existing = prev[messageId] || [];
@@ -512,9 +547,7 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
                 });
                 setReactions(reactionsMap);
             }
-        } catch (e) {
-            console.warn('loadReactions:', e);
-        }
+        } catch (_) {}
     };
 
     const loadChatData = async () => {
@@ -524,7 +557,7 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
             setLoading(true);
             const { data: group } = await supabase.from('app_groups').select('name, member_count, language, avatar_url').eq('id', gid).single();
             if (group) {
-                if (group.name === 'DM' && group.member_count === 2) {
+                if (group.name === 'DM') {
                     setIsDM(true);
                     const { data: members } = await supabase
                         .from('app_group_members')
@@ -599,6 +632,13 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
                 });
                 setMessages(messagesWithFallback);
 
+                // Fetch other members' last_read_at for read receipts
+                const { data: readData } = await supabase
+                    .from('app_group_members')
+                    .select('user_id, last_read_at')
+                    .eq('group_id', groupId);
+                setGroupMembersReadAt(readData || []);
+
                 // Load reactions for these messages
                 const messageIds = messagesData.map(m => m.id);
                 await loadReactions(messageIds);
@@ -616,28 +656,51 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
         if (!user?.id) return;
         try {
             setLoading(true);
+            // User's groups: for phrases/vocab modal and English challenge only
             const { data: memberships, error: memberError } = await supabase
                 .from('app_group_members')
                 .select('group_id')
                 .eq('user_id', user.id);
             if (memberError) throw memberError;
-            const groupIds = (memberships || []).map((m) => m.group_id).filter(Boolean);
-            if (groupIds.length === 0) {
+            const userGroupIds = (memberships || []).map((m) => m.group_id).filter(Boolean);
+
+            // All non-DM groups: feed shows messages from every group so people see activity
+            const { data: allGroups, error: allGroupsError } = await supabase
+                .from('app_groups')
+                .select('id, name, language, member_count');
+            if (allGroupsError) throw allGroupsError;
+            const allGroupIds = (allGroups || [])
+                .filter((g) => !(g.name === 'DM' && g.member_count === 2))
+                .map((g) => g.id)
+                .filter(Boolean);
+            if (allGroupIds.length === 0) {
                 setMessages([]);
                 setLoading(false);
                 return;
             }
-            mergedGroupIdsRef.current = groupIds;
+            mergedGroupIdsRef.current = allGroupIds;
+
+            // User's groups data: languages for phrases/vocab modal + English group for challenge
+            let groupsData = [];
+            if (userGroupIds.length > 0) {
+                const { data } = await supabase
+                    .from('app_groups')
+                    .select('id, name, language')
+                    .in('id', userGroupIds);
+                groupsData = data || [];
+            }
+            const langs = [...new Set((groupsData || [])
+                .filter((g) => g.id !== LANGUAGE_SOUP_GROUP_ID)
+                .map((g) => g.language)
+                .filter(Boolean))];
+            setMergedGroupLanguages(langs);
 
             // One challenge per day: use the English group's challenge only (default for Language Soup feed)
             let englishChallenge = null;
             let englishGroupId = null;
             if (oneChallengePerDayEnglish) {
-                const { data: groupsData } = await supabase
-                    .from('app_groups')
-                    .select('id, name, language')
-                    .in('id', groupIds);
-                const englishGroup = (groupsData || []).find(
+                const sourceGroups = (groupsData || []).length > 0 ? groupsData : (allGroups || []);
+                const englishGroup = sourceGroups.find(
                     (g) =>
                         (g.language && String(g.language).toLowerCase().includes('english')) ||
                         (g.name && String(g.name).toLowerCase().includes('english'))
@@ -678,8 +741,9 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
                     sender:app_users(id, display_name, avatar_url, fluent_languages, status_text),
                     app_groups(name, language)
                 `)
-                .in('group_id', groupIds)
-                .order('created_at', { ascending: true });
+                .in('group_id', allGroupIds)
+                .order('created_at', { ascending: false })
+                .limit(500);
             if (msgError) throw msgError;
 
             const normalized = (messagesData || []).map((msg) => {
@@ -711,8 +775,28 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
             const filtered = normalized.filter((m) => !isFromLanguageSoupBot(m) || keepChallengeIds.has(m.id));
             filtered.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
 
-            setMessages(filtered);
-            const messageIds = filtered.map((m) => m.id);
+            // Attach challenge_prompt and challenge_metadata per message (for dynamic "need more ingredients")
+            const challengeIds = [...new Set(filtered.map((m) => m.challenge_id).filter(Boolean))];
+            let challengePromptMap = {};
+            let challengeMetadataMap = {};
+            if (challengeIds.length > 0) {
+                const { data: challenges } = await supabase
+                    .from('app_challenges')
+                    .select('id, prompt_text, metadata')
+                    .in('id', challengeIds);
+                (challenges || []).forEach((c) => {
+                    challengePromptMap[c.id] = c.prompt_text;
+                    challengeMetadataMap[c.id] = c.metadata;
+                });
+            }
+            const withChallengeContext = filtered.map((msg) => ({
+                ...msg,
+                challenge_prompt: msg.challenge_id ? challengePromptMap[msg.challenge_id] : undefined,
+                challenge_metadata: msg.challenge_id ? challengeMetadataMap[msg.challenge_id] : undefined,
+            }));
+
+            setMessages(withChallengeContext);
+            const messageIds = withChallengeContext.map((m) => m.id);
             if (messageIds.length > 0) await loadReactions(messageIds);
             setTimeout(() => scrollToBottom(), 100);
         } catch (e) {
@@ -804,6 +888,8 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
             await supabase.from('app_group_members').update({ last_read_at: new Date().toISOString() }).eq('user_id', user.id).eq('group_id', groupId);
             setMessages((prev) => prev.map((msg) => (msg.id === tempId ? { ...data, sender: optimisticMessage.sender } : msg)));
 
+            track(AnalyticsEvents.TEXT_SENT, { group_id: groupId });
+
             // Complete quest for first text message
             await completeQuest('first_text');
 
@@ -825,7 +911,29 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
         }
     };
 
-
+    const handleSendText = useCallback(async () => {
+        const t = textInput.trim();
+        if (!t || sending || !user) return;
+        if (merged) {
+            sendMessage();
+            return;
+        }
+        setTextInput('');
+        setSending(true);
+        try {
+            await chat.sendText(t);
+            track(AnalyticsEvents.TEXT_SENT, { group_id: groupId });
+            await completeQuest('first_text');
+            if (currentChallenge?.id) {
+                await completeQuest('reply_challenge');
+                if (permissionStatus !== 'granted') setShowNotificationCTA(true);
+            }
+        } catch (_) {
+            setTextInput(t);
+        } finally {
+            setSending(false);
+        }
+    }, [merged, textInput, sending, user, sendMessage, chat?.sendText, currentChallenge?.id, permissionStatus, completeQuest]);
 
     const handleDeleteMessage = async (messageId) => {
         try {
@@ -863,22 +971,40 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
         if (result?.uri) await sendVoiceMemo(result.uri);
     };
 
-    const sendVoiceMemo = async (audioUri, explicitDuration) => {
-        console.log('🎤 [VOICE] Starting sendVoiceMemo with URI:', audioUri);
-        if (!audioUri || !user) {
-            console.log('❌ [VOICE] Missing audioUri or user:', { audioUri, userId: user?.id });
+    // Hold-to-record: release sends if duration >= 0.5s, else cancel
+    const handleReleaseRecording = async () => {
+        const result = await stopRecording();
+        if (channelRef.current) {
+            channelRef.current.send({
+                type: 'broadcast',
+                event: 'recording_stop',
+                payload: { user_id: user.id },
+            });
+        }
+        if (result && result.duration >= 500) {
+            await sendVoiceMemo(result.uri, Math.floor(result.duration / 1000));
+        } else {
+            await cancelRecording();
+        }
+    };
+
+    const sendVoiceMemo = async (audioUri, explicitDuration, challengeIdOverride) => {
+        if (!audioUri || !user) return;
+        const duration = explicitDuration !== undefined ? explicitDuration : Math.floor(recordingDuration);
+        const effectiveChallengeId = challengeIdOverride ?? currentChallenge?.id;
+        if (!merged && chat?.sendVoice) {
+            await chat.sendVoice(audioUri, duration);
+            await completeQuest('first_audio');
+            if (currentChallenge?.id && permissionStatus !== 'granted') setShowNotificationCTA(true);
             return;
         }
         const tempId = `temp-voice-${Date.now()}`;
-        // Use explicit duration if provided, otherwise fallback to recordingDuration or 0
-        const duration = explicitDuration !== undefined ? explicitDuration : Math.floor(recordingDuration);
-        console.log('⏱️ [VOICE] Final duration to save:', duration, 'seconds');
 
         const optimisticMessage = {
             id: tempId,
             sender_id: user.id,
             group_id: groupId,
-            challenge_id: currentChallenge?.id || null,
+            challenge_id: effectiveChallengeId || null,
             message_type: 'voice',
             media_url: audioUri,
             duration_seconds: duration,
@@ -890,50 +1016,37 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
         setTimeout(() => scrollToBottom(), 50);
 
         try {
-            console.log('📁 [VOICE] Getting file info...');
             const fileInfo = await FileSystem.getInfoAsync(audioUri);
-            console.log('📁 [VOICE] File info:', { exists: fileInfo.exists, size: fileInfo.size, uri: fileInfo.uri });
+            if (!fileInfo.exists) throw new Error('Voice file not found');
 
-            console.log('🔄 [VOICE] Reading file as base64...');
             const audioData = await FileSystem.readAsStringAsync(audioUri, { encoding: FileSystem.EncodingType.Base64 });
-            console.log('✅ [VOICE] Base64 data length:', audioData.length);
-
             const fileName = `language-chat/${user.id}/voice_${Date.now()}.m4a`;
-            console.log('☁️ [VOICE] Uploading to Supabase:', fileName);
 
             const { error: uploadError } = await supabase.storage.from('voice-memos').upload(fileName, decode(audioData), { contentType: 'audio/m4a' });
-            if (uploadError) {
-                console.error('❌ [VOICE] Upload error:', uploadError);
-                throw uploadError;
-            }
-            console.log('✅ [VOICE] Upload successful');
+            if (uploadError) throw uploadError;
 
             const { data: { publicUrl } } = supabase.storage.from('voice-memos').getPublicUrl(fileName);
-            console.log('🔗 [VOICE] Public URL:', publicUrl);
 
-            console.log('💾 [VOICE] Inserting into database...');
             const { data, error: insertError } = await supabase.from('app_messages').insert({
                 sender_id: user.id,
                 group_id: groupId,
-                challenge_id: currentChallenge?.id || null,
+                challenge_id: effectiveChallengeId || null,
                 message_type: 'voice',
                 media_url: publicUrl,
                 duration_seconds: duration,
             }).select().single();
 
-            if (insertError) {
-                console.error('❌ [VOICE] Database insert error:', insertError);
-                throw insertError;
-            }
-            console.log('✅ [VOICE] Database insert successful:', data);
-            if (currentChallenge?.id) {
+            if (insertError) throw insertError;
+
+            if (effectiveChallengeId) {
                 supabase.functions.invoke('notify-challenge-reply', { body: { group_id: groupId, sender_id: user.id } }).catch(() => {});
             }
             // Mark group as read so we never show unread from our own message
             await supabase.from('app_group_members').update({ last_read_at: new Date().toISOString() }).eq('user_id', user.id).eq('group_id', groupId);
 
             setMessages((prev) => prev.map((msg) => (msg.id === tempId ? { ...data, sender: optimisticMessage.sender } : msg)));
-            console.log('🎉 [VOICE] Voice memo sent successfully!');
+
+            track(AnalyticsEvents.VOICE_SENT, { group_id: groupId });
 
             // Fire-and-forget: transcribe voice memo for reading when you can't listen
             supabase.functions.invoke('voice-feedback', { body: { task: 'transcribe_message', messageId: data.id } })
@@ -948,7 +1061,7 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
             await completeQuest('first_audio');
 
             // Nudge to turn on notifications if they are off
-            if (currentChallenge?.id && permissionStatus !== 'granted') {
+            if (effectiveChallengeId && permissionStatus !== 'granted') {
                 setShowNotificationCTA(true);
             }
         } catch (error) {
@@ -963,7 +1076,9 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
         const { data, error } = await supabase.functions.invoke('voice-feedback', { body: { task: 'transcribe_message', messageId } });
         if (error) throw error;
         if (data?.transcript != null) {
-            setMessages((prev) => prev.map((m) => m.id === messageId ? { ...m, transcript: data.transcript } : m));
+            const updater = (prev) => prev.map((m) => m.id === messageId ? { ...m, transcript: data.transcript } : m);
+            if (merged) setMessages(updater);
+            else chat.setMessages?.(updater);
             return data.transcript;
         }
         throw new Error(data?.error || 'No transcript');
@@ -990,16 +1105,14 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
 
 
     const sendImageMessage = async (media) => {
-        // Handle both old format (string) and new format (object)
-        const imageUri = typeof media === 'string' ? media : media.uri;
-        const mediaType = typeof media === 'string' ? 'image' : (media.type || 'image');
-        const caption = typeof media === 'string' ? '' : (media.caption || '');
-
-        console.log('[Media Send] Starting upload for:', { imageUri, mediaType, caption });
-        if (!imageUri || !user) {
-            console.error('[Media Send] Missing imageUri or user');
+        const imageUri = typeof media === 'string' ? media : media?.uri;
+        if (!imageUri || !user) return;
+        if (!merged && chat?.sendImage) {
+            await chat.sendImage(media);
             return;
         }
+        const mediaType = typeof media === 'string' ? 'image' : (media?.type || 'image');
+        const caption = typeof media === 'string' ? '' : (media?.caption || '');
 
         const tempId = `temp-${mediaType}-${Date.now()}`;
         const optimisticMessage = {
@@ -1019,38 +1132,27 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
             },
         };
 
-        console.log('[Media Send] Adding optimistic message');
         setMessages((prev) => [...prev, optimisticMessage]);
         setTimeout(() => scrollToBottom(), 50);
 
         try {
-            console.log('[Media Send] Reading file as base64...');
             const base64 = await FileSystem.readAsStringAsync(imageUri, {
                 encoding: FileSystem.EncodingType.Base64,
             });
-            console.log('[Media Send] Base64 length:', base64.length);
 
             const extension = mediaType === 'video' ? 'mp4' : 'jpg';
             const contentType = mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
             const fileName = `chat-media/${groupId}/${user.id}/${mediaType}_${Date.now()}.${extension}`;
 
-            console.log('[Media Send] Uploading to:', fileName);
             const { error: uploadError } = await supabase.storage
                 .from('voice-memos')
                 .upload(fileName, decode(base64), { contentType });
 
-            if (uploadError) {
-                console.error('[Media Send] Upload error:', uploadError);
-                throw uploadError;
-            }
+            if (uploadError) throw uploadError;
 
-            console.log('[Media Send] Upload successful, getting URL...');
             const { data: { publicUrl } } = supabase.storage
                 .from('voice-memos')
                 .getPublicUrl(fileName);
-
-            console.log('[Media Send] Public URL:', publicUrl);
-            console.log('[Media Send] Inserting into database...');
 
             // Insert message into database
             const { data, error: insertError } = await supabase
@@ -1066,12 +1168,8 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
                 .select()
                 .single();
 
-            if (insertError) {
-                console.error('[Media Send] Database error:', insertError);
-                throw insertError;
-            }
+            if (insertError) throw insertError;
 
-            console.log('[Media Send] Success! Message data:', data);
             setMessages((prev) =>
                 prev.map((msg) => (msg.id === tempId ? { ...data, sender: optimisticMessage.sender } : msg))
             );
@@ -1090,18 +1188,34 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
         );
 
         if (existingReaction) {
+            setReactions(prev => {
+                const next = { ...prev };
+                next[messageId] = (next[messageId] || []).filter(r => r.id !== existingReaction.id);
+                return next;
+            });
             await supabase
                 .from('app_message_reactions')
                 .delete()
                 .eq('id', existingReaction.id);
         } else {
-            await supabase
+            const optimistic = { id: `opt-${messageId}-${user.id}-${emoji}`, message_id: messageId, user_id: user.id, emoji, created_at: new Date().toISOString() };
+            setReactions(prev => ({
+                ...prev,
+                [messageId]: [...(prev[messageId] || []).filter(r => !(String(r.id).startsWith('opt-') && r.user_id === user.id && r.emoji === emoji)), optimistic]
+            }));
+            const { error } = await supabase
                 .from('app_message_reactions')
                 .insert({
                     message_id: messageId,
                     user_id: user.id,
                     emoji: emoji
                 });
+            if (error) {
+                setReactions(prev => ({
+                    ...prev,
+                    [messageId]: (prev[messageId] || []).filter(r => r.id !== optimistic.id)
+                }));
+            }
         }
     };
 
@@ -1123,23 +1237,25 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
     useEffect(() => {
         if (!scrollToMessageId) lastScrolledToMessageIdRef.current = null;
     }, [scrollToMessageId]);
+    const listRefForScroll = merged ? flatListRef : chat.listRef;
+    const displayMessagesForScroll = merged ? messagesWithDates : chat.messagesWithDates;
     // Scroll to a specific message when opened from podcast (once per scrollToMessageId to avoid update loops)
     useEffect(() => {
-        if (!scrollToMessageId || !messagesWithDates.length || !flatListRef.current) return;
-        const idx = messagesWithDates.findIndex((m) => m.id === scrollToMessageId);
+        if (!scrollToMessageId || !displayMessagesForScroll?.length || !listRefForScroll?.current) return;
+        const idx = displayMessagesForScroll.findIndex((m) => m.id === scrollToMessageId);
         if (idx < 0) return;
         if (lastScrolledToMessageIdRef.current === scrollToMessageId) return;
         lastScrolledToMessageIdRef.current = scrollToMessageId;
         const t = setTimeout(() => {
             try {
-                flatListRef.current?.scrollToIndex({ index: idx, animated: true });
+                listRefForScroll.current?.scrollToIndex({ index: idx, animated: true });
             } catch (_) {
                 const approxOffset = Math.max(0, idx * 100);
-                flatListRef.current?.scrollToOffset({ offset: approxOffset, animated: true });
+                listRefForScroll.current?.scrollToOffset({ offset: approxOffset, animated: true });
             }
         }, 300);
         return () => clearTimeout(t);
-    }, [messagesWithDates, scrollToMessageId]);
+    }, [displayMessagesForScroll, scrollToMessageId, listRefForScroll]);
 
     if (!groupId) {
         return (
@@ -1154,13 +1270,6 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
         );
     }
 
-    if (loading) {
-        return (
-            <View style={styles.center}>
-                <ActivityIndicator size="large" color={Colors.primary} />
-            </View>
-        );
-    }
 
     return (
         <View style={styles.container}>
@@ -1171,18 +1280,20 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
                 reactionsTable="app_message_reactions"
                 userId={user?.id}
                 groupId={groupId}
-                groupName={merged ? 'Language Soup' : groupName}
-                compact={merged}
+                groupName={merged ? 'Language Soup' : (chat.group?.name ?? groupName)}
+                compact={embedded || merged}
                 getMessageGroupLabel={(merged || showLanguageTags) ? getMessageGroupLabel : undefined}
-                messages={messagesWithDates}
-                loading={loading}
-                groupLanguage={groupLanguage} // Pass language for Voice Feedback (Fixes "American Accent" bug)
+                messages={merged ? (loading ? [] : messagesWithDates) : (chat.loading ? [] : chat.messagesWithDates)}
+                loading={merged ? loading : chat.loading}
+                groupMembersReadAt={merged ? [] : chat.groupMembersReadAt}
+                currentUserId={user?.id}
+                groupLanguage={merged ? groupLanguage : (chat.group?.language ?? groupLanguage)}
                 currentChallenge={currentChallenge} // Pass full challenge for AI Context
-                reactions={reactions}
-                onReact={handleReact}
+                reactions={merged ? reactions : chat.reactions}
+                onReact={merged ? handleReact : chat.handleReact}
                 onAvatarPress={handleAvatarPress}
                 onGetTranscript={handleGetTranscript}
-                onSendText={sendMessage}
+                onSendText={handleSendText}
                 onSendVoice={handleSendVoice}
                 onPickImage={sendImageMessage}
                 textInput={textInput}
@@ -1195,6 +1306,7 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
                 onStartRecording={startRecording}
                 onCancelRecording={handleCancelRecording}
                 onSendRecording={handleStopAndPreview}
+                onReleaseRecording={handleReleaseRecording}
                 // Voice Preview props (listen before send)
                 previewAudio={previewAudio}
                 isPlayingPreview={isPlayingPreview}
@@ -1206,7 +1318,14 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
                 isPaused={isPaused}
                 onPauseRecording={pauseRecording}
                 onResumeRecording={resumeRecording}
-                onShowInspiration={(metadata) => {
+                onShowInspiration={(metadata, context) => {
+                    if (merged) {
+                        setPhrasesChallengePrompt(context?.prompt ?? visibleChallenge?.prompt_text);
+                        setPhrasesChallengeId(context?.challengeId ?? visibleChallenge?.id);
+                        track(AnalyticsEvents.PHRASES_MODAL_OPEN, { group_id: groupId });
+                        setShowSoupPhrasesVocab(true);
+                        return;
+                    }
                     // TEST MODE: Inject dummy data ONLY for specific group
                     let dataToUse = metadata;
                     const isTestGroup = groupName && groupName.toLowerCase().includes('noah');
@@ -1223,65 +1342,59 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
                     }
 
                     setInspirationMetadata(dataToUse);
+                    setPhrasesChallengePrompt(context?.prompt ?? visibleChallenge?.prompt_text);
+                    setPhrasesChallengeId(context?.challengeId ?? visibleChallenge?.id);
                     setShowInspiration(true);
                 }}
-                headerComponent={embedded ? null : (
-                    Platform.OS === 'ios' ? (
-                        <BlurView intensity={95} tint="light" style={[styles.header, { paddingTop: insets.top }]}>
+                flatListRef={merged ? flatListRef : chat.listRef}
+                theme="whatsapp"
+                headerComponent={embedded ? null : (() => {
+                    const goGroup = () => onOpenGroupInfo ? onOpenGroupInfo() : router.push(`/group-info?id=${groupId}`);
+                    const goPartner = () => partner?.id && router.push(`/user/${partner.id}`);
+                    const HeaderWrap = Platform.OS === 'ios' ? BlurView : View;
+                    const displayName = merged ? groupName : (isDM ? groupName : (chat.group?.name ?? groupName));
+                    const displayAvatar = merged ? groupAvatar : (isDM ? groupAvatar : (chat.group?.avatar_url ?? null));
+                    const displayIsDM = merged ? isDM : isDM;
+                    const headerStyle = [styles.header, { paddingTop: insets.top }, Platform.OS !== 'ios' && { backgroundColor: '#fff' }, whatsAppHeaderBorder].filter(Boolean);
+                    return (
+                        <HeaderWrap {...(Platform.OS === 'ios' && { intensity: 95, tint: 'light' })} style={headerStyle}>
                             <View style={styles.headerContent}>
                                 <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.9 }]}>
                                     <ChevronLeft size={30} color={Colors.primary} />
                                 </Pressable>
-                                {(groupAvatar || isDM) && (
-                                    <View style={styles.headerAvatarContainer}>
-                                        {groupAvatar ? (
-                                            <Image source={getAvatarSource(groupAvatar)} style={styles.headerAvatar} />
-                                        ) : (
-                                            <View style={[styles.headerAvatar, styles.headerAvatarPlaceholder]}>
-                                                <Text style={styles.headerAvatarLetter}>{(groupName || '?')[0].toUpperCase()}</Text>
-                                            </View>
+                                <Pressable style={({ pressed }) => [styles.headerMiddle, pressed && { opacity: 0.9 }]} onPress={displayIsDM ? goPartner : goGroup}>
+                                    {(displayAvatar || displayIsDM) && (
+                                        <View style={styles.headerAvatarContainer}>
+                                            {displayAvatar ? (
+                                                <Image source={getAvatarSource(displayAvatar)} style={styles.headerAvatar} />
+                                            ) : (
+                                                <View style={[styles.headerAvatar, styles.headerAvatarPlaceholder]}>
+                                                    <Text style={styles.headerAvatarLetter}>{(displayName || '?')[0].toUpperCase()}</Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                    )}
+                                    <View style={styles.headerInfo}>
+                                        <Text style={styles.headerTitle} numberOfLines={1}>{displayName}</Text>
+                                        {!displayIsDM && (
+                                            <Text style={styles.headerSubtitle}>
+                                                {(merged ? memberCount : (chat.group?.member_count ?? 0))} members · tap for group
+                                            </Text>
                                         )}
                                     </View>
+                                </Pressable>
+                                {!displayIsDM && (
+                                    <Pressable style={({ pressed }) => [styles.headerAction, pressed && { opacity: 0.9 }]} onPress={goGroup}>
+                                        <MoreVertical size={26} color={Colors.primary} />
+                                    </Pressable>
                                 )}
-                                <View style={styles.headerInfo}>
-                                    <Text style={styles.headerTitle}>{groupName}</Text>
-                                    {!isDM && <Text style={styles.headerSubtitle}>{memberCount} members</Text>}
-                                </View>
-                                <Pressable style={({ pressed }) => [styles.headerAction, pressed && { opacity: 0.9 }]} onPress={() => (onOpenGroupInfo ? onOpenGroupInfo() : router.push(`/group-info?id=${groupId}`))}>
-                                    <MoreVertical size={24} color={Colors.primary} />
-                                </Pressable>
+                                {displayIsDM && <View style={styles.headerAction} />}
                             </View>
-                        </BlurView>
-                    ) : (
-                        <View style={[styles.header, { paddingTop: insets.top, backgroundColor: '#fff' }]}>
-                            <View style={styles.headerContent}>
-                                <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.9 }]}>
-                                    <ChevronLeft size={30} color={Colors.primary} />
-                                </Pressable>
-                                {(groupAvatar || isDM) && (
-                                    <View style={styles.headerAvatarContainer}>
-                                        {groupAvatar ? (
-                                            <Image source={getAvatarSource(groupAvatar)} style={styles.headerAvatar} />
-                                        ) : (
-                                            <View style={[styles.headerAvatar, styles.headerAvatarPlaceholder]}>
-                                                <Text style={styles.headerAvatarLetter}>{(groupName || '?')[0].toUpperCase()}</Text>
-                                            </View>
-                                        )}
-                                    </View>
-                                )}
-                                <View style={styles.headerInfo}>
-                                    <Text style={styles.headerTitle}>{groupName}</Text>
-                                    {!isDM && <Text style={styles.headerSubtitle}>{memberCount} members</Text>}
-                                </View>
-                                <Pressable style={({ pressed }) => [styles.headerAction, pressed && { opacity: 0.9 }]} onPress={() => (onOpenGroupInfo ? onOpenGroupInfo() : router.push(`/group-info?id=${groupId}`))}>
-                                    <MoreVertical size={24} color={Colors.primary} />
-                                </Pressable>
-                            </View>
-                        </View>
-                    )
-                )}
+                        </HeaderWrap>
+                    );
+                })()}
 
-                bannerComponent={null}
+                bannerComponent={merged ? <BenjaminBookingBanner /> : null}
             />
 
             <InspirationModal
@@ -1289,9 +1402,28 @@ export function GroupChatView({ groupId: groupIdProp, embedded: embeddedProp, me
                 onClose={() => setShowInspiration(false)}
                 metadata={inspirationMetadata || visibleChallenge?.metadata}
                 language={groupLanguage}
+                prompt={phrasesChallengePrompt ?? visibleChallenge?.prompt_text}
+                challengeId={phrasesChallengeId ?? visibleChallenge?.id}
             />
 
-        </View>
+            {merged && (
+                <SoupPhrasesVocabModal
+                    visible={showSoupPhrasesVocab}
+                    onClose={() => { setShowSoupPhrasesVocab(false); setPhrasesChallengePrompt(null); setPhrasesChallengeId(null); }}
+                    prompt={phrasesChallengePrompt ?? visibleChallenge?.prompt_text}
+                    challengeId={phrasesChallengeId ?? visibleChallenge?.id}
+                    userId={user?.id}
+                    languages={mergedGroupLanguages}
+                    onSendRecording={async (uri, durationSeconds) => {
+                        track(AnalyticsEvents.PHRASES_MODAL_RECORD_SENT, { group_id: groupId });
+                        await sendVoiceMemo(uri, durationSeconds, phrasesChallengeId ?? visibleChallenge?.id);
+                    }}
+                />
+            )}
+
+            <FillProfileThenGroupsModal visible={false} onClose={() => {}} onComplete={() => {}} />
+
+            </View>
     );
 }
 
@@ -1315,56 +1447,62 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         zIndex: 10,
-        paddingHorizontal: 16,
-        paddingBottom: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0,0,0,0.05)',
+        paddingHorizontal: 12,
+        paddingBottom: 14,
+        borderBottomWidth: 2,
+        borderBottomColor: 'rgba(0,173,239,0.15)',
     },
     headerContent: {
         flexDirection: 'row',
         alignItems: 'center',
     },
+    headerMiddle: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        minWidth: 0,
+    },
     headerAvatarContainer: {
-        marginRight: 10,
+        marginRight: 12,
     },
     headerAvatar: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        backgroundColor: '#E1E1E1',
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        backgroundColor: '#E8E8E8',
     },
     headerAvatarPlaceholder: {
-        backgroundColor: '#00adef',
+        backgroundColor: SOUP_COLORS.blue,
         justifyContent: 'center',
         alignItems: 'center',
     },
     headerAvatarLetter: {
-        fontSize: 16,
-        fontWeight: '700',
+        fontSize: 20,
+        fontWeight: '800',
         color: '#fff',
     },
     backButton: {
-        padding: 8,
-        marginLeft: -8,
-        marginRight: 4,
+        padding: 10,
+        marginLeft: -4,
+        marginRight: 2,
     },
     headerInfo: {
         flex: 1,
         justifyContent: 'center',
     },
     headerTitle: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#000',
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#111',
     },
     headerSubtitle: {
-        fontSize: 12,
-        color: '#666',
-        marginTop: 0,
+        fontSize: 13,
+        color: '#667781',
+        marginTop: 2,
     },
     headerAction: {
-        padding: 8,
-        marginRight: -8,
+        padding: 10,
+        marginRight: -4,
     },
     inspirationButton: {
         flexDirection: 'row',

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Modal, Pressable, StyleSheet } from 'react-native';
+import { WHATS_NEW } from '../constants/WhatsNewCopy';
 
 const SOUP_COLORS = {
     cream: '#FDF5E6',
@@ -10,22 +11,35 @@ const SOUP_COLORS = {
 };
 
 /**
- * Minimal "what's new" / "where things are" — tap to open from Profile.
- * No tour, no steps. One screen, short copy, got it. See STRATEGY_AND_NOAH.md.
+ * Minimal "what's new" — auto-shown once per version when they enter the app, or tap from Profile.
+ * No tour, no steps. One screen, short bullets, got it. Copy in constants/WhatsNewCopy.js.
  */
 export default function WhatsNewSheet({ visible, onClose }) {
     if (!visible) return null;
+
+    const { title, items } = WHATS_NEW;
+    const hasItems = Array.isArray(items) && items.length > 0;
 
     return (
         <Modal visible={visible} animationType="slide" transparent>
             <Pressable style={styles.backdrop} onPress={onClose}>
                 <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-                    <Text style={styles.title}>where things are</Text>
-                    <Text style={styles.body}>
-                        <Text style={styles.bold}>Today</Text> — send your voice. One challenge, one tap.{'\n\n'}
-                        <Text style={styles.bold}>Community</Text> — hear everyone's voices. Podcast mode = listen to the soup in one go.{'\n\n'}
-                        more voices live in the Community tab. explore and tap around — no tutorial, just soup.
-                    </Text>
+                    <Text style={styles.title}>{title}</Text>
+                    {hasItems ? (
+                        <View style={styles.bulletList}>
+                            {items.map((line, i) => (
+                                <Text key={i} style={styles.bulletLine}>
+                                    <Text style={styles.bullet}>• </Text>
+                                    {line}
+                                </Text>
+                            ))}
+                        </View>
+                    ) : (
+                        <Text style={styles.body}>
+                            <Text style={styles.bold}>Today</Text> — send your voice. One challenge, one tap.{'\n\n'}
+                            <Text style={styles.bold}>Community</Text> — hear everyone. Explore and tap around.
+                        </Text>
+                    )}
                     <Pressable style={({ pressed }) => [styles.button, pressed && { opacity: 0.9 }]} onPress={onClose}>
                         <Text style={styles.buttonText}>got it</Text>
                     </Pressable>
@@ -60,6 +74,9 @@ const styles = StyleSheet.create({
         color: SOUP_COLORS.subtext,
         marginBottom: 24,
     },
+    bulletList: { marginBottom: 24 },
+    bulletLine: { fontSize: 15, lineHeight: 22, color: SOUP_COLORS.subtext, marginBottom: 8 },
+    bullet: { fontWeight: '700', color: SOUP_COLORS.text },
     bold: {
         fontWeight: '700',
         color: SOUP_COLORS.text,

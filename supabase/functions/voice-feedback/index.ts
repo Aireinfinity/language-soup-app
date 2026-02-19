@@ -114,9 +114,10 @@ serve(async (req) => {
             const baseRules = `RULES (STRICT):
 1. starter_phrases: an array of EXACTLY 2 short sentences in ${targetLang} only. Each phrase max 8 words. Prefer 5-7 words.
    Each must be a direct ANSWER to the question. Vary the phrasing (e.g. one formal, one casual).
-2. For each phrase provide "translation": English meaning. Return as starter_phrases: [{ "phrase": "<sentence in ${targetLang}>", "translation": "<English>" }, { "phrase": "<second sentence>", "translation": "<English>" }]
-3. vocab_bank: exactly 3 useful vocabulary words. For EACH item: "target_term": the word IN ${targetLang} we pronounce, "english": English meaning.
-4. Use natural spoken language: contractions, elisions, informal register. Sound like casual speech.`
+2. GRAMMAR: Every phrase must be a complete, grammatically correct sentence. Include all required articles, prepositions, and particles. For English: e.g. "I'd go to the museum" not "I'd go museum". For other languages: use correct grammar (e.g. proper prepositions, articles). Keep it casual and natural but correct.
+3. For each phrase provide "translation": English meaning. Return as starter_phrases: [{ "phrase": "<sentence in ${targetLang}>", "translation": "<English>" }, { "phrase": "<second sentence>", "translation": "<English>" }]
+4. vocab_bank: exactly 3 useful vocabulary words. For EACH item: "target_term": the word IN ${targetLang} we pronounce, "english": English meaning.
+5. Use natural spoken language: contractions, elisions, informal register. Sound like casual speech.`
 
             const variationInstruction = `IMPORTANT: The user asked for a DIFFERENT set of ideas. Do NOT repeat the same phrases or vocab they may have seen before. Pick a different angle (e.g. different formality, different vocabulary theme, different sentence structures). Be creative and varied.`
 
@@ -234,14 +235,19 @@ Return strictly valid JSON: { "starter_phrases": [{"phrase": "<sentence in ${tar
             const LANGUAGE_MAP: Record<string, string> = {
                 'french': 'fr', 'hungarian': 'hu', 'english': 'en', 'spanish': 'es', 'german': 'de',
                 'italian': 'it', 'portuguese': 'pt', 'russian': 'ru', 'japanese': 'ja', 'chinese': 'zh',
-                'korean': 'ko', 'dutch': 'nl', 'polish': 'pl', 'turkish': 'tr', 'indonesian': 'id', 'arabic': 'ar'
+                'korean': 'ko', 'dutch': 'nl', 'polish': 'pl', 'turkish': 'tr', 'indonesian': 'id', 'arabic': 'ar',
+                'mandarin': 'zh', 'hindi': 'hi', 'bengali': 'bn', 'urdu': 'ur', 'vietnamese': 'vi', 'thai': 'th',
+                'greek': 'el', 'czech': 'cs', 'romanian': 'ro', 'swedish': 'sv', 'danish': 'da', 'norwegian': 'no',
+                'finnish': 'fi', 'hebrew': 'he', 'persian': 'fa', 'farsi': 'fa', 'swahili': 'sw'
             }
-            if (groupLanguage) {
-                const lower = groupLanguage.toLowerCase()
-                const iso = LANGUAGE_MAP[lower]
-                if (iso) formData.append('language', iso)
-                else if (lower.length === 2) formData.append('language', lower)
+            const baseLangForIso = (l: string | null) => {
+                if (!l || typeof l !== 'string') return null
+                const s = l.trim().toLowerCase()
+                const base = s.split(/[\s*(\/\–\-]/)[0].trim()
+                return LANGUAGE_MAP[base] || (base.length === 2 ? base : null)
             }
+            const iso = baseLangForIso(groupLanguage)
+            if (iso) formData.append('language', iso)
 
             const whisperResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
                 method: 'POST',
@@ -310,40 +316,24 @@ Return strictly valid JSON: { "starter_phrases": [{"phrase": "<sentence in ${tar
         formData.append('file', audioBlob, `audio.${extension}`)
         formData.append('model', 'whisper-1')
 
-        // Fix: Whisper requires ISO-639-1 codes (e.g. 'fr', 'hu') not full names
+        // Fix: Whisper requires ISO-639-1 codes (e.g. 'fr', 'hu'). Normalize "French (Français)" -> "french" -> "fr"
         const LANGUAGE_MAP: Record<string, string> = {
-            'french': 'fr',
-            'hungarian': 'hu',
-            'english': 'en',
-            'spanish': 'es',
-            'german': 'de',
-            'italian': 'it',
-            'portuguese': 'pt',
-            'russian': 'ru',
-            'japanese': 'ja',
-            'chinese': 'zh',
-            'korean': 'ko',
-            'dutch': 'nl',
-            'polish': 'pl',
-            'turkish': 'tr',
-            'indonesian': 'id',
-            'arabic': 'ar'
+            'french': 'fr', 'hungarian': 'hu', 'english': 'en', 'spanish': 'es', 'german': 'de',
+            'italian': 'it', 'portuguese': 'pt', 'russian': 'ru', 'japanese': 'ja', 'chinese': 'zh',
+            'korean': 'ko', 'dutch': 'nl', 'polish': 'pl', 'turkish': 'tr', 'indonesian': 'id', 'arabic': 'ar',
+            'mandarin': 'zh', 'hindi': 'hi', 'bengali': 'bn', 'vietnamese': 'vi', 'thai': 'th',
+            'greek': 'el', 'czech': 'cs', 'romanian': 'ro', 'swedish': 'sv', 'danish': 'da', 'norwegian': 'no',
+            'finnish': 'fi', 'hebrew': 'he', 'persian': 'fa', 'farsi': 'fa', 'swahili': 'sw'
+        };
+        const baseLangForIso = (l: string | null) => {
+            if (!l || typeof l !== 'string') return null;
+            const s = l.trim().toLowerCase();
+            const base = s.split(/[\s*(\/\–\-]/)[0].trim();
+            return LANGUAGE_MAP[base] || (base.length === 2 ? base : null) || null;
         };
 
-        if (language) {
-            const lowerLang = language.toLowerCase();
-            const isoCode = LANGUAGE_MAP[lowerLang];
-            if (isoCode) {
-                formData.append('language', isoCode);
-            } else {
-                // If 2 characters, assume it's already ISO
-                if (lowerLang.length === 2) {
-                    formData.append('language', lowerLang);
-                }
-                // Otherwise, omit language param to let Whisper auto-detect
-                // (Sending invalid language codes like "french" breaks transcription)
-            }
-        }
+        const isoCode = baseLangForIso(language);
+        if (isoCode) formData.append('language', isoCode);
 
         const whisperResponse = await fetch(
             'https://api.openai.com/v1/audio/transcriptions',
@@ -376,19 +366,22 @@ Return strictly valid JSON: { "starter_phrases": [{"phrase": "<sentence in ${tar
             }
         }
 
-        // 3. Correct (Groq/Llama)
+        // 3. Correct (Groq/Llama) — use normalized target language name for prompt (e.g. "French" from "French (Français)")
+        const targetLangName = (language && typeof language === 'string')
+            ? language.trim().split(/[\s*(\/\–\-]/)[0].trim() || 'English'
+            : 'English'
         const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY')
-        const systemPrompt = `You are a Translanguaging Expert and an expert in ${language || 'English'}. Correct this CASUAL voice message.
+        const systemPrompt = `You are a Translanguaging Expert and an expert in ${targetLangName}. Correct this CASUAL voice message.
 Student said: "${transcription}"
 Context (Question they are answering): "${context?.prompt || 'Unknown'}"
-Target Language: ${language || 'English'}
+Target Language: ${targetLangName}
 Student's Known Languages: ${userLangString}
 
 RULES:
 1. Fix ONLY wrong words or unnatural phrasing.
 2. Keep it CASUAL (not classroom style).
 3. Explanation must be SHORT (max 1-2 sentences).
-4. Use translanguaging (explain in English, compare to ${userLangString}).
+4. Use translanguaging (explain in English, compare to ${userLangString}). The student is speaking in ${targetLangName}.
 
 Return strictly valid JSON: { "corrected": "...", "explanation": "...", "is_correct": boolean }`
 

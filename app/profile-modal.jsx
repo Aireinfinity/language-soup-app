@@ -4,7 +4,7 @@
 import React from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { X } from 'lucide-react-native';
 import ProfileScreen from './(tabs)/profile';
 import { Colors } from '../constants/Colors';
@@ -12,12 +12,22 @@ import { Colors } from '../constants/Colors';
 export default function ProfileModalScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
+    const params = useLocalSearchParams();
+    const isOnboarding = params.onboarding === '1';
+
+    const handleClose = () => {
+        if (isOnboarding) {
+            router.replace('/(tabs)/feed');
+        } else {
+            router.back();
+        }
+    };
 
     return (
         <View style={styles.container}>
             <Pressable
                 style={({ pressed }) => [styles.closeBtn, { top: insets.top + 8 }, pressed && { opacity: 0.8 }]}
-                onPress={() => router.back()}
+                onPress={handleClose}
             >
                 <X size={24} color={Colors.primary} />
             </Pressable>

@@ -1,13 +1,16 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { View, Text, FlatList, TextInput, Pressable, KeyboardAvoidingView, Platform, ActivityIndicator, StyleSheet, Keyboard, Alert } from 'react-native';
+import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, FlatList, Pressable, KeyboardAvoidingView, Platform, StyleSheet, Alert } from 'react-native';
+import AnimatedReanimated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Send, Mic, Trash2, Image as ImageIcon, X, Play, Pause, Square } from 'lucide-react-native';
+import { X } from 'lucide-react-native';
 import { MessageBubble } from './MessageBubble';
-import { LiveAudioWaveform } from './LiveAudioWaveform';
 import { ImagePreview } from './ImagePreview';
+import { ChatInputBar } from './ChatInputBar';
 import { ReplyPreview } from './ReplyPreview';
+import { SkeletonMessageBubble, SKELETON_IDS } from './SkeletonMessageBubble';
 import { ReactionViewerModal } from './ReactionViewerModal';
 import { ChatStyles, CompactChatOverrides } from '../constants/ChatStyles';
+import { WhatsAppChatStyles } from '../constants/WhatsAppChatStyles';
 import { Colors } from '../constants/Colors';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
@@ -67,7 +70,7 @@ export function SharedChatUI({
     sending,
     headerComponent,
     bannerComponent,
-    placeholderText = "Message...",
+    placeholderText,
     showLanguageFlags = false,
     senderKey = "sender",
     isRecording,
@@ -76,6 +79,7 @@ export function SharedChatUI({
     onStartRecording,
     onCancelRecording,
     onSendRecording,
+    onReleaseRecording,
     typingIndicatorComponent,
     flatListRef,
     userId,
@@ -87,7 +91,9 @@ export function SharedChatUI({
     groupName = null,
     groupLanguage = null,
     getMessageGroupLabel = null,
-    currentChallenge = null, // New Prop: Full challenge object for context
+    currentChallenge = null,
+    groupMembersReadAt = [], // { user_id, last_read_at }[] for read receipts
+    currentUserId = null,
     onAvatarPress,
     onShowInspiration, // New Prop
     onGetTranscript, // (messageId) => Promise<transcript> for voice messages without transcript
@@ -103,11 +109,15 @@ export function SharedChatUI({
     onPauseRecording,
     onResumeRecording,
     compact = false, // smaller messages so ~5–7 fit (e.g. Language Soup feed)
+    theme, // 'whatsapp' = paper bg, simple date sep, light input bar
 }) {
     // ========== INTERNAL STATE (Self-Contained) ==========
-    const [replyTo, setReplyTo] = useState(null); // { messageId, content, senderName }
-    const [editingMessage, setEditingMessage] = useState(null); // { messageId, originalContent }
+    const [replyTo, setReplyTo] = useState(null);
+    const [editingMessage, setEditingMessage] = useState(null);
     const [reactionViewer, setReactionViewer] = useState({ visible: false, reactions: [], users: [] });
+    const scrollOffsetRef = useRef(0);
+    const prevMessageCountRef = useRef(messages?.length ?? 0);
+    const [newMessagesCount, setNewMessagesCount] = useState(0);
 
     // ========== INTERNAL HANDLERS ==========
     const handleReply = (message) => {
@@ -154,28 +164,13 @@ export function SharedChatUI({
     };
 
     const handleReactionPress = async (message, emojiClicked, userIdsOfEmoji) => {
-        console.log('[SharedChatUI] handleReactionPress TRIGGERED', {
-            messageId: message?.id,
-            emojiClicked,
-            userIdsCount: userIdsOfEmoji?.length
-        });
-
         const { haptics } = require('../utils/haptics');
         haptics.light();
 
-        // Get ALL reactions for this message to populate the modal fully
         const allMessageReactions = reactions[message.id] || [];
-        console.log('[SharedChatUI] allMessageReactions found:', allMessageReactions.length);
+        if (allMessageReactions.length === 0) return;
 
-        if (allMessageReactions.length === 0) {
-            console.warn('[SharedChatUI] No reactions found for message', message.id);
-            return;
-        }
-
-        // Get all unique user IDs involved in any reaction to this message
         const allUserIds = [...new Set(allMessageReactions.map(r => r.user_id))];
-        console.log('[SharedChatUI] Fetching profiles for User IDs:', allUserIds);
-
         const { data: users, error } = await supabase
             .from('app_users')
             .select('id, display_name, avatar_url')
@@ -185,9 +180,6 @@ export function SharedChatUI({
             console.error('[SharedChatUI] Error fetching reaction users:', error);
             return;
         }
-
-        console.log('[SharedChatUI] Users fetched:', users?.length);
-        console.log('[SharedChatUI] Setting ReactionViewer visible NOW');
 
         setTimeout(() => {
             setReactionViewer({
@@ -228,6 +220,7 @@ export function SharedChatUI({
                 // Clear edit state
                 setEditingMessage(null);
                 onTextChange('');
+                try { require('../utils/haptics').haptics.success(); } catch (_) {}
             } catch (error) {
                 console.error('[SharedChatUI] Edit error:', error);
                 Alert.alert('Error', 'Failed to edit message');
@@ -236,23 +229,21 @@ export function SharedChatUI({
         }
 
         // Handle Reply Mode - Pass replyTo data to parent's onSendText
-        // The parent should handle inserting reply_to field
         if (replyTo) {
-            // Call parent's send with reply context
-            // For now, just call onSendText and clear reply
             await onSendText();
             setReplyTo(null);
+            try { require('../utils/haptics').haptics.success(); } catch (_) {}
             return;
         }
 
         // Regular send
         await onSendText();
+        try { require('../utils/haptics').haptics.success(); } catch (_) {}
     };
 
     const insets = useSafeAreaInsets();
     const internalFlatListRef = useRef(null);
-    // Use only internal ref for FlatList to avoid frozen-ref errors when ref is set/cleared by React
-    const listRef = internalFlatListRef;
+    const listRef = flatListRef ?? internalFlatListRef;
     const [imagePreview, setImagePreview] = useState(null);
     const [mediaType, setMediaType] = useState('image');
 
@@ -263,30 +254,17 @@ export function SharedChatUI({
         }
     }, [editingMessage, replyTo]);
 
-    // Android Keyboard Handling: specific listener for when keyboard is fully shown
-    useEffect(() => {
-        if (Platform.OS === 'android') {
-            const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
-                // Scroll to bottom immediately without animation to reduce perceived lag
-                listRef.current?.scrollToOffset({ offset: 0, animated: false });
-            });
-            return () => showSubscription.remove();
-        }
-    }, []);
-
     const handlePickImage = async () => {
         try {
             const result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ['images', 'videos'],
                 allowsEditing: false,
                 quality: 0.8,
-                videoMaxDuration: 60, // 60 seconds max
+                videoMaxDuration: 60,
             });
-
             if (!result.canceled && result.assets[0]) {
                 const asset = result.assets[0];
                 setImagePreview(asset.uri);
-                // Detect media type from asset or URI
                 setMediaType(asset.type || (asset.uri.match(/\.(mp4|mov|m4v)$/i) ? 'video' : 'image'));
             }
         } catch (error) {
@@ -294,15 +272,44 @@ export function SharedChatUI({
         }
     };
 
+    const handleTakePhoto = async () => {
+        try {
+            const { status } = await ImagePicker.requestCameraPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Camera access', 'Allow camera access to take a photo.');
+                return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
+                mediaTypes: ['images'],
+                allowsEditing: false,
+                quality: 0.8,
+            });
+            if (!result.canceled && result.assets[0]) {
+                setImagePreview(result.assets[0].uri);
+                setMediaType('image');
+            }
+        } catch (error) {
+            console.error('[SharedChatUI] Error taking photo:', error);
+        }
+    };
+
+    const handlePhotoPress = () => {
+        Alert.alert(
+            'Photo',
+            'Take a photo or choose from your camera roll',
+            [
+                { text: 'Take photo', onPress: handleTakePhoto },
+                { text: 'Choose from library', onPress: handlePickImage },
+                { text: 'Cancel', style: 'cancel' },
+            ]
+        );
+    };
+
     const handleSendImage = async (caption) => {
-        console.log('[SharedChatUI] handleSendImage called', { imagePreview, mediaType, caption, hasCallback: !!onPickImage });
         if (imagePreview && onPickImage) {
-            console.log('[SharedChatUI] Calling onPickImage with:', { uri: imagePreview, type: mediaType, caption });
             await onPickImage({ uri: imagePreview, type: mediaType, caption });
             setImagePreview(null);
             setMediaType('image');
-        } else {
-            console.log('[SharedChatUI] NOT calling - missing:', { imagePreview: !!imagePreview, onPickImage: !!onPickImage });
         }
     };
 
@@ -311,14 +318,54 @@ export function SharedChatUI({
         setMediaType('image');
     };
 
+    const skeletonData = useMemo(() => SKELETON_IDS.slice(0, 3).map((id, i) => ({ id, type: 'skeleton', isMe: i % 2 === 1 })), []);
+
+    const voiceMessagesList = useMemo(() => {
+        const list = (messages || []).filter((m) => m && m.message_type === 'voice');
+        return list.map((m) => ({
+            url: m.media_url || m.content,
+            durationSeconds: m.duration_seconds ?? (m.duration ? m.duration / 1000 : undefined),
+            messageId: m.id,
+            senderName: m.sender?.display_name,
+            senderAvatar: m.sender?.avatar_url,
+            senderStatus: m.sender?.status_text,
+            groupName: getMessageGroupLabel ? getMessageGroupLabel(m) : groupName,
+            groupId,
+        }));
+    }, [messages, groupName, groupId, getMessageGroupLabel]);
+
+    useEffect(() => {
+        const prev = prevMessageCountRef.current;
+        const count = messages?.length ?? 0;
+        if (count > prev && scrollOffsetRef.current > 30) {
+            setNewMessagesCount((n) => n + (count - prev));
+        }
+        prevMessageCountRef.current = count;
+    }, [messages?.length, loading]);
+
+    const scrollToBottom = () => {
+        listRef.current?.scrollToOffset({ offset: 0, animated: true });
+        setNewMessagesCount(0);
+    };
+
+    const isWhatsApp = theme === 'whatsapp';
+    const listStyles = isWhatsApp ? WhatsAppChatStyles : ChatStyles;
+    const listContentStyle = contentContainerStyle ?? (compact ? [ChatStyles.messagesList, CompactChatOverrides.messagesList] : listStyles.messagesList);
+
     const renderMessage = ({ item }) => {
+        if (item.type === 'skeleton') {
+            return <SkeletonMessageBubble isMe={item.isMe} />;
+        }
         if (item.type === 'date_separator') {
+            const sepStyle = compact ? [ChatStyles.dateSeparator, CompactChatOverrides.dateSeparator] : listStyles.dateSeparator;
+            const badgeStyle = compact ? [ChatStyles.dateSeparatorBadge, CompactChatOverrides.dateSeparatorBadge] : listStyles.dateSeparatorBadge;
+            const textStyle = compact ? [ChatStyles.dateSeparatorText, CompactChatOverrides.dateSeparatorText] : listStyles.dateSeparatorText;
             return (
-                <View style={compact ? [ChatStyles.dateSeparator, CompactChatOverrides.dateSeparator] : ChatStyles.dateSeparator}>
-                    <View style={compact ? [ChatStyles.dateSeparatorBadge, CompactChatOverrides.dateSeparatorBadge] : ChatStyles.dateSeparatorBadge}>
-                        <Text style={compact ? [ChatStyles.dateSeparatorText, CompactChatOverrides.dateSeparatorText] : ChatStyles.dateSeparatorText}>{item.label}</Text>
+                <AnimatedReanimated.View entering={FadeIn.duration(280)} style={sepStyle}>
+                    <View style={badgeStyle}>
+                        <Text style={textStyle}>{item.label}</Text>
                     </View>
-                </View>
+                </AnimatedReanimated.View>
             );
         }
 
@@ -334,6 +381,8 @@ export function SharedChatUI({
 
         const messageReactions = reactions[item.id] || [];
         const perMessageGroupName = getMessageGroupLabel ? getMessageGroupLabel(item) : null;
+        const others = (groupMembersReadAt || []).filter((m) => m.user_id !== currentUserId);
+        const seen = isMe && item.created_at && others.length > 0 && others.every((m) => new Date(m.last_read_at || 0) >= new Date(item.created_at));
         return (
             <MessageBubble
                 message={item}
@@ -353,7 +402,10 @@ export function SharedChatUI({
                 onShowInspiration={onShowInspiration}
                 onGetTranscript={onGetTranscript}
                 currentChallenge={currentChallenge}
+                currentUserId={currentUserId ?? userId}
                 compact={compact}
+                seen={seen}
+                voiceMessagesList={voiceMessagesList}
             />
         );
     };
@@ -362,7 +414,7 @@ export function SharedChatUI({
         <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={{ flex: 1 }}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 80} // Adjusted for both platforms
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
         >
             {/* Custom Header */}
             {headerComponent}
@@ -373,14 +425,39 @@ export function SharedChatUI({
             {/* Messages List */}
             <FlatList
                 ref={listRef}
-                data={messages}
+                data={loading ? skeletonData : messages}
                 renderItem={renderMessage}
                 keyExtractor={(item) => item.id}
                 inverted={inverted}
                 initialScrollIndex={0}
+                initialNumToRender={14}
+                maxToRenderPerBatch={10}
+                windowSize={11}
+                removeClippedSubviews={Platform.OS !== 'web'}
                 keyboardDismissMode="on-drag"
-                contentContainerStyle={contentContainerStyle || (compact ? [ChatStyles.messagesList, CompactChatOverrides.messagesList] : ChatStyles.messagesList)}
+                onScroll={(e) => {
+                    const y = e.nativeEvent.contentOffset.y;
+                    scrollOffsetRef.current = y;
+                    if (y <= 30) setNewMessagesCount(0);
+                }}
+                scrollEventThrottle={16}
+                contentContainerStyle={[listContentStyle, { paddingBottom: 28 }]}
+                ListEmptyComponent={!loading && (!messages || messages.length === 0) ? (
+                    <View style={styles.emptyWrap}>
+                        <Text style={styles.emptyTitle}>tap the mic to talk or type a message.</Text>
+                    </View>
+                ) : null}
             />
+            {newMessagesCount > 0 && (
+                <Pressable
+                    onPress={() => { try { require('../utils/haptics').haptics.light(); } catch (_) {} scrollToBottom(); }}
+                    style={({ pressed }) => [styles.newMessagesPill, pressed && { opacity: 0.9 }]}
+                >
+                    <Text style={styles.newMessagesPillText}>
+                        {newMessagesCount} new message{newMessagesCount !== 1 ? 's' : ''}
+                    </Text>
+                </Pressable>
+            )}
 
             {/* Typing Indicator */}
             {typingIndicatorComponent}
@@ -398,12 +475,15 @@ export function SharedChatUI({
                         <View style={ChatStyles.editPreviewInline}>
                             <View style={ChatStyles.editBarInline} />
                             <View style={ChatStyles.editContentInline}>
-                                <Text style={ChatStyles.editLabelInline}>Editing message</Text>
+                                <Text style={ChatStyles.editLabelInline}>editing message</Text>
                                 <Text style={ChatStyles.editMessageInline} numberOfLines={1}>
                                     {editingMessage.originalContent}
                                 </Text>
                             </View>
-                            <Pressable onPress={handleCancelEdit} style={ChatStyles.editCloseButtonInline}>
+                            <Pressable
+                                onPress={() => { try { require('../utils/haptics').haptics.light(); } catch (_) {} handleCancelEdit(); }}
+                                style={({ pressed }) => [ChatStyles.editCloseButtonInline, pressed && { opacity: 0.7 }]}
+                            >
                                 <X size={18} color="#666" />
                             </Pressable>
                         </View>
@@ -411,117 +491,30 @@ export function SharedChatUI({
                 </View>
             )}
 
-            {/* Input Area */}
-            {(() => {
-                const lastMsg = messages?.find(m => m.type !== 'date_separator');
-                const isFromOther = chatType === 'support' ? lastMsg?.from_admin : (lastMsg?.sender_id !== userId && lastMsg?.user_id !== userId);
-                const showVoiceNudge = lastMsg?.message_type === 'voice' && isFromOther && !isRecording && !previewAudio;
-                return showVoiceNudge ? (
-                    <View style={styles.voiceNudgeWrap}>
-                        <Text style={styles.voiceNudgeText}>Reply with voice?</Text>
-                    </View>
-                ) : null;
-            })()}
-            <View style={[
-                ChatStyles.inputContainer,
-                (replyTo || editingMessage) && ChatStyles.inputContainerWithPreview,
-                { paddingBottom: Math.max(insets.bottom, 10) }
-            ]}>
-                {isRecording || previewAudio ? (
-                    // Voice Recording/Preview UI
-                    <View style={styles.voiceRecordingContainer}>
-                        {/* Top Row: Timer + Waveform OR Playback */}
-                        <View style={styles.waveformRow}>
-                            {previewAudio ? (
-                                // Preview mode: Show playback controls
-                                <View style={styles.liveWaveformBar}>
-                                    <Pressable onPress={onTogglePreview} style={styles.playPauseButton}>
-                                        {isPlayingPreview ? (
-                                            <Pause size={20} color="#00adef" />
-                                        ) : (
-                                            <Play size={20} color="#00adef" />
-                                        )}
-                                    </Pressable>
-                                    <View style={styles.waveformProgress}>
-                                        <View style={[styles.progressFill, { width: `${(previewPosition || 0) * 100}%` }]} />
-                                    </View>
-                                    <Text style={styles.timerText}>
-                                        {Math.floor(previewAudio.duration / 60)}:{String(previewAudio.duration % 60).padStart(2, '0')}
-                                    </Text>
-                                </View>
-                            ) : (
-                                // Recording mode: Show live waveform
-                                <View style={styles.liveWaveformBar}>
-                                    <Text style={styles.timerText}>
-                                        {Math.floor(recordingDuration / 60)}:{String(Math.floor(recordingDuration % 60)).padStart(2, '0')}
-                                    </Text>
-                                    <View style={styles.waveformWrapper}>
-                                        <LiveAudioWaveform
-                                            metering={metering}
-                                            recordingDuration={recordingDuration}
-                                            isRecording={isRecording}
-                                        />
-                                    </View>
-                                </View>
-                            )}
-                        </View>
-
-                        {/* Bottom Row: Action Buttons */}
-                        <View style={styles.actionButtonRow}>
-                            {/* Trash - Left */}
-                            <Pressable
-                                onPress={previewAudio ? onDiscardPreview : onCancelRecording}
-                                style={styles.trashButton}
-                            >
-                                <Trash2 size={24} color="#8E8E93" />
-                            </Pressable>
-
-                            {/* Stop/Send Button - Right */}
-                            <Pressable
-                                onPress={previewAudio ? onConfirmSend : onSendRecording}
-                                style={styles.sendButton}
-                            >
-                                {previewAudio ? (
-                                    <Send size={22} color="#fff" />
-                                ) : (
-                                    <Square size={20} color="#fff" fill="#fff" />
-                                )}
-                            </Pressable>
-                        </View>
-                    </View>
-                ) : (
-                    <View style={ChatStyles.standardInputBar}>
-                        <TextInput
-                            style={[
-                                ChatStyles.textInput,
-                                editingMessage && ChatStyles.textInputEditing
-                            ]}
-                            value={textInput}
-                            onChangeText={onTextChange}
-                            placeholder={placeholderText}
-                            placeholderTextColor={Colors.textLight}
-                            multiline
-                            maxLength={500}
-                            onFocus={() => {
-                                // Default focus handler
-                            }}
-                        />
-                        {textInput.trim() ? (
-                            <Pressable onPress={handleSendWrapper} disabled={sending} style={ChatStyles.sendButton}>
-                                <Send size={24} color="#fff" />
-                            </Pressable>
-                        ) : (
-                            <>
-                                <Pressable onPress={handlePickImage} style={ChatStyles.micButton}>
-                                    <ImageIcon size={24} color={Colors.primary} />
-                                </Pressable>
-                                <Pressable onPress={onStartRecording} style={ChatStyles.micButton}>
-                                    <Mic size={26} color={Colors.primary} />
-                                </Pressable>
-                            </>
-                        )}
-                    </View>
-                )}
+            {/* Input bar: text, photo, voice. Green for group chat. */}
+            <View style={[isWhatsApp ? WhatsAppChatStyles.inputContainer : ChatStyles.inputContainer, (replyTo || editingMessage) && ChatStyles.inputContainerWithPreview]}>
+                <ChatInputBar
+                    theme={chatType === 'group' || chatType === 'support' ? 'creamGreen' : theme}
+                    value={textInput}
+                    onChangeText={onTextChange}
+                    onSendText={handleSendWrapper}
+                    sending={sending}
+                    placeholder={placeholderText}
+                    isEditing={!!editingMessage}
+                    onPhotoPress={handlePhotoPress}
+                    onStartRecording={onStartRecording}
+                    isRecording={isRecording}
+                    recordingDuration={recordingDuration}
+                    metering={metering}
+                    onCancelRecording={onCancelRecording}
+                    onSendRecording={onSendRecording}
+                    previewAudio={previewAudio}
+                    isPlayingPreview={isPlayingPreview}
+                    previewPosition={previewPosition}
+                    onTogglePreview={onTogglePreview}
+                    onDiscardPreview={onDiscardPreview}
+                    onConfirmSend={onConfirmSend}
+                />
             </View>
 
             <ImagePreview
@@ -544,128 +537,59 @@ export function SharedChatUI({
 }
 
 const styles = StyleSheet.create({
-    voiceRecordingContainer: {
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        paddingVertical: 12,
-        paddingHorizontal: 16,
-        marginHorizontal: 8,
-        marginBottom: 8,
-        borderWidth: 1,
-        borderColor: '#E5E5E5',
-    },
-    waveformRow: {
-        marginBottom: 12,
-    },
-    liveWaveformBar: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 12,
-    },
-    playPauseButton: {
-        padding: 4,
-    },
-    playbackBar: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#F5F5F5',
-        borderRadius: 20,
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        gap: 8,
-    },
-    waveformProgress: {
-        flex: 1,
-        height: 4,
-        backgroundColor: '#E0E0E0',
-        borderRadius: 2,
-        position: 'relative',
-    },
-    progressFill: {
-        height: '100%',
-        backgroundColor: '#00adef',
-        borderRadius: 2,
-        position: 'absolute',
-        left: 0,
-        top: 0,
-    },
-    progressDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: '#00adef',
-    },
-    waveformBars: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 2,
-    },
-    waveformBar: {
-        width: 3,
-        backgroundColor: '#CCC',
-        borderRadius: 1.5,
-    },
-    waveformWrapper: {
-        flex: 1,
-        height: 32,
-        maxWidth: 200,
-        overflow: 'hidden',
-    },
-    timerText: {
-        color: '#333',
-        fontSize: 16,
-        fontWeight: '600',
-        fontVariant: ['tabular-nums'],
-    },
-    actionButtonRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-    },
-    trashButton: {
-        padding: 12,
-    },
-    centerButton: {
-        padding: 12,
-    },
-    pauseButton: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        borderWidth: 2,
-        borderColor: '#ec008b',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    pauseIcon: {
-        flexDirection: 'row',
-        gap: 4,
-    },
-    pauseBar: {
-        width: 4,
-        height: 16,
-        backgroundColor: '#ec008b',
-        borderRadius: 2,
-    },
-    sendButton: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: '#00adef',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
     voiceNudgeWrap: {
-        paddingHorizontal: 12,
-        paddingTop: 4,
-        paddingBottom: 2,
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        marginHorizontal: 12,
+        marginBottom: 4,
+        backgroundColor: 'rgba(0,173,239,0.1)',
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(0,173,239,0.2)',
+    },
+    voiceNudgePressed: {
+        opacity: 0.85,
     },
     voiceNudgeText: {
-        fontSize: 13,
-        fontWeight: '600',
+        fontSize: 14,
+        fontWeight: '700',
+        color: Colors.primary,
+    },
+    newMessagesPill: {
+        position: 'absolute',
+        bottom: 100,
+        alignSelf: 'center',
+        backgroundColor: SOUP_COLORS.blue,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 24,
+        shadowColor: SOUP_COLORS.blue,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 6,
+        elevation: 5,
+    },
+    newMessagesPillText: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#fff',
+    },
+    emptyWrap: {
+        paddingVertical: 56,
+        paddingHorizontal: 32,
+        alignItems: 'center',
+    },
+    emptyTitle: {
+        fontSize: 20,
+        fontWeight: '800',
+        color: Colors.primary,
+        marginBottom: 10,
+    },
+    emptySub: {
+        fontSize: 16,
         color: Colors.textLight,
-        fontStyle: 'italic',
+        lineHeight: 24,
+        textAlign: 'center',
     },
 });
 

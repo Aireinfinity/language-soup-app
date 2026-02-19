@@ -1,20 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator, Alert, TextInput, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Users, Plus, LogOut } from 'lucide-react-native';
+import { ArrowLeft, Plus, LogOut } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { useQuests } from '../contexts/QuestContext';
 import { pickRandom, JOINING_LABELS } from '../constants/CopyPhilosophy';
+import { getAvatarSource, sortAvatarUrlsRealFirst } from '../utils/soupUtils';
 
 const SOUP_COLORS = {
     blue: '#00adef',
+    turquoise: '#00ADEF',
     pink: '#ec008b',
     green: '#19b091',
-    cream: '#fffbf5',
-    subtext: '#666',
+    cream: '#FDF5E6',
+    text: '#2d3436',
+    subtext: '#636e72',
 };
+
+function displayGroupName(name) {
+    if (!name || typeof name !== 'string') return name || '';
+    return name.replace(/\s*\(click here!\)\s*/gi, '').trim() || name;
+}
 
 export default function BrowseGroups() {
     const { user } = useAuth();
@@ -25,6 +33,8 @@ export default function BrowseGroups() {
     const [myGroupIds, setMyGroupIds] = useState([]);
     const [actionLoading, setActionLoading] = useState({}); // Track loading state per group
     const [joinLoadingLabel, setJoinLoadingLabel] = useState('joining…');
+    const [search, setSearch] = useState('');
+    const [memberAvatarsByGroupId, setMemberAvatarsByGroupId] = useState({});
 
     useEffect(() => {
         loadGroups();
@@ -32,7 +42,6 @@ export default function BrowseGroups() {
 
     const loadGroups = async () => {
         try {
-            // Get groups user is already in
             const { data: memberData } = await supabase
                 .from('app_group_members')
                 .select('group_id')
@@ -41,7 +50,6 @@ export default function BrowseGroups() {
             const joinedIds = memberData?.map(m => m.group_id) || [];
             setMyGroupIds(joinedIds);
 
-            // Get all groups
             const { data, error } = await supabase
                 .from('app_groups')
                 .select('*')
@@ -49,7 +57,34 @@ export default function BrowseGroups() {
                 .order('member_count', { ascending: false });
 
             if (error) throw error;
-            setGroups(data || []);
+            const groupList = data || [];
+            setGroups(groupList);
+
+            if (groupList.length > 0) {
+                const ids = groupList.map((g) => g.id);
+                const { data: members } = await supabase
+                    .from('app_group_members')
+                    .select('group_id, user_id')
+                    .in('group_id', ids);
+                const userIds = [...new Set((members || []).map((m) => m.user_id))];
+                if (userIds.length > 0) {
+                    const { data: users } = await supabase
+                        .from('app_users')
+                        .select('id, avatar_url')
+                        .in('id', userIds);
+                    const urlById = (users || []).reduce((acc, u) => ({ ...acc, [u.id]: u.avatar_url }), {});
+                    const byGroup = {};
+                    (members || []).forEach((m) => {
+                        if (!byGroup[m.group_id]) byGroup[m.group_id] = [];
+                        const url = urlById[m.user_id];
+                        if (url && byGroup[m.group_id].length < 5) byGroup[m.group_id].push(url);
+                    });
+                    Object.keys(byGroup).forEach((gid) => {
+                        byGroup[gid] = sortAvatarUrlsRealFirst(byGroup[gid]).slice(0, 5);
+                    });
+                    setMemberAvatarsByGroupId(byGroup);
+                }
+            }
         } catch (error) {
             console.error('Error loading groups:', error);
         } finally {
@@ -118,63 +153,78 @@ export default function BrowseGroups() {
         }
     };
 
+    const filteredGroups = search.trim()
+        ? groups.filter(
+            (g) =>
+                (g.name || '').toLowerCase().includes(search.trim().toLowerCase()) ||
+                (g.language || '').toLowerCase().includes(search.trim().toLowerCase())
+        )
+        : groups;
+
     const renderGroup = ({ item }) => {
         const isMember = myGroupIds.includes(item.id);
         const isLoading = actionLoading[item.id];
+        const displayName = displayGroupName(item.name);
+        const count = item.member_count || 0;
+        const avatarUrls = memberAvatarsByGroupId[item.id] || [];
 
         return (
-            <View style={styles.groupCard}>
-                <View style={styles.groupHeader}>
-                    <Text style={styles.groupName}>{item.name}</Text>
-                    <Text style={styles.groupLanguage}>{item.language}</Text>
-                </View>
-
-                {item.description && (
-                    <Text style={styles.groupDescription}>{item.description}</Text>
-                )}
-
-                <View style={styles.groupFooter}>
-                    <View style={styles.memberInfo}>
-                        <Users size={14} color={SOUP_COLORS.subtext} />
-                        <Text style={styles.memberCount}>{item.member_count} members</Text>
-                    </View>
-
-                    {isMember ? (
-                        <View style={styles.memberActions}>
-                            <Pressable
-                                style={({ pressed }) => [styles.button, styles.viewButton, pressed && { opacity: 0.9 }]}
-                                onPress={() => router.push(`/chat/${item.id}`)}
-                            >
-                                <Text style={styles.viewButtonText}>peek 👀</Text>
-                            </Pressable>
-                            <Pressable
-                                style={({ pressed }) => [styles.button, styles.leaveButton, pressed && { opacity: 0.9 }]}
-                                onPress={() => leaveGroup(item.id)}
-                            >
-                                <LogOut size={14} color={SOUP_COLORS.pink} />
-                            </Pressable>
+            <Pressable
+                style={({ pressed }) => [
+                    styles.row,
+                    pressed && { opacity: 0.9 },
+                    isMember && styles.rowMine,
+                ]}
+                onPress={() => !isMember && !isLoading && joinGroup(item.id)}
+                disabled={isMember || isLoading}
+            >
+                <View style={styles.rowLeft}>
+                    {avatarUrls.length > 0 && (
+                        <View style={styles.avatarRow}>
+                            {avatarUrls.slice(0, 5).map((url, i) => {
+                                const source = getAvatarSource(url);
+                                return source ? (
+                                    <Image key={i} source={source} style={styles.avatarDot} />
+                                ) : (
+                                    <View key={i} style={[styles.avatarDot, styles.avatarDotPlaceholder]}>
+                                        <Text style={styles.avatarDotLetter}>?</Text>
+                                    </View>
+                                );
+                            })}
                         </View>
-                    ) : (
-                        <Pressable
-                            style={({ pressed }) => [styles.button, styles.joinButton, pressed && !isLoading && { opacity: 0.9 }]}
-                            onPress={() => joinGroup(item.id)}
-                            disabled={isLoading}
-                        >
-                            {isLoading ? (
-                                <>
-                                    <ActivityIndicator size="small" color="#fff" />
-                                    <Text style={styles.joinButtonText}>{joinLoadingLabel}</Text>
-                                </>
-                            ) : (
-                                <>
-                                    <Plus size={16} color="#fff" />
-                                    <Text style={styles.joinButtonText}>join</Text>
-                                </>
-                            )}
-                        </Pressable>
                     )}
+                    <Text style={[styles.rowText, isMember && styles.rowTextMine]} numberOfLines={1}>
+                        {displayName}
+                    </Text>
+                    <Text style={styles.rowCount}>
+                        {count} {count === 1 ? 'person' : 'people'}
+                        {item.language ? ` · ${item.language}` : ''}
+                    </Text>
                 </View>
-            </View>
+                {isMember ? (
+                    <View style={styles.rowActions}>
+                        <Pressable
+                            style={({ pressed: p }) => [styles.peekBtn, p && { opacity: 0.9 }]}
+                            onPress={() => router.push(`/chat/${item.id}`)}
+                        >
+                            <Text style={styles.peekBtnText}>peek</Text>
+                        </Pressable>
+                        <Pressable
+                            style={({ pressed: p }) => [styles.leaveBtn, p && { opacity: 0.9 }]}
+                            onPress={() => leaveGroup(item.id)}
+                        >
+                            <LogOut size={14} color={SOUP_COLORS.pink} />
+                        </Pressable>
+                    </View>
+                ) : isLoading ? (
+                    <View style={styles.rowRight}>
+                        <ActivityIndicator size="small" color={SOUP_COLORS.turquoise} />
+                        <Text style={styles.rowAdd}>{joinLoadingLabel}</Text>
+                    </View>
+                ) : (
+                    <Text style={styles.rowAdd}>+ join</Text>
+                )}
+            </Pressable>
         );
     };
 
@@ -189,23 +239,28 @@ export default function BrowseGroups() {
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
             <View style={styles.header}>
-                <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.backButton, pressed && { opacity: 0.9 }]}>
-                    <ArrowLeft size={24} color="#000" />
+                <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.8 }]}>
+                    <ArrowLeft size={24} color={SOUP_COLORS.text} />
                 </Pressable>
-                <View>
-                    <Text style={styles.headerTitle}>Browse Groups</Text>
-                    <Text style={styles.headerSubtitle}>Find your perfect language community</Text>
-                </View>
+                <Text style={styles.title}>join groups</Text>
             </View>
-
+            <Text style={styles.subtitle}>pick a group to join. we'll add you and you'll see it in your feed.</Text>
+            <TextInput
+                style={styles.search}
+                placeholder="search groups…"
+                placeholderTextColor={SOUP_COLORS.subtext}
+                value={search}
+                onChangeText={setSearch}
+            />
             <FlatList
-                data={groups}
+                data={filteredGroups}
                 renderItem={renderGroup}
                 keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.list}
+                style={styles.list}
+                contentContainerStyle={styles.listContent}
                 ListEmptyComponent={
                     <View style={styles.empty}>
-                        <Text style={styles.emptyText}>No groups available yet</Text>
+                        <Text style={styles.emptyText}>no groups yet</Text>
                     </View>
                 }
             />
@@ -224,124 +279,77 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     header: {
-        paddingHorizontal: 20,
-        paddingTop: 10,
-        paddingBottom: 20,
         flexDirection: 'row',
         alignItems: 'center',
+        paddingHorizontal: 12,
+        paddingVertical: 12,
         gap: 12,
     },
-    headerTitle: {
-        fontSize: 28,
-        fontWeight: '800',
-        color: '#000',
-        marginBottom: 4,
-    },
-    headerSubtitle: {
-        fontSize: 14,
-        color: SOUP_COLORS.subtext,
-    },
-    backButton: {
-        padding: 4,
-    },
-    list: {
-        padding: 16,
-    },
-    groupCard: {
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        padding: 16,
-        marginBottom: 12,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    groupHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    groupName: {
+    backBtn: { padding: 8 },
+    title: {
         fontSize: 18,
-        fontWeight: '700',
-        color: '#000',
-        flex: 1,
+        fontWeight: '800',
+        color: SOUP_COLORS.text,
     },
-    groupLanguage: {
+    subtitle: {
         fontSize: 13,
-        fontWeight: '600',
-        color: SOUP_COLORS.blue,
-        backgroundColor: `${SOUP_COLORS.blue}15`,
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-    },
-    groupDescription: {
-        fontSize: 14,
         color: SOUP_COLORS.subtext,
-        lineHeight: 20,
+        paddingHorizontal: 20,
         marginBottom: 12,
     },
-    groupFooter: {
+    search: {
+        height: 44,
+        marginHorizontal: 16,
+        marginBottom: 12,
+        paddingHorizontal: 14,
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        fontSize: 16,
+        color: SOUP_COLORS.text,
+    },
+    list: { flex: 1 },
+    listContent: { paddingBottom: 24 },
+    row: {
         flexDirection: 'row',
+        alignItems: 'center',
         justifyContent: 'space-between',
-        alignItems: 'center',
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: 'rgba(0,0,0,0.06)',
     },
-    memberInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-    },
-    memberCount: {
-        fontSize: 13,
-        color: SOUP_COLORS.subtext,
-    },
-    button: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-    },
-    joinButton: {
-        backgroundColor: SOUP_COLORS.blue,
-    },
-    joinButtonText: {
-        fontSize: 14,
+    rowMine: { backgroundColor: 'rgba(0,173,239,0.06)' },
+    rowLeft: { flex: 1, minWidth: 0 },
+    avatarRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+    avatarDot: { width: 24, height: 24, borderRadius: 12, marginRight: -6, borderWidth: 2, borderColor: SOUP_COLORS.cream },
+    avatarDotPlaceholder: { backgroundColor: SOUP_COLORS.turquoise, justifyContent: 'center', alignItems: 'center' },
+    avatarDotLetter: { fontSize: 10, fontWeight: '800', color: '#fff' },
+    rowText: {
+        fontSize: 16,
         fontWeight: '600',
-        color: '#fff',
+        color: SOUP_COLORS.text,
     },
-    viewButton: {
-        backgroundColor: SOUP_COLORS.cream,
-        borderWidth: 1.5,
-        borderColor: SOUP_COLORS.blue,
-    },
-    viewButtonText: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: SOUP_COLORS.blue,
-    },
-    memberActions: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    leaveButton: {
-        backgroundColor: `${SOUP_COLORS.pink}15`,
-        borderWidth: 1.5,
-        borderColor: SOUP_COLORS.pink,
-        paddingHorizontal: 10,
-    },
-    empty: {
-        alignItems: 'center',
-        paddingVertical: 48,
-    },
-    emptyText: {
-        fontSize: 15,
+    rowTextMine: { color: SOUP_COLORS.subtext },
+    rowCount: {
+        fontSize: 12,
         color: SOUP_COLORS.subtext,
+        marginTop: 2,
     },
+    rowAdd: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: SOUP_COLORS.turquoise,
+    },
+    rowRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    rowActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    peekBtn: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
+        backgroundColor: 'rgba(0,173,239,0.15)',
+    },
+    peekBtnText: { fontSize: 13, fontWeight: '700', color: SOUP_COLORS.turquoise },
+    leaveBtn: { padding: 8 },
+    empty: { alignItems: 'center', paddingVertical: 48 },
+    emptyText: { fontSize: 15, color: SOUP_COLORS.subtext },
 });

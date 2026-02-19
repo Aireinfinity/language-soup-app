@@ -34,7 +34,7 @@ export function ChallengeCard({ title, description, timeLeft, style, metadata, l
                     onPress={() => setShowInspiration(true)}
                 >
                     <Ionicons name="bulb-outline" size={16} color="#FFF" />
-                    <ThemedText style={styles.inspirationText}>Need ideas?</ThemedText>
+                    <ThemedText style={styles.inspirationText}>beginner phrase & vocab</ThemedText>
                 </TouchableOpacity>
             </View>
 

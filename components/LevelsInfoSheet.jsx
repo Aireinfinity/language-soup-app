@@ -1,17 +1,37 @@
 /**
  * Reusable "How levels work" sheet. Used from header (tap level) and can be used from profile.
+ * When speakLevel/listenLevel are passed, shows dynamic progress bars at the top.
  */
 import React from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, ScrollView } from 'react-native';
 
 const SOUP_COLORS = {
     blue: '#00adef',
+    green: '#19b091',
     cream: '#FDF5E6',
     text: '#2d3436',
     subtext: '#636e72',
 };
 
-export function LevelsInfoSheet({ visible, onClose }) {
+const MAX_LEVEL = 6;
+
+function LevelBar({ level, emoji, label }) {
+    const progress = Math.min(1, (level || 1) / MAX_LEVEL);
+    return (
+        <View style={styles.levelBarWrap}>
+            <View style={styles.levelBarRow}>
+                <Text style={styles.levelBarEmoji}>{emoji}</Text>
+                <Text style={styles.levelBarLabel}>{label}</Text>
+                <Text style={styles.levelBarNum}>Lv.{level || 1}</Text>
+            </View>
+            <View style={styles.levelBarTrack}>
+                <View style={[styles.levelBarFill, { width: `${progress * 100}%` }]} />
+            </View>
+        </View>
+    );
+}
+
+export function LevelsInfoSheet({ visible, onClose, speakLevel = 1, listenLevel = 1 }) {
     return (
         <Modal
             visible={visible}
@@ -25,10 +45,15 @@ export function LevelsInfoSheet({ visible, onClose }) {
                         <Text style={styles.closeBtnText}>✕</Text>
                     </Pressable>
                     <ScrollView showsVerticalScrollIndicator={false} style={styles.scroll}>
-                        <Text style={styles.title}>how levels work</Text>
+                        <Text style={styles.title}>talking with levels</Text>
                         <Text style={styles.intro}>
-                            Your level goes up the more you speak. More voice messages = higher level. Early levels = quick wins; later = real mastery.
+                            Your level goes up the more you speak. More voice messages = higher level.
                         </Text>
+                        <View style={styles.dynamicBars}>
+                            <LevelBar level={speakLevel} emoji="🎤" label="speak" />
+                            <LevelBar level={listenLevel} emoji="👂" label="listen" />
+                        </View>
+                        <Text style={styles.dividerTitle}>how levels work</Text>
 
                         <View style={styles.section}>
                             <Text style={styles.sectionTitle}>🎤 Output (speaking)</Text>
@@ -139,5 +164,49 @@ const styles = StyleSheet.create({
         fontStyle: 'italic',
         marginTop: 8,
         marginBottom: 24,
+    },
+    dynamicBars: {
+        marginBottom: 20,
+        padding: 16,
+        backgroundColor: SOUP_COLORS.cream,
+        borderRadius: 14,
+        gap: 14,
+    },
+    levelBarWrap: { marginBottom: 4 },
+    levelBarRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 6,
+        gap: 8,
+    },
+    levelBarEmoji: { fontSize: 16 },
+    levelBarLabel: {
+        flex: 1,
+        fontSize: 14,
+        fontWeight: '700',
+        color: SOUP_COLORS.text,
+    },
+    levelBarNum: {
+        fontSize: 13,
+        fontWeight: '800',
+        color: SOUP_COLORS.subtext,
+    },
+    levelBarTrack: {
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: 'rgba(0,0,0,0.08)',
+        overflow: 'hidden',
+    },
+    levelBarFill: {
+        height: '100%',
+        borderRadius: 5,
+        backgroundColor: SOUP_COLORS.green,
+    },
+    dividerTitle: {
+        fontSize: 16,
+        fontWeight: '800',
+        color: SOUP_COLORS.subtext,
+        marginBottom: 12,
+        textAlign: 'center',
     },
 });

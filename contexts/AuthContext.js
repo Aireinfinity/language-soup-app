@@ -24,9 +24,7 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => {
         // Check active sessions and subscribe to auth changes
-        console.log('[AuthContext] Checking session...');
         supabase.auth.getSession().then(({ data: { session } }) => {
-            console.log('[AuthContext] Session retrieved:', session ? 'Found User' : 'No User');
             setSession(session);
             setUser(session?.user ?? null);
             setLoading(false);
@@ -102,7 +100,6 @@ export const AuthProvider = ({ children }) => {
         const isPublicRoute = publicRoutes.includes(currentRoute) || !currentRoute;
 
         if (!user && !isPublicRoute) {
-            console.log('[Auth] Redirecting to login. User:', user, 'Route:', currentRoute);
             // Redirect to login if not authenticated and trying to access protected route
             router.replace('/login');
         } else if (user) {
@@ -118,7 +115,6 @@ export const AuthProvider = ({ children }) => {
             const isInitialLoad = !segments || segments.length === 0 || (segments.length === 1 && (segments[0] === '' || segments[0] === 'index'));
 
             if (isInitialLoad && !bootScreenShown && !inOnboardingFlow) {
-                console.log('[Auth] Initial authenticated load, checking profile...');
                 checkProfileAndRedirect(user, true, false, segments[0]);
             }
         }
@@ -141,19 +137,10 @@ export const AuthProvider = ({ children }) => {
 
             setProfileChecked(true);
 
-            // 2. Navigation Decisions
-            if (hasGroups) {
-                // Determine if we should redirect (only if we are "lost" in onboarding/login)
-                if (inAuthGroup || inOnboarding || currentSegment === 'login' || currentSegment === 'index') {
-                    // Go to Main App
-                    router.replace('/(tabs)');
-                }
-            } else {
-                // New User (No groups joined yet) -> Group Selection
-                // But don't loop if already there
-                if (currentSegment !== 'group-selection' && currentSegment !== 'browse-groups') {
-                    router.replace('/group-selection');
-                }
+            // 2. Navigation Decisions: everyone goes to main app (no onboarding redirect). Don't redirect from index so boot screen can show.
+            if (currentSegment === 'index') return;
+            if (inAuthGroup || inOnboarding || currentSegment === 'login') {
+                router.replace('/(tabs)');
             }
 
         } catch (error) {

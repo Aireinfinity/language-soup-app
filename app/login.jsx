@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { Colors } from '../constants/Colors';
+import { track, AnalyticsEvents } from '../lib/analytics';
 
 // Fewer emojis so everything fits on one page
 const EMOJIS = [
@@ -44,6 +45,8 @@ export default function LoginScreen() {
                 throw new Error('Sign-in did not return a user');
             }
 
+            track(AnalyticsEvents.LOGIN_SUCCESS, { is_new_user: !!authData.isNewUser });
+
             if (authData.isNewUser) {
                 Alert.alert(
                     'save your password!',
@@ -54,10 +57,10 @@ export default function LoginScreen() {
                             InteractionManager.runAfterInteractions(() => {
                                 requestAnimationFrame(() => {
                                     try {
-                                        router.replace('/onboarding/conversational');
+                                        router.replace('/');
                                     } catch (e) {
                                         console.warn('[Login] replace failed:', e);
-                                        router.push('/onboarding/conversational');
+                                        router.push('/');
                                     }
                                 });
                             });
@@ -66,9 +69,9 @@ export default function LoginScreen() {
                 );
             } else {
                 try {
-                    router.replace('/(tabs)');
+                    router.replace('/');
                 } catch (e) {
-                    router.push('/(tabs)');
+                    router.push('/');
                 }
             }
         } catch (error) {
@@ -165,6 +168,7 @@ export default function LoginScreen() {
                 </Pressable>
 
                 <Text style={styles.disclaimer}>no email. your 3 emojis are your password</Text>
+                        <Text style={styles.loginHint}>same name + same 3 emojis = log in. new name + new emojis = new account.</Text>
                     </ScrollView>
                 </KeyboardAvoidingView>
             </TouchableWithoutFeedback>
@@ -282,5 +286,12 @@ const styles = StyleSheet.create({
         color: Colors.textLight,
         textAlign: 'center',
         marginTop: 12,
+    },
+    loginHint: {
+        fontSize: 12,
+        color: Colors.textLight,
+        textAlign: 'center',
+        marginTop: 8,
+        fontStyle: 'italic',
     },
 });

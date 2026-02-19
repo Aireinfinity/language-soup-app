@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, Image, Modal, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import Animated, { FadeIn, FadeOut, SlideInDown } from 'react-native-reanimated';
-import { Play, Pause, SkipBack, SkipForward, X, MessageCircle } from 'lucide-react-native';
+import { Play, Pause, SkipBack, SkipForward, X, Heart } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAudioPlayer } from '../contexts/AudioPlayerContext';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 import { getAvatarSource } from '../utils/soupUtils';
+import { ReactionPicker } from './ReactionPicker';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const SOUP_COLORS = {
@@ -20,7 +22,7 @@ const SOUP_COLORS = {
 
 export function PodcastPlayerExpanded() {
     const insets = useSafeAreaInsets();
-    const router = useRouter();
+    const { user } = useAuth();
     const {
         currentAudio,
         isPlaying,
@@ -41,6 +43,27 @@ export function PodcastPlayerExpanded() {
     } = useAudioPlayer();
 
     const [seekBarWidth, setSeekBarWidth] = useState(0);
+    const [showReactionPicker, setShowReactionPicker] = useState(false);
+
+    const handleReact = useCallback(async (emoji) => {
+        if (!user?.id || !currentAudio?.messageId) return;
+        const messageId = currentAudio.messageId;
+        const { data: existing } = await supabase
+            .from('app_message_reactions')
+            .select('id')
+            .eq('message_id', messageId)
+            .eq('user_id', user.id)
+            .eq('emoji', emoji)
+            .maybeSingle();
+        if (existing) {
+            await supabase.from('app_message_reactions').delete().eq('id', existing.id);
+        } else {
+            await supabase
+                .from('app_message_reactions')
+                .insert({ message_id: messageId, user_id: user.id, emoji });
+        }
+    }, [user?.id, currentAudio?.messageId]);
+
     if (!currentAudio || !isPlayerExpanded) return null;
 
     const formatTime = (ms) => {
@@ -185,22 +208,30 @@ export function PodcastPlayerExpanded() {
                             </Pressable>
                         </View>
 
-                        {currentAudio.groupId ? (
+                        {currentAudio.messageId && user ? (
                             <Pressable
                                 onPress={() => {
                                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                    setIsPlayerExpanded(false);
-                                    router.push(`/chat/${currentAudio.groupId}${currentAudio.messageId ? `?messageId=${currentAudio.messageId}` : ''}`);
+                                    setShowReactionPicker(true);
                                 }}
                                 style={styles.reactBtn}
                             >
-                                <MessageCircle size={20} color={SOUP_COLORS.blue} />
-                                <Text style={styles.reactBtnText}>React in chat</Text>
+                                <Heart size={20} color={SOUP_COLORS.blue} />
+                                <Text style={styles.reactBtnText}>React</Text>
                             </Pressable>
                         ) : null}
                     </View>
                 </View>
             </Animated.View>
+
+            <ReactionPicker
+                visible={showReactionPicker}
+                onClose={() => setShowReactionPicker(false)}
+                onReact={(emoji) => {
+                    handleReact(emoji);
+                    setShowReactionPicker(false);
+                }}
+            />
         </Modal>
     );
 }
@@ -344,10 +375,12 @@ const styles = StyleSheet.create({
     reactBtn: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
         gap: 8,
         paddingVertical: 12,
         paddingHorizontal: 20,
-        backgroundColor: 'rgba(0, 173, 239, 0.2)',
+        marginTop: 16,
+        backgroundColor: 'rgba(0, 173, 239, 0.15)',
         borderRadius: 24,
     },
     reactBtnText: {

@@ -3,10 +3,8 @@ import Constants from 'expo-constants';
 
 const VERSION_KEY = '@app_version';
 
-// Get version from app.json (expo config)
-// HARDCODED to force What's New to show via OTA update
-const CURRENT_VERSION = '1.0.5-SoupFeature-V7';
-// const CURRENT_VERSION = Constants.expoConfig?.version || Constants.manifest?.version || '1.0.0';
+// From app.json so each new build/OTA that bumps version shows What's New once
+const CURRENT_VERSION = Constants.expoConfig?.version ?? Constants.manifest?.version ?? '1.0.0';
 
 export async function shouldShowWhatsNew() {
     try {

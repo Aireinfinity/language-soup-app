@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './supabase';
-import { TrendingUp, Globe, Wrench, BarChart3, Rocket, Target } from 'lucide-react';
+import { TrendingUp, Globe, Wrench, BarChart3, Rocket, Target, Activity } from 'lucide-react';
 
 export default function MarketingTab() {
     const [stats, setStats] = useState({
@@ -10,9 +10,16 @@ export default function MarketingTab() {
         tools: [],
     });
     const [loading, setLoading] = useState(true);
+    const [eventsByType, setEventsByType] = useState([]);
+    const [recentEvents, setRecentEvents] = useState([]);
+    const [eventsLoading, setEventsLoading] = useState(true);
 
     useEffect(() => {
         loadSignupData();
+    }, []);
+
+    useEffect(() => {
+        loadAppEvents();
     }, []);
 
     const loadSignupData = async () => {
@@ -83,6 +90,35 @@ export default function MarketingTab() {
             console.error('Error loading signup data:', err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const loadAppEvents = async () => {
+        try {
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            const { data: events, error } = await supabase
+                .from('app_events')
+                .select('id, event_name, user_id, group_id, properties, created_at')
+                .gte('created_at', sevenDaysAgo.toISOString())
+                .order('created_at', { ascending: false })
+                .limit(500);
+            if (error) throw error;
+            const list = events || [];
+            const byName = {};
+            list.forEach((e) => {
+                byName[e.event_name] = (byName[e.event_name] || 0) + 1;
+            });
+            setEventsByType(
+                Object.entries(byName)
+                    .map(([name, count]) => ({ name, count }))
+                    .sort((a, b) => b.count - a.count)
+            );
+            setRecentEvents(list.slice(0, 50));
+        } catch (err) {
+            console.error('Error loading app_events:', err);
+        } finally {
+            setEventsLoading(false);
         }
     };
 

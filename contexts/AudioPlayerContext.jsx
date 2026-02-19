@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { Audio } from 'expo-av';
 import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -72,12 +72,24 @@ export function AudioPlayerProvider({ children }) {
         };
     }, []);
 
+    const lastPlaybackUpdateRef = useRef(0);
+    const PLAYBACK_THROTTLE_MS = 150;
+
     const onPlaybackStatusUpdate = (status) => {
         if (status.isLoaded) {
-            setPosition(status.positionMillis);
-            setDuration(status.durationMillis);
+            const now = Date.now();
+            if (now - lastPlaybackUpdateRef.current >= PLAYBACK_THROTTLE_MS) {
+                lastPlaybackUpdateRef.current = now;
+                setPosition(status.positionMillis);
+                setDuration(status.durationMillis);
+            }
 
-            if (status.didJustFinish) {
+            // Only treat as end when we're actually at the end (expo-av can fire didJustFinish early)
+            const atEnd = status.durationMillis > 0 && status.positionMillis >= Math.max(0, status.durationMillis - 400);
+            if (status.didJustFinish && atEnd) {
+                lastPlaybackUpdateRef.current = 0;
+                setPosition(status.positionMillis);
+                setDuration(status.durationMillis);
                 setIsPlaying(false);
                 setPosition(0);
                 const listenedSec = status.durationMillis ? Math.floor(status.durationMillis / 1000) : 0;
@@ -99,8 +111,8 @@ export function AudioPlayerProvider({ children }) {
                     queueRef.current = [];
                     fullQueueRef.current = [];
                     currentIndexRef.current = 0;
+                    if (listenedSec > 0) recordListeningSeconds(listenedSec);
                     (async () => {
-                        if (listenedSec > 0) await recordListeningSeconds(listenedSec);
                         const [t, tot] = await Promise.all([
                             AsyncStorage.getItem(LISTENING_TODAY_KEY),
                             AsyncStorage.getItem(LISTENING_TOTAL_KEY),
@@ -171,9 +183,10 @@ export function AudioPlayerProvider({ children }) {
             );
 
             soundRef.current = sound;
+            const durationMs = status.durationMillis || (audioDuration > 0 ? audioDuration * 1000 : 0);
             setCurrentAudio({
                 url,
-                duration: audioDuration * 1000, // convert to ms
+                duration: durationMs,
                 messageId,
                 senderName,
                 senderAvatar,
@@ -182,10 +195,8 @@ export function AudioPlayerProvider({ children }) {
                 groupId
             });
             setIsPlaying(true);
-
-            if (status.durationMillis) {
-                setDuration(status.durationMillis);
-            }
+            setPosition(0);
+            setDuration(durationMs);
         } catch (error) {
             console.error('[AudioPlayer] Error playing audio:', error);
         }
@@ -205,7 +216,7 @@ export function AudioPlayerProvider({ children }) {
         }
     };
 
-    const stopAudio = async () => {
+    const stopAudio = useCallback(async () => {
         if (soundRef.current) {
             await soundRef.current.unloadAsync();
             soundRef.current = null;
@@ -220,7 +231,7 @@ export function AudioPlayerProvider({ children }) {
         queueRef.current = [];
         fullQueueRef.current = [];
         currentIndexRef.current = 0;
-    };
+    }, []);
 
     // Podcast mode: play a list of voice messages; supports skip next/prev.
     const startQueue = (items) => {

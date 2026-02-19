@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, Pressable, Text, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Pressable, Text, ActivityIndicator, Dimensions } from 'react-native';
 import { Play, Pause, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { Colors } from '../constants/Colors';
 import { useAudioPlayer } from '../contexts/AudioPlayerContext';
 import * as LegacyFileSystem from 'expo-file-system/legacy';
-import { cacheDirectory } from 'expo-file-system';
 
-const WAVEFORM_BARS = 30;
+const WAVEFORM_BARS = 40;
+const VOICE_ROW_WIDTH = Math.min(280, Dimensions.get('window').width * 0.72);
 
 // Cache directory for voice memos
 const CACHE_DIR = `${LegacyFileSystem.cacheDirectory}voice_memos/`;
@@ -24,12 +24,12 @@ function ensureCacheDir() {
 
 const TRANSCRIPT_PREVIEW_LINES = 2;
 
-export function AudioMessage({ audioUrl, duration, senderName, isMe, messageId, senderAvatar, senderStatus, groupName, groupId = null, transcript = null, onGetTranscript = null, showTranscript = true }) {
+export function AudioMessage({ audioUrl, duration, senderName, isMe, messageId, senderAvatar, senderStatus, groupName, groupId = null, transcript = null, onGetTranscript = null, showTranscript = true, queueFromThisMessage = null }) {
     const [loading, setLoading] = useState(false);
     const [transcriptLoading, setTranscriptLoading] = useState(false);
     const [transcriptExpanded, setTranscriptExpanded] = useState(false);
     const [localUri, setLocalUri] = useState(null);
-    const { currentAudio, isPlaying, position, duration: contextDuration, playAudio } = useAudioPlayer();
+    const { currentAudio, isPlaying, position, duration: contextDuration, playAudio, startQueue } = useAudioPlayer();
 
     useEffect(() => {
         ensureCacheDir();
@@ -39,13 +39,18 @@ export function AudioMessage({ audioUrl, duration, senderName, isMe, messageId, 
     const isThisPlaying = currentAudio?.messageId === messageId && isPlaying;
     const isThisAudio = currentAudio?.messageId === messageId;
 
-    // Calculate progress for waveform (0 to 1)
-    const progress = isThisAudio && contextDuration > 0 ? position / contextDuration : 0;
+    // Calculate progress for waveform (0 to 1). Clamp; when playback just finished, show full bar.
+    const rawProgress = isThisAudio && contextDuration > 0 ? position / contextDuration : 0;
+    const atEnd = isThisAudio && contextDuration > 0 && !isPlaying && position >= Math.max(0, contextDuration - 500);
+    const progress = atEnd ? 1 : Math.min(1, Math.max(0, rawProgress));
 
-    // Generate random waveform bars once
     const waveformHeights = useMemo(() => {
-        return Array.from({ length: WAVEFORM_BARS }, () => Math.random() * 0.5 + 0.3);
-    }, []);
+        const seed = (messageId || '').split('').reduce((s, c) => s + c.charCodeAt(0), 0);
+        return Array.from({ length: WAVEFORM_BARS }, (_, i) => {
+            const t = (i / WAVEFORM_BARS + seed * 0.01) % 1;
+            return 0.25 + 0.5 * (Math.sin(t * Math.PI * 4) * 0.5 + 0.5);
+        });
+    }, [messageId]);
 
     // Caching Logic
     useEffect(() => {
@@ -89,11 +94,21 @@ export function AudioMessage({ audioUrl, duration, senderName, isMe, messageId, 
     }, [audioUrl]);
 
     const handlePlayPress = async () => {
-        if (!localUri) return;
+        const uriToPlay = localUri || audioUrl;
+        if (!uriToPlay) return;
 
         setLoading(true);
         try {
-            await playAudio(localUri, duration, messageId, senderName, senderAvatar, senderStatus, groupName, groupId);
+            if (queueFromThisMessage?.length > 0) {
+                const items = queueFromThisMessage.map((item) => ({
+                    ...item,
+                    url: item.url,
+                    durationSeconds: item.durationSeconds ?? (item.duration ? item.duration / 1000 : duration || 0),
+                }));
+                startQueue(items);
+            } else {
+                await playAudio(uriToPlay, duration || 0, messageId, senderName, senderAvatar, senderStatus, groupName, groupId);
+            }
         } catch (error) {
             console.error('[AudioMessage] Error playing:', error);
         } finally {
@@ -136,38 +151,36 @@ export function AudioMessage({ audioUrl, duration, senderName, isMe, messageId, 
             styles.outerWrap,
             isMe && styles.outerWrapMe,
         ]}>
-            <View style={[
-                styles.container,
-                isMe && styles.containerMe,
-            ]}>
-                <Pressable
-                    onPress={handlePlayPress}
-                    style={({ pressed }) => [styles.playButton, pressed && { opacity: 0.9 }]}
-                    disabled={loading}
-                >
-                    {loading ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                    ) : isThisPlaying ? (
-                        <Pause size={24} color="#fff" fill="#fff" />
-                    ) : (
-                        <Play size={24} color="#fff" fill="#fff" />
-                    )}
-                </Pressable>
-
-                <View style={styles.waveformContainer}>
-                    <View style={styles.waveform}>
-                        {waveformHeights.map((height, index) => (
-                            <WaveformBar
-                                key={index}
-                                index={index}
-                                totalBars={WAVEFORM_BARS}
-                                height={height}
-                                progress={progress}
-                                isMe={isMe}
-                            />
-                        ))}
+            <View style={[styles.container, isMe && styles.containerMe]}>
+                <View style={styles.topRow}>
+                    <Pressable
+                        onPress={handlePlayPress}
+                        style={({ pressed }) => [styles.playButton, pressed && { opacity: 0.9 }]}
+                        disabled={loading || (!localUri && !audioUrl)}
+                    >
+                        {loading ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                        ) : isThisPlaying ? (
+                            <Pause size={24} color="#fff" fill="#fff" />
+                        ) : (
+                            <Play size={24} color="#fff" fill="#fff" />
+                        )}
+                    </Pressable>
+                    <View style={styles.waveformContainer}>
+                        <View style={styles.waveform}>
+                            {waveformHeights.map((height, index) => (
+                                <View key={`bg-${index}`} style={[styles.waveBar, { height: Math.max(8, 22 * height), backgroundColor: 'rgba(255,255,255,0.4)' }]} />
+                            ))}
+                            <View style={[styles.waveformFill, { width: `${progress * 100}%` }]} pointerEvents="none">
+                                {waveformHeights.map((height, index) => (
+                                    <View key={`fg-${index}`} style={[styles.waveBar, { height: Math.max(8, 22 * height), backgroundColor: 'rgba(255,255,255,0.98)' }]} />
+                                ))}
+                            </View>
+                        </View>
                     </View>
-                    <Text style={[styles.duration, styles.durationMe]}>
+                </View>
+                <View style={styles.durationRow}>
+                    <Text style={[styles.duration, isMe ? styles.durationMe : styles.durationThem]} numberOfLines={1}>
                         {formatDuration(duration)}
                     </Text>
                 </View>
@@ -204,34 +217,22 @@ export function AudioMessage({ audioUrl, duration, senderName, isMe, messageId, 
     );
 }
 
-// Separate component for individual bars (plain View to avoid Reanimated frozen-ref issues)
-const WaveformBar = ({ index, totalBars, height, progress, isMe }) => {
-    const barPos = index / totalBars;
-    const isPlayed = progress > barPos;
-    // Same visible style for both: white bars on green or blue bubble
-    const backgroundColor = isPlayed ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)';
-    return (
-        <View style={[styles.waveBar, { backgroundColor, height: 24 * height }]} />
-    );
-};
-
 const styles = StyleSheet.create({
     outerWrap: {
-        width: '100%',
+        alignSelf: 'flex-start',
+        maxWidth: '100%',
     },
     outerWrapMe: {},
     container: {
+        width: VOICE_ROW_WIDTH,
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+    },
+    containerMe: {},
+    topRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 10,
-        paddingLeft: 4,
-        paddingRight: 8,
-        minWidth: 240,
-        maxWidth: 280,
-        gap: 12,
-    },
-    containerMe: {
-        // Parent bubble handles background
+        gap: 8,
     },
     transcriptWrap: {
         marginTop: 12,
@@ -285,25 +286,44 @@ const styles = StyleSheet.create({
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
+        minWidth: 0,
     },
     waveform: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        height: 28,
+        height: 36,
         flex: 1,
+        minWidth: 0,
+        gap: 2,
+    },
+    waveformFill: {
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        bottom: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 2,
+        overflow: 'hidden',
     },
     waveBar: {
         width: 3,
-        borderRadius: 1.5,
+        borderRadius: 2,
+    },
+    durationRow: {
+        marginTop: 4,
+        alignSelf: 'flex-end',
     },
     duration: {
         fontSize: 12,
         color: Colors.textLight,
-        fontWeight: '500',
+        fontWeight: '600',
     },
     durationMe: {
+        color: 'rgba(255,255,255,0.9)',
+    },
+    durationThem: {
         color: 'rgba(255,255,255,0.9)',
     },
 });

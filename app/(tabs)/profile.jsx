@@ -13,6 +13,7 @@ import { useNotifications } from '../../contexts/NotificationContext';
 import GroupAvatar from '../../components/GroupAvatar';
 import WhatsNewSheet from '../../components/WhatsNewSheet';
 import { getAvatarSource } from '../../utils/soupUtils';
+import { getOutputLevel, getInputLevel } from '../../utils/levelHelpers';
 import { TAB_BAR_HEIGHT } from '../../constants/Layout';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -67,6 +68,7 @@ export default function ProfileScreen() {
     // Editable States
     const [newName, setNewName] = useState('');
     const [newTagline, setNewTagline] = useState('');
+    const [newBio, setNewBio] = useState('');
     const [newTimezone, setNewTimezone] = useState('');
     const [newLanguages, setNewLanguages] = useState([]);
     const [newLearning, setNewLearning] = useState([]);
@@ -108,6 +110,7 @@ export default function ProfileScreen() {
                 setUser(userData);
                 setNewName(userData.display_name);
                 setNewTagline(userData.status_text || '');
+                setNewBio(userData.bio || '');
                 setNewTimezone(userData.timezone || '');
                 setNewLanguages(userData.fluent_languages || []);
                 setNewLearning(userData.learning_languages || []);
@@ -135,9 +138,10 @@ export default function ProfileScreen() {
             if (groupData) {
                 const userGroups = groupData.map(item => item.app_groups);
                 setGroups(userGroups);
+            }
 
-                // Comprehensive language list (100+ languages)
-                // Comprehensive language list with dialects and regional variants
+            // Always load language and timezone lists for profile editing
+            {
                 const allLanguages = [
                     'Afrikaans', 'Akan', 'Albanian', 'Amharic',
                     'Arabic (Modern Standard)', 'Arabic (Egyptian)', 'Arabic (Levantine)', 'Arabic (Gulf)', 'Arabic (Maghrebi)', 'Arabic (Sudanese)',
@@ -175,7 +179,6 @@ export default function ProfileScreen() {
                 ].sort();
                 setAvailableLanguages(allLanguages);
 
-                // Simplified Timezones
                 const allTimezones = [
                     'UTC', 'GMT',
                     'EST', 'CST', 'MST', 'PST',
@@ -187,7 +190,9 @@ export default function ProfileScreen() {
                     'HST', 'AKST', 'AST'
                 ].sort();
                 setAvailableTimezones(allTimezones);
-            } const { data: statsData } = await supabase
+            }
+
+            const { data: statsData } = await supabase
                 .rpc('get_user_stats', { uid: authUser.id });
 
             if (statsData) {
@@ -206,6 +211,7 @@ export default function ProfileScreen() {
         const updates = {
             display_name: (newName || '').trim(),
             status_text: (newTagline || '').trim(),
+            bio: (newBio || '').trim(),
             timezone: (newTimezone || '').trim(),
             fluent_languages: newLanguages || [],
             learning_languages: newLearning || [],
@@ -362,23 +368,22 @@ export default function ProfileScreen() {
     const renderIdentity = () => (
         <View style={styles.heroSection}>
             <View style={styles.heroCard}>
-            {/* Hero Layout: Flags | Photo | Flags */}
+            {/* Hero Layout: Flags | Photo | Flags (same when view or edit) */}
             <View style={styles.heroPhotoRow}>
-                {/* Left Column - Learning Languages */}
                 <View style={styles.flagColumn}>
-                    {user.learning_languages && user.learning_languages.length > 0 && (
+                    {(editing ? newLearning : user.learning_languages)?.length > 0 && (
                         <>
                             <Text style={styles.flagColumnTitle} numberOfLines={1}>LEARNING 🌱</Text>
                             <View style={styles.flagList}>
-                                {(learningExpanded ? user.learning_languages : user.learning_languages.slice(0, 3)).map((lang, i) => (
+                                {((editing ? newLearning : user.learning_languages) || []).slice(0, learningExpanded || editing ? 99 : 3).map((lang, i) => (
                                     <Text key={`learning-${i}`} style={styles.flagEmoji}>
                                         {getLanguageFlag(lang)}
                                     </Text>
                                 ))}
-                                {user.learning_languages.length > 3 && (
+                                {!editing && (user.learning_languages?.length || 0) > 3 && (
                                     <Pressable onPress={() => setLearningExpanded(!learningExpanded)} style={({ pressed }) => pressed && { opacity: 0.8 }}>
                                         <Text style={styles.expandButton}>
-                                            {learningExpanded ? '- Less' : `+${user.learning_languages.length - 3} more`}
+                                            {learningExpanded ? '- Less' : `+${(user.learning_languages?.length || 0) - 3} more`}
                                         </Text>
                                     </Pressable>
                                 )}
@@ -387,7 +392,6 @@ export default function ProfileScreen() {
                     )}
                 </View>
 
-                {/* Center - Profile Photo */}
                 <Pressable onPress={showAvatarOptions} style={({ pressed }) => [styles.heroAvatarContainer, !uploading && pressed && { opacity: 0.9 }]} disabled={uploading}>
                     {previewAvatar || user?.avatar_url ? (
                         <Image
@@ -396,7 +400,7 @@ export default function ProfileScreen() {
                         />
                     ) : (
                         <View style={[styles.heroAvatarPlaceholder, uploading && { opacity: 0.5 }]}>
-                            <Text style={styles.heroAvatarInitial}>{user?.display_name?.[0]?.toUpperCase() || '?'}</Text>
+                            <Text style={styles.heroAvatarInitial}>{(editing ? newName : user?.display_name)?.[0]?.toUpperCase() || '?'}</Text>
                         </View>
                     )}
                     {uploading && (
@@ -413,21 +417,20 @@ export default function ProfileScreen() {
                     )}
                 </Pressable>
 
-                {/* Right Column - Conversational Languages */}
                 <View style={styles.flagColumn}>
-                    {user.fluent_languages && user.fluent_languages.length > 0 && (
+                    {(editing ? newLanguages : user.fluent_languages)?.length > 0 && (
                         <>
                             <Text style={styles.flagColumnTitle} numberOfLines={1}>CONVERSATIONAL 💬</Text>
                             <View style={styles.flagList}>
-                                {(fluentExpanded ? user.fluent_languages : user.fluent_languages.slice(0, 3)).map((lang, i) => (
+                                {((editing ? newLanguages : user.fluent_languages) || []).slice(0, fluentExpanded || editing ? 99 : 3).map((lang, i) => (
                                     <Text key={`fluent-${i}`} style={styles.flagEmoji}>
                                         {getLanguageFlag(lang)}
                                     </Text>
                                 ))}
-                                {user.fluent_languages.length > 3 && (
+                                {!editing && (user.fluent_languages?.length || 0) > 3 && (
                                     <Pressable onPress={() => setFluentExpanded(!fluentExpanded)} style={({ pressed }) => pressed && { opacity: 0.8 }}>
                                         <Text style={styles.expandButton}>
-                                            {fluentExpanded ? '- Less' : `+${user.fluent_languages.length - 3} more`}
+                                            {fluentExpanded ? '- Less' : `+${(user.fluent_languages?.length || 0) - 3} more`}
                                         </Text>
                                     </Pressable>
                                 )}
@@ -437,17 +440,234 @@ export default function ProfileScreen() {
                 </View>
             </View>
 
-            {/* Name */}
+            {/* Name: editable inline */}
             <View style={styles.heroNameRow}>
-                <Text style={styles.heroName}>{user?.display_name || 'Anonymous Souper'}</Text>
-                <Pressable onPress={() => setEditing(true)} hitSlop={10} style={({ pressed }) => pressed && { opacity: 0.8 }}>
-                    <Edit2 size={20} color={SOUP_COLORS.blue} />
-                </Pressable>
+                {editing ? (
+                    <TextInput
+                        style={styles.heroNameInput}
+                        value={newName}
+                        onChangeText={setNewName}
+                        placeholder="your name"
+                        placeholderTextColor={SOUP_COLORS.subtext}
+                    />
+                ) : (
+                    <Text style={styles.heroName}>{user?.display_name || 'Anonymous Souper'}</Text>
+                )}
+                {!editing ? (
+                    <Pressable onPress={() => setEditing(true)} hitSlop={10} style={({ pressed }) => pressed && { opacity: 0.8 }}>
+                        <Edit2 size={20} color={SOUP_COLORS.blue} />
+                    </Pressable>
+                ) : null}
             </View>
 
-            {/* Tagline - right under name */}
-            {user?.status_text && (
-                <Text style={styles.heroTagline}>"{user.status_text}"</Text>
+            {/* Tagline: editable inline */}
+            {editing ? (
+                <>
+                    <TextInput
+                        style={styles.heroTaglineInput}
+                        value={newTagline}
+                        onChangeText={setNewTagline}
+                        placeholder='your tagline...'
+                        placeholderTextColor={SOUP_COLORS.subtext}
+                        maxLength={50}
+                    />
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.flavorScroll}>
+                        {EXAMPLE_TAGLINES.map(tag => (
+                            <Pressable
+                                key={tag}
+                                style={[styles.flavorChip, newTagline === tag && styles.flavorChipSelected]}
+                                onPress={() => setNewTagline(tag)}
+                            >
+                                <Text style={[styles.flavorChipText, newTagline === tag && styles.flavorChipTextSelected]}>{tag}</Text>
+                            </Pressable>
+                        ))}
+                    </ScrollView>
+                </>
+            ) : (
+                user?.status_text ? (
+                    <View style={styles.taglinePill}>
+                        <Text style={styles.heroTagline}>"{user.status_text}"</Text>
+                    </View>
+                ) : null
+            )}
+
+            {/* Progress bars only (name, tagline, then bars) */}
+            {!editing && stats && (() => {
+                const totalSpeakSeconds = stats.total_speaking_seconds ?? 0;
+                const speakMinutes = totalSpeakSeconds / 60;
+                const listenHours = (totalSpeakSeconds * 2) / 3600;
+                const outLevel = getOutputLevel(speakMinutes);
+                const inLevel = getInputLevel(listenHours);
+                const outProgress = outLevel.maxed ? 100 : Math.min(100, Math.max(5, ((speakMinutes - outLevel.prevGoal) / (outLevel.nextGoal - outLevel.prevGoal)) * 100));
+                const inProgress = inLevel.maxed ? 100 : Math.min(100, Math.max(5, ((listenHours - inLevel.prevGoal) / (inLevel.nextGoal - inLevel.prevGoal)) * 100));
+                return (
+                    <View style={styles.compactLevelsWrap}>
+                        <View style={styles.compactLevelBar}>
+                            <View style={styles.compactLevelBarHead}>
+                                <Text style={styles.compactLevelBarLabel}>🗣️ Out the Mouth</Text>
+                                <View style={[styles.compactLevelBadge, { backgroundColor: SOUP_COLORS.pink }]}>
+                                    <Text style={styles.compactLevelBadgeText}>Lv.{outLevel.level}</Text>
+                                </View>
+                            </View>
+                            <View style={styles.compactBarTrack}>
+                                <View style={[styles.compactBarFill, { width: `${outProgress}%`, backgroundColor: SOUP_COLORS.pink }]} />
+                            </View>
+                        </View>
+                        <View style={styles.compactLevelBar}>
+                            <View style={styles.compactLevelBarHead}>
+                                <Text style={styles.compactLevelBarLabel}>🧠 In the Brain</Text>
+                                <View style={[styles.compactLevelBadge, { backgroundColor: SOUP_COLORS.blue }]}>
+                                    <Text style={styles.compactLevelBadgeText}>Lv.{inLevel.level}</Text>
+                                </View>
+                            </View>
+                            <View style={styles.compactBarTrack}>
+                                <View style={[styles.compactBarFill, { width: `${inProgress}%`, backgroundColor: SOUP_COLORS.blue }]} />
+                            </View>
+                        </View>
+                    </View>
+                );
+            })()}
+
+            {/* Mode strip: clear view for posting (public = ok to screen record, private = only in app) */}
+            {!editing && (
+                <View style={[styles.modeStrip, sharePreference === 'public' ? styles.modeStripPublic : styles.modeStripPrivate]}>
+                    <Text style={[styles.modeStripLabel, sharePreference === 'public' && styles.modeStripLabelPublic]}>
+                        {sharePreference === 'public' ? 'public' : 'private'}
+                    </Text>
+                    <Text style={styles.modeStripHint}>
+                        {sharePreference === 'public' ? 'ok to screen record, share on Instagram' : 'only in app'}
+                    </Text>
+                </View>
+            )}
+
+            {/* Bio: show when view, editable when edit */}
+            {editing ? (
+                <>
+                    <Text style={styles.inlineEditLabel}>bio</Text>
+                    <TextInput
+                        style={styles.bioInputInline}
+                        value={newBio}
+                        onChangeText={setNewBio}
+                        placeholder="a bit about you..."
+                        placeholderTextColor={SOUP_COLORS.subtext}
+                        multiline
+                        numberOfLines={3}
+                    />
+                </>
+            ) : (
+                (user?.bio?.trim() ? (
+                    <View style={styles.bioBlock}>
+                        <Text style={styles.inlineEditLabel}>bio</Text>
+                        <Text style={styles.bioTextInline}>{user.bio}</Text>
+                    </View>
+                ) : null)
+            )}
+
+            {/* Profile visibility (public/private) - visible in view mode */}
+            {!editing && (
+                <Pressable style={styles.visibilityRow} onPress={() => setEditing(true)}>
+                    <Text style={styles.inlineEditLabel}>profile visibility</Text>
+                    <Text style={styles.visibilityValue}>
+                        {sharePreference === 'public'
+                            ? 'Public (ok to feature on Instagram)'
+                            : 'Private (only in app)'}
+                    </Text>
+                    <Text style={styles.visibilityHint}>
+                        Private = only in app. Public = ok to feature on Instagram. Default is private.
+                    </Text>
+                </Pressable>
+            )}
+
+            {/* Inline edit: timezone, languages, share, save/cancel */}
+            {editing && (
+                <>
+                    <Text style={styles.inlineEditLabel}>timezone</Text>
+                    <View style={styles.inlineChipsRow}>
+                        {newTimezone ? (
+                            <Pressable style={[styles.languageChip, styles.languageChipSelected]} onPress={() => setNewTimezone('')}>
+                                <Text style={[styles.languageChipText, styles.languageChipTextSelected]}>{newTimezone} ✕</Text>
+                            </Pressable>
+                        ) : null}
+                        <TextInput
+                            style={styles.inlineSearchInput}
+                            value={timezoneSearch}
+                            onChangeText={setTimezoneSearch}
+                            placeholder="search timezone..."
+                            placeholderTextColor={SOUP_COLORS.subtext}
+                        />
+                    </View>
+                    {timezoneSearch ? (
+                        <View style={styles.languageChips}>
+                            {availableTimezones.filter(tz => tz.toLowerCase().includes(timezoneSearch.toLowerCase())).slice(0, 8).map(tz => (
+                                <Pressable key={tz} style={styles.languageChip} onPress={() => { setNewTimezone(tz); setTimezoneSearch(''); }}>
+                                    <Text style={styles.languageChipText}>{tz}</Text>
+                                </Pressable>
+                            ))}
+                        </View>
+                    ) : null}
+
+                    <Text style={styles.inlineEditLabel}>conversational languages</Text>
+                    {newLanguages.length > 0 && (
+                        <View style={[styles.languageChips, { marginBottom: 6 }]}>
+                            {newLanguages.map(lang => (
+                                <Pressable key={lang} style={[styles.languageChip, styles.languageChipSelected]} onPress={() => setNewLanguages(newLanguages.filter(l => l !== lang))}>
+                                    <Text style={[styles.languageChipText, styles.languageChipTextSelected]}>{lang} ✕</Text>
+                                </Pressable>
+                            ))}
+                        </View>
+                    )}
+                    <TextInput style={[styles.inlineSearchInput, { marginBottom: 8 }]} value={languageSearch} onChangeText={setLanguageSearch} placeholder="add language..." placeholderTextColor={SOUP_COLORS.subtext} />
+                    {languageSearch ? (
+                        <View style={styles.languageChips}>
+                            {availableLanguages.filter(l => !newLanguages.includes(l) && l.toLowerCase().includes(languageSearch.toLowerCase())).slice(0, 12).map(lang => (
+                                <Pressable key={lang} style={styles.languageChip} onPress={() => { setNewLanguages([...newLanguages, lang]); setLanguageSearch(''); }}>
+                                    <Text style={styles.languageChipText}>{lang}</Text>
+                                </Pressable>
+                            ))}
+                        </View>
+                    ) : null}
+
+                    <Text style={styles.inlineEditLabel}>learning</Text>
+                    {newLearning.length > 0 && (
+                        <View style={[styles.languageChips, { marginBottom: 6 }]}>
+                            {newLearning.map(lang => (
+                                <Pressable key={lang} style={[styles.languageChip, styles.languageChipSelected]} onPress={() => setNewLearning(newLearning.filter(l => l !== lang))}>
+                                    <Text style={[styles.languageChipText, styles.languageChipTextSelected]}>{lang} ✕</Text>
+                                </Pressable>
+                            ))}
+                        </View>
+                    )}
+                    <TextInput style={[styles.inlineSearchInput, { marginBottom: 8 }]} value={learningSearch} onChangeText={setLearningSearch} placeholder="add language..." placeholderTextColor={SOUP_COLORS.subtext} />
+                    {learningSearch ? (
+                        <View style={styles.languageChips}>
+                            {availableLanguages.filter(l => !newLearning.includes(l) && l.toLowerCase().includes(learningSearch.toLowerCase())).slice(0, 12).map(lang => (
+                                <Pressable key={lang} style={styles.languageChip} onPress={() => { setNewLearning([...newLearning, lang]); setLearningSearch(''); }}>
+                                    <Text style={styles.languageChipText}>{lang}</Text>
+                                </Pressable>
+                            ))}
+                        </View>
+                    ) : null}
+
+                    <Text style={styles.inlineEditLabel}>profile visibility</Text>
+                    <Text style={styles.visibilityHint}>Private = only in app. Public = ok to feature on Instagram.</Text>
+                    <View style={styles.shareRow}>
+                        <Pressable onPress={() => setSharePreference('private')} style={[styles.shareOption, sharePreference === 'private' && styles.shareOptionSelected]}>
+                            <Text style={[styles.shareOptionText, sharePreference === 'private' && styles.shareOptionTextSelected]}>Private</Text>
+                        </Pressable>
+                        <Pressable onPress={() => setSharePreference('public')} style={[styles.shareOption, sharePreference === 'public' && styles.shareOptionSelected]}>
+                            <Text style={[styles.shareOptionText, sharePreference === 'public' && styles.shareOptionTextSelected]}>Public</Text>
+                        </Pressable>
+                    </View>
+
+                    <View style={styles.inlineEditActions}>
+                        <Pressable style={({ pressed }) => [styles.inlineCancelBtn, pressed && { opacity: 0.8 }]} onPress={() => { setEditing(false); setNewName(user?.display_name); setNewTagline(user?.status_text || ''); setNewBio(user?.bio || ''); setNewTimezone(user?.timezone || ''); setNewLanguages(user?.fluent_languages || []); setNewLearning(user?.learning_languages || []); setSharePreference(user?.share_preference === 'public' ? 'public' : 'private'); setLanguageSearch(''); setLearningSearch(''); setTimezoneSearch(''); }}>
+                            <Text style={styles.inlineCancelText}>cancel</Text>
+                        </Pressable>
+                        <Pressable style={({ pressed }) => [styles.inlineSaveBtn, pressed && { opacity: 0.9 }]} onPress={handleSave}>
+                            <Text style={styles.inlineSaveText}>save</Text>
+                        </Pressable>
+                    </View>
+                </>
             )}
             </View>
         </View>
@@ -555,78 +775,6 @@ export default function ProfileScreen() {
     };
 
     const renderStats = () => {
-        // Calculate max for relative bar widths
-        const outputData = stats?.flavor_breakdown || [];
-        const maxOutput = Math.max(...outputData.map(l => l.seconds || 0), 1);
-
-        // For input, we'll estimate based on messages received in each language group
-        // This would need a separate RPC in production, for now we'll show the same data as a placeholder
-        const inputData = stats?.listening_breakdown || stats?.flavor_breakdown || [];
-        const maxInput = Math.max(...inputData.map(l => l.seconds || 0), 1);
-        // OUTPUT (Speaking) levels - in MINUTES
-        const getOutputLevel = (minutes) => {
-            if (minutes < 30) return { level: 1, name: 'First Words 🌱', nextGoal: 30, prevGoal: 0, color: '#8BC34A' };
-            if (minutes < 120) return { level: 2, name: 'Sentence Builder 🧱', nextGoal: 120, prevGoal: 30, color: '#4CAF50' };
-            if (minutes < 300) return { level: 3, name: 'Conversation Starter 💬', nextGoal: 300, prevGoal: 120, color: '#00BCD4' };
-            if (minutes < 600) return { level: 4, name: 'Daily Souper 🍜', nextGoal: 600, prevGoal: 300, color: '#FF9800' };
-            if (minutes < 1200) return { level: 5, name: 'Fluent Rambler 🎙️', nextGoal: 1200, prevGoal: 600, color: '#E91E63' };
-            return { level: 6, name: 'Native Vibes 🌟', nextGoal: 1200, prevGoal: 1200, color: '#9C27B0', maxed: true };
-        };
-
-        // INPUT (Listening) levels - in HOURS
-        const getInputLevel = (hours) => {
-            if (hours < 3) return { level: 1, name: 'Ear Training 👂', nextGoal: 3, prevGoal: 0, color: '#8BC34A' };
-            if (hours < 10) return { level: 2, name: 'Word Catcher 🎣', nextGoal: 10, prevGoal: 3, color: '#4CAF50' };
-            if (hours < 30) return { level: 3, name: 'Context King 👑', nextGoal: 30, prevGoal: 10, color: '#00BCD4' };
-            if (hours < 100) return { level: 4, name: 'Comprehension Pro 🧠', nextGoal: 100, prevGoal: 30, color: '#FF9800' };
-            if (hours < 300) return { level: 5, name: 'Native Speed 🚀', nextGoal: 300, prevGoal: 100, color: '#E91E63' };
-            return { level: 6, name: 'Polyglot 🌍', nextGoal: 300, prevGoal: 300, color: '#9C27B0', maxed: true };
-        };
-
-        const InputIcon = () => <Text style={{ fontSize: 14 }}>🧠</Text>;
-        const OutputIcon = () => <Text style={{ fontSize: 14 }}>🗣️🏿</Text>;
-
-        const renderMetricItem = (lang, levelInfo, type) => {
-            const isInput = type === 'input';
-            const progressPercent = levelInfo.maxed ? 100 :
-                (((isInput ? (lang.seconds * 2 / 3600) : (lang.seconds / 60)) - levelInfo.prevGoal) / (levelInfo.nextGoal - levelInfo.prevGoal)) * 100;
-
-            const clampedProgress = Math.min(Math.max(progressPercent, 5), 100);
-            const barColor = isInput ? SOUP_COLORS.blue : SOUP_COLORS.pink;
-            const emoji = isInput ? '🧠' : '🗣️🏿';
-
-            return (
-                <View key={`${type}-${lang.language}`} style={styles.statItemCard}>
-                    <View style={styles.statHeaderRow}>
-                        <View>
-                            <Text style={styles.statLangName}>{lang.language}</Text>
-                            <Text style={styles.statLevelName}>{levelInfo.name}</Text>
-                        </View>
-                        <View style={[styles.statLevelBadge, { backgroundColor: barColor }]}>
-                            <Text style={styles.statLevelText}>Lv.{levelInfo.level}</Text>
-                        </View>
-                    </View>
-
-                    {/* Cute Progress Bar with Traveling Emoji */}
-                    <View style={styles.cuteBarContainer}>
-                        <View style={[styles.cuteBarFill, { width: `${clampedProgress}%`, backgroundColor: barColor }]}>
-                            <View style={styles.travelingEmojiContainer}>
-                                <Text style={styles.travelingEmoji}>{emoji}</Text>
-                            </View>
-                        </View>
-                    </View>
-
-                    <Text style={styles.statFooterText}>
-                        {isInput
-                            ? `${(lang.seconds * 2 / 3600).toFixed(1)} hours listened`
-                            : `${Math.floor(lang.seconds / 60)} mins spoken`
-                        }
-                        {levelInfo.maxed ? ' (Maxed!)' : ` / ${levelInfo.nextGoal} to next level`}
-                    </Text>
-                </View>
-            );
-        };
-
         return (
             <View style={styles.statsSection}>
                 <View style={styles.sectionTitleRow}>
@@ -656,76 +804,6 @@ export default function ProfileScreen() {
                     </View>
                 </View>
 
-                {/* COMPREHENSIBLE Card */}
-                <View style={styles.comprehensibleCard}>
-                    <View style={styles.sectionHeaderRow}>
-                        <View style={{ flex: 1 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                <Text style={styles.sectionTitle}>Comprehensible 📖</Text>
-                                <Pressable
-                                    style={styles.infoButton}
-                                    onPress={() => setShowLevelsInfo(true)}
-                                >
-                                    <Text style={styles.infoButtonText}>?</Text>
-                                </Pressable>
-                            </View>
-                            <Text style={styles.sectionSubtitle}>Real progress, no streaks.</Text>
-                        </View>
-                    </View>
-
-                    {/* TABS */}
-                    <View style={styles.statsTabs}>
-                        <Pressable
-                            style={[styles.statsTab, statsTab === 'input' && styles.statsTabActive]}
-                            onPress={() => setStatsTab('input')}
-                        >
-                            <Text style={[styles.statsTabText, statsTab === 'input' && styles.statsTabTextActive]}>
-                                In the Brain 🧠
-                            </Text>
-                        </Pressable>
-                        <Pressable
-                            style={[styles.statsTab, statsTab === 'output' && styles.statsTabActive]}
-                            onPress={() => setStatsTab('output')}
-                        >
-                            <Text style={[styles.statsTabText, statsTab === 'output' && styles.statsTabTextActive]}>
-                                Out the Mouth 🗣️🏿
-                            </Text>
-                        </Pressable>
-                    </View>
-
-                    {/* CONTENT */}
-                    <View style={styles.statsContent}>
-                        {statsTab === 'input' ? (
-                            inputData.length === 0 ? (
-                                <View style={styles.emptyStateContainer}>
-                                    <Text style={styles.emptyEmoji}>👂</Text>
-                                    <Text style={styles.emptyText}>Feed your brain! Listen to some memos.</Text>
-                                </View>
-                            ) : (
-                                inputData.map((lang, idx) => {
-                                    // Recalculate solely for render pass
-                                    const listeningSeconds = (lang.seconds || 0) * 2;
-                                    const hours = listeningSeconds / 3600;
-                                    const levelInfo = getInputLevel(hours);
-                                    return renderMetricItem(lang, levelInfo, 'input');
-                                })
-                            )
-                        ) : (
-                            outputData.length === 0 ? (
-                                <View style={styles.emptyStateContainer}>
-                                    <Text style={styles.emptyEmoji}>😶</Text>
-                                    <Text style={styles.emptyText}>Cat got your tongue? Start yapping!</Text>
-                                </View>
-                            ) : (
-                                outputData.map((lang, idx) => {
-                                    const minutes = Math.floor((lang.seconds || 0) / 60);
-                                    const levelInfo = getOutputLevel(minutes);
-                                    return renderMetricItem(lang, levelInfo, 'output');
-                                })
-                            )
-                        )}
-                    </View>
-                </View>
                 </View>
             </View>
         );
@@ -763,17 +841,11 @@ export default function ProfileScreen() {
         <SafeAreaView style={styles.container} edges={['bottom']}>
             <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
                 <View style={{ flex: 1 }} />
-                {/* Right Side Icons */}
+                {/* Right: Edit profile + Bell */}
                 <View style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
-                    {/* Logout Button */}
-                    <Pressable
-                        onPress={handleSignOut}
-                        hitSlop={10}
-                    >
-                        <LogOut size={22} color={SOUP_COLORS.pink} />
+                    <Pressable onPress={() => setEditing(true)} hitSlop={10} style={({ pressed }) => pressed && { opacity: 0.8 }}>
+                        <Edit2 size={22} color={SOUP_COLORS.blue} />
                     </Pressable>
-
-                    {/* Notifications Bell */}
                     <Pressable
                         onPress={() => {
                             if (permissionStatus !== 'granted') {
@@ -810,7 +882,6 @@ export default function ProfileScreen() {
 
                 {renderIdentity()}
 
-                {/* What's new — tap to open, no forced tour */}
                 <Pressable
                     style={({ pressed }) => [
                         styles.whatsNewRow,
@@ -823,258 +894,22 @@ export default function ProfileScreen() {
                     <ChevronRight size={18} color={SOUP_COLORS.subtext} />
                 </Pressable>
 
-                <View style={{ height: 16 }} />
+                {renderStats()}
+                {renderGroups()}
+
+                {/* Sign out at bottom */}
+                <Pressable
+                    style={({ pressed }) => [styles.signOutRow, pressed && { opacity: 0.85 }]}
+                    onPress={handleSignOut}
+                >
+                    <LogOut size={20} color={SOUP_COLORS.pink} />
+                    <Text style={styles.signOutText}>sign out</Text>
+                </Pressable>
+
+                <View style={{ height: 24 }} />
             </ScrollView>
 
             <WhatsNewSheet visible={showWhatsNewSheet} onClose={() => setShowWhatsNewSheet(false)} />
-
-            {/* Edit Profile Modal */}
-            <Modal
-                visible={editing}
-                animationType="slide"
-                presentationStyle="pageSheet"
-            >
-                <SafeAreaView style={styles.modalContainer} edges={['top']}>
-                    <View style={styles.modalHeader}>
-                        <Pressable onPress={() => setEditing(false)}>
-                            <Text style={styles.modalCancel}>Cancel</Text>
-                        </Pressable>
-                        <Text style={styles.modalTitle}>Edit Profile</Text>
-                        <Pressable onPress={handleSave}>
-                            <Text style={styles.modalSave}>Save</Text>
-                        </Pressable>
-                    </View>
-
-                    <KeyboardAvoidingView
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                        style={{ flex: 1 }}
-                    >
-                        <ScrollView
-                            style={styles.modalScroll}
-                            keyboardShouldPersistTaps="handled"
-                        >
-                            <View style={styles.modalContent}>
-                                <Text style={styles.modalLabel}>Name</Text>
-                                <TextInput
-                                    style={styles.modalInput}
-                                    value={newName}
-                                    onChangeText={setNewName}
-                                    placeholder="Your name"
-                                    placeholderTextColor="#999"
-                                />
-
-                                <Text style={styles.modalLabel}>Tagline ✨</Text>
-                                <TextInput
-                                    style={styles.modalInput}
-                                    value={newTagline}
-                                    onChangeText={setNewTagline}
-                                    placeholder="your tagline..."
-                                    placeholderTextColor="#999"
-                                    maxLength={50}
-                                />
-                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.flavorScroll}>
-                                    {EXAMPLE_TAGLINES.map(tag => (
-                                        <Pressable
-                                            key={tag}
-                                            style={[styles.flavorChip, newTagline === tag && styles.flavorChipSelected]}
-                                            onPress={() => setNewTagline(tag)}
-                                        >
-                                            <Text style={[styles.flavorChipText, newTagline === tag && styles.flavorChipTextSelected]}>
-                                                {tag}
-                                            </Text>
-                                        </Pressable>
-                                    ))}
-                                </ScrollView>
-
-                                <Text style={styles.modalLabel}>Timezone 🌎</Text>
-                                {/* Selected Timezone */}
-                                {newTimezone ? (
-                                    <View style={[styles.languageChips, { marginBottom: 8 }]}>
-                                        <Pressable
-                                            style={[styles.languageChip, styles.languageChipSelected]}
-                                            onPress={() => setNewTimezone('')}
-                                        >
-                                            <Text style={[styles.languageChipText, styles.languageChipTextSelected]}>
-                                                {newTimezone} ✕
-                                            </Text>
-                                        </Pressable>
-                                    </View>
-                                ) : null}
-
-                                <TextInput
-                                    style={[styles.modalInput, { marginBottom: 12 }]}
-                                    value={timezoneSearch}
-                                    onChangeText={setTimezoneSearch}
-                                    placeholder="Search timezone..."
-                                    placeholderTextColor="#999"
-                                />
-                                <View style={styles.languageChips}>
-                                    {(() => {
-                                        if (!timezoneSearch) return null;
-                                        const filtered = availableTimezones.filter(tz =>
-                                            tz.toLowerCase().includes(timezoneSearch.toLowerCase())
-                                        );
-                                        return (
-                                            <>
-                                                {filtered.slice(0, 10).map(tz => (
-                                                    <Pressable
-                                                        key={tz}
-                                                        style={styles.languageChip}
-                                                        onPress={() => {
-                                                            setNewTimezone(tz);
-                                                            setTimezoneSearch('');
-                                                        }}
-                                                    >
-                                                        <Text style={styles.languageChipText}>{tz}</Text>
-                                                    </Pressable>
-                                                ))}
-                                            </>
-                                        );
-                                    })()}
-                                </View>
-
-
-                                <Text style={styles.modalLabel}>Conversational Languages</Text>
-                                {/* Selected Languages always visible */}
-                                {newLanguages.length > 0 && (
-                                    <View style={[styles.languageChips, { marginBottom: 8 }]}>
-                                        {newLanguages.map(lang => (
-                                            <Pressable
-                                                key={lang}
-                                                style={[styles.languageChip, styles.languageChipSelected]}
-                                                onPress={() => setNewLanguages(newLanguages.filter(l => l !== lang))}
-                                            >
-                                                <Text style={[styles.languageChipText, styles.languageChipTextSelected]}>
-                                                    {lang} ✕
-                                                </Text>
-                                            </Pressable>
-                                        ))}
-                                    </View>
-                                )}
-
-                                <TextInput
-                                    style={[styles.modalInput, { marginBottom: 12 }]}
-                                    value={languageSearch}
-                                    onChangeText={setLanguageSearch}
-                                    placeholder="Start typing..."
-                                    placeholderTextColor="#999"
-                                />
-                                <View style={styles.languageChips}>
-                                    {(() => {
-                                        // Filter out already selected ones from search results
-                                        const filtered = availableLanguages.filter(lang =>
-                                            !newLanguages.includes(lang) &&
-                                            lang.toLowerCase().includes(languageSearch.toLowerCase())
-                                        );
-                                        // Only show search results if user is typing
-                                        if (!languageSearch) return null;
-
-                                        const toShow = filtered.slice(0, 20);
-
-                                        return (
-                                            <>
-                                                {toShow.map(lang => (
-                                                    <Pressable
-                                                        key={lang}
-                                                        style={styles.languageChip}
-                                                        onPress={() => {
-                                                            setNewLanguages([...newLanguages, lang]);
-                                                            setLanguageSearch(''); // Clear search after adding
-                                                        }}
-                                                    >
-                                                        <Text style={styles.languageChipText}>
-                                                            {lang}
-                                                        </Text>
-                                                    </Pressable>
-                                                ))}
-                                            </>
-                                        );
-                                    })()}
-                                </View>
-
-                                <Text style={styles.modalLabel}>Learning</Text>
-                                {/* Selected Learning Languages always visible */}
-                                {newLearning.length > 0 && (
-                                    <View style={[styles.languageChips, { marginBottom: 8 }]}>
-                                        {newLearning.map(lang => (
-                                            <Pressable
-                                                key={lang}
-                                                style={[styles.languageChip, styles.languageChipSelected]}
-                                                onPress={() => setNewLearning(newLearning.filter(l => l !== lang))}
-                                            >
-                                                <Text style={[styles.languageChipText, styles.languageChipTextSelected]}>
-                                                    {lang} ✕
-                                                </Text>
-                                            </Pressable>
-                                        ))}
-                                    </View>
-                                )}
-
-                                <TextInput
-                                    style={[styles.modalInput, { marginBottom: 12 }]}
-                                    value={learningSearch}
-                                    onChangeText={setLearningSearch}
-                                    placeholder="Start typing..."
-                                    placeholderTextColor="#999"
-                                />
-                                <View style={styles.languageChips}>
-                                    {(() => {
-                                        // Filter out already selected ones from search results
-                                        const filtered = availableLanguages.filter(lang =>
-                                            !newLearning.includes(lang) &&
-                                            lang.toLowerCase().includes(learningSearch.toLowerCase())
-                                        );
-                                        // Only show search results if user is typing
-                                        if (!learningSearch) return null;
-
-                                        const toShow = filtered.slice(0, 20);
-
-                                        return (
-                                            <>
-                                                {toShow.map(lang => (
-                                                    <Pressable
-                                                        key={lang}
-                                                        style={styles.languageChip}
-                                                        onPress={() => {
-                                                            setNewLearning([...newLearning, lang]);
-                                                            setLearningSearch(''); // Clear search after adding
-                                                        }}
-                                                    >
-                                                        <Text style={styles.languageChipText}>
-                                                            {lang}
-                                                        </Text>
-                                                    </Pressable>
-                                                ))}
-                                            </>
-                                        );
-                                    })()}
-                                </View>
-
-                                <View style={styles.modalLabelRow}>
-                                    <Text style={styles.modalLabel}>Share my profile</Text>
-                                    <Text style={styles.modalShareHint}>Public = ok to feature on social. Private = only in app.</Text>
-                                </View>
-                                <View style={styles.shareRow}>
-                                    <Pressable
-                                        onPress={() => setSharePreference('private')}
-                                        style={[styles.shareOption, sharePreference === 'private' && styles.shareOptionSelected]}
-                                    >
-                                        <Text style={[styles.shareOptionText, sharePreference === 'private' && styles.shareOptionTextSelected]}>Private</Text>
-                                    </Pressable>
-                                    <Pressable
-                                        onPress={() => setSharePreference('public')}
-                                        style={[styles.shareOption, sharePreference === 'public' && styles.shareOptionSelected]}
-                                    >
-                                        <Text style={[styles.shareOptionText, sharePreference === 'public' && styles.shareOptionTextSelected]}>Public</Text>
-                                    </Pressable>
-                                </View>
-
-                                <View style={{ height: 100 }} />
-                            </View>
-                        </ScrollView>
-                    </KeyboardAvoidingView>
-                </SafeAreaView>
-            </Modal>
 
             {/* Levels Info Modal */}
             <Modal
@@ -1284,6 +1119,21 @@ const styles = StyleSheet.create({
         paddingTop: 20,
         marginTop: -10,
     },
+    signOutRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+        paddingVertical: 16,
+        paddingHorizontal: 24,
+        marginTop: 24,
+        marginBottom: 8,
+    },
+    signOutText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: SOUP_COLORS.pink,
+    },
     whatsNewRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -1312,6 +1162,7 @@ const styles = StyleSheet.create({
     },
     heroCard: {
         width: '100%',
+        alignItems: 'center',
         backgroundColor: SOUP_COLORS.cardBg,
         borderRadius: 24,
         padding: 24,
@@ -1428,6 +1279,7 @@ const styles = StyleSheet.create({
     heroNameRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
         gap: 10,
         marginBottom: 8,
     },
@@ -1439,11 +1291,114 @@ const styles = StyleSheet.create({
     },
     heroTagline: {
         fontSize: 15,
-        color: SOUP_COLORS.subtext,
+        color: SOUP_COLORS.text,
         fontStyle: 'italic',
         textAlign: 'center',
-        marginTop: 4,
     },
+    taglinePill: {
+        alignSelf: 'center',
+        marginTop: 6,
+        paddingLeft: 12,
+        borderLeftWidth: 4,
+        borderLeftColor: SOUP_COLORS.blue,
+    },
+    compactLevelsWrap: { width: '100%', marginTop: 16, marginBottom: 8 },
+    compactLevelBar: { marginBottom: 12 },
+    compactLevelBarHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+    compactLevelBarLabel: { fontSize: 13, fontWeight: '700', color: SOUP_COLORS.text },
+    compactLevelBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 },
+    compactLevelBadgeText: { fontSize: 12, fontWeight: '800', color: '#fff' },
+    compactBarTrack: { height: 8, backgroundColor: 'rgba(0,0,0,0.08)', borderRadius: 4, overflow: 'hidden' },
+    compactBarFill: { height: '100%', borderRadius: 4 },
+    visibilityRow: { width: '100%', marginTop: 16 },
+    visibilityValue: { fontSize: 15, fontWeight: '700', color: SOUP_COLORS.text, marginBottom: 4 },
+    visibilityHint: { fontSize: 13, color: SOUP_COLORS.subtext },
+    modeStrip: {
+        width: '100%',
+        marginTop: 14,
+        marginBottom: 4,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        borderRadius: 10,
+        borderWidth: 1,
+    },
+    modeStripPublic: {
+        backgroundColor: 'rgba(25, 176, 145, 0.12)',
+        borderColor: SOUP_COLORS.green,
+    },
+    modeStripPrivate: {
+        backgroundColor: 'rgba(0,0,0,0.04)',
+        borderColor: 'rgba(0,0,0,0.1)',
+    },
+    modeStripLabel: { fontSize: 14, fontWeight: '800', color: SOUP_COLORS.text, textTransform: 'lowercase', marginBottom: 2 },
+    modeStripLabelPublic: { color: SOUP_COLORS.green },
+    modeStripHint: { fontSize: 12, color: SOUP_COLORS.subtext },
+    heroNameInput: {
+        fontSize: 28,
+        fontWeight: '900',
+        color: SOUP_COLORS.text,
+        textAlign: 'center',
+        paddingVertical: 4,
+        paddingHorizontal: 8,
+        flex: 1,
+    },
+    heroTaglineInput: {
+        fontSize: 15,
+        color: SOUP_COLORS.text,
+        textAlign: 'center',
+        marginTop: 4,
+        paddingVertical: 6,
+        paddingHorizontal: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.1)',
+        borderRadius: 12,
+        marginBottom: 6,
+    },
+    inlineEditLabel: {
+        fontSize: 12,
+        fontWeight: '800',
+        color: SOUP_COLORS.blue,
+        textTransform: 'uppercase',
+        letterSpacing: 0.6,
+        marginTop: 14,
+        marginBottom: 6,
+    },
+    bioInputInline: {
+        fontSize: 15,
+        color: SOUP_COLORS.text,
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.1)',
+        borderRadius: 12,
+        minHeight: 72,
+        textAlignVertical: 'top',
+    },
+    bioBlock: { marginTop: 8 },
+    bioTextInline: { fontSize: 15, color: SOUP_COLORS.text, lineHeight: 22 },
+    inlineChipsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 6 },
+    inlineSearchInput: {
+        fontSize: 15,
+        color: SOUP_COLORS.text,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.1)',
+        borderRadius: 12,
+        flex: 1,
+        minWidth: 120,
+    },
+    inlineEditActions: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: 16,
+        marginTop: 24,
+        marginBottom: 8,
+    },
+    inlineCancelBtn: { paddingVertical: 12, paddingHorizontal: 24 },
+    inlineCancelText: { fontSize: 16, fontWeight: '700', color: SOUP_COLORS.subtext },
+    inlineSaveBtn: { backgroundColor: SOUP_COLORS.blue, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 14 },
+    inlineSaveText: { fontSize: 16, fontWeight: '800', color: '#fff' },
     heroLanguagesRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -2051,6 +2006,7 @@ const styles = StyleSheet.create({
     },
     shareRow: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
         gap: 12,
     },
     shareOption: {

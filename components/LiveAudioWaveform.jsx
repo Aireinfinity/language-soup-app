@@ -1,117 +1,81 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Colors } from '../constants/Colors';
-import Animated, {
-    useSharedValue,
-    useAnimatedStyle,
-    withSpring,
-} from 'react-native-reanimated';
 
-const BAR_COUNT = 300; // Lots of bars for smooth continuous scroll
-const BAR_INTERVAL = 17; // 300 bars * 17ms = 5100ms ≈ 5 seconds
+const BAR_COUNT = 28;
+const UPDATE_INTERVAL_MS = 55;
+const SMOOTHING = 0.25;
+const BAR_WIDTH = 2.5;
+const BAR_GAP = 1.5;
 
 export function LiveAudioWaveform({ metering, recordingDuration, isRecording, color = Colors.primary }) {
     const [barHeights, setBarHeights] = useState([]);
-    const lastBarTime = useRef(0);
-    const animationFrame = useRef(null);
+    const lastUpdate = useRef(0);
+    const smoothedLevel = useRef(0.15);
+    const rafId = useRef(null);
     const meteringRef = useRef(metering);
-
-    // Keep metering in a ref to avoid recreating the animation loop
-    useEffect(() => {
-        meteringRef.current = metering;
-    }, [metering]);
+    meteringRef.current = metering;
 
     useEffect(() => {
-        // Continuous time-based updates like WhatsApp
-        const updateBars = () => {
-            const currentTime = Date.now();
+        if (!isRecording) return;
 
-            if (currentTime - lastBarTime.current >= BAR_INTERVAL) {
-                // Height based on actual audio level
-                const normalized = Math.max(0, Math.min(1, (meteringRef.current + 60) / 60));
-                const height = Math.max(0.15, normalized);
+        const update = () => {
+            const now = Date.now();
+            if (now - lastUpdate.current >= UPDATE_INTERVAL_MS) {
+                lastUpdate.current = now;
+                const raw = Math.max(0, Math.min(1, (meteringRef.current + 60) / 60));
+                smoothedLevel.current = smoothedLevel.current + (raw - smoothedLevel.current) * (1 - SMOOTHING);
+                const height = Math.max(0.1, Math.min(1, smoothedLevel.current));
 
-                setBarHeights(prev => {
-                    const newHeights = [height, ...prev];
-                    return newHeights.slice(0, BAR_COUNT);
+                setBarHeights((prev) => {
+                    const next = [height, ...prev].slice(0, BAR_COUNT);
+                    return next;
                 });
-
-                lastBarTime.current = currentTime;
             }
-
-            animationFrame.current = requestAnimationFrame(updateBars);
+            rafId.current = requestAnimationFrame(update);
         };
-
-        if (isRecording) { // Trigger immediately on isRecording
-            animationFrame.current = requestAnimationFrame(updateBars);
-        }
-
+        lastUpdate.current = 0;
+        rafId.current = requestAnimationFrame(update);
         return () => {
-            if (animationFrame.current) {
-                cancelAnimationFrame(animationFrame.current);
-            }
+            if (rafId.current) cancelAnimationFrame(rafId.current);
         };
-    }, [isRecording]); // Keep the isRecording fix for immediate display
+    }, [isRecording]);
 
     useEffect(() => {
         if (recordingDuration === 0) {
             setBarHeights([]);
-            lastBarTime.current = 0;
+            smoothedLevel.current = 0.15;
         }
     }, [recordingDuration]);
 
     return (
         <View style={styles.container}>
-            {/* Bars in natural order - newest on right (first in array), oldest on left */}
             {barHeights.map((height, index) => (
-                <SilkyBar
+                <View
                     key={index}
-                    height={height}
-                    color={color}
+                    style={[
+                        styles.bar,
+                        { backgroundColor: color, height: 4 + height * 24 },
+                    ]}
                 />
             ))}
         </View>
     );
 }
 
-const SilkyBar = ({ height, color }) => {
-    const animatedHeight = useSharedValue(4);
-
-    const barPersonality = useRef({
-        damping: 15,
-        stiffness: 120,
-        mass: 0.7,
-    }).current;
-
-    useEffect(() => {
-        const targetHeight = Math.max(4, height * 28);
-
-        animatedHeight.value = withSpring(targetHeight, {
-            damping: barPersonality.damping,
-            stiffness: barPersonality.stiffness,
-            mass: barPersonality.mass,
-        });
-    }, [height]);
-
-    const animatedStyle = useAnimatedStyle(() => ({
-        height: animatedHeight.value,
-    }));
-
-    return <Animated.View style={[styles.bar, animatedStyle, { backgroundColor: color }]} />;
-};
-
 const styles = StyleSheet.create({
     container: {
-        flexDirection: 'row-reverse', // Reverse so right side is the start
+        flexDirection: 'row-reverse',
         alignItems: 'center',
-        justifyContent: 'flex-start', // Start from right edge
-        height: 36,
+        justifyContent: 'flex-start',
+        height: 28,
         flex: 1,
-        gap: 2,
+        gap: BAR_GAP,
         paddingHorizontal: 2,
+        minWidth: 0,
     },
     bar: {
-        width: 3,
-        borderRadius: 2,
+        width: BAR_WIDTH,
+        borderRadius: 1.5,
     },
 });

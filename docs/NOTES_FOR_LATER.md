@@ -50,6 +50,20 @@ Noah wants a **better system** for support tickets so they don't pile up. Tyler 
 
 ---
 
+## DMs + 24h chat + Noah inbox (Feb 2026 plan)
+
+**Done:** DM creation was failing on `is_public` (column doesn't exist on `app_groups`). Fixed: create DM with only `name`, `language`, `level`, `member_count`.
+
+**Design standard:** All chats (group and DM) use the same screen and layout. Language Soup group chat is the design standard; DMs and support chat should look the same (same SharedChatUI, same feel).
+
+**DMs:** Keep them chill and simple. Photos in DMs are fine (Miranda's "no photos" idea noted but not required; trust users).
+
+**24-hour chat (Chat with Noah):** Should not feel like a support center. It should feel like texting Noah. Copy and entry points: consider "text Noah" or "live Noah's chats" instead of "24/7 Live Support Chat" so it feels personal.
+
+**Noah on his phone:** Noah wants to receive these chats on his phone with notifications and a single place to see everyone. Target experience: (1) **"Live Noah's chats"** (or similar) — a screen that lists everyone who has a thread with him, with unread counts. (2) Tap a thread to open that conversation and reply. (3) **Push notifications** when someone sends a message so he gets notified on his phone. Options: (a) Add an "admin inbox" or "Noah inbox" view to the Expo app (logged in as Noah), showing support threads + unread, with Expo Push when `app_support_messages` gets a new user message. (b) Or a dedicated minimal PWA / mobile dashboard that does the same. (c) Or push that deep-links to the existing Vite dashboard if it can receive push on mobile. Next step: decide whether Noah uses the same Expo app in "admin mode" for inbox, or a separate dashboard on mobile; then implement thread list + unread + push for new support messages.
+
+---
+
 ## Dashboard login (single admin, no random user)
 
 Noah is the only admin. He doesn't want to log in every time; anonymous login was creating a **new random user** each time. **Done:** Reuse existing session on login (if already have an admin session, don't call signInAnonymously again). **Stay on the same browser** so the session persists. For one permanent account with no login prompt, he could switch to **email magic link** or **password** for his admin user so one stable identity; then session persists across devices when he signs in with that email.

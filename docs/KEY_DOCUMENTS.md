@@ -37,9 +37,10 @@ Paths: `.cursor/rules/product-language-soup.mdc`, `.cursor/rules/founder-collab.
 | **Facelift finalization** | `docs/FACELIFT_BUILD_FINALIZATION.md` | Facelift build: new user first voice memo + re-activation; finalization checklist, ship, tell users. |
 | **Onboarding audit** | `docs/ONBOARDING_AUDIT_DOWNLOAD_TO_FIRST_VOICE_MEMO.md` | Path from download → first voice memo. |
 | **Today tab design** | `docs/TODAY_TAB_DESIGN_CONCEPT.md` | Today tab vision, hero, design. |
-| **Two tabs** | `docs/TWO_TABS_DESIGN_HERO.md` | Today vs Community. |
+| **Two tabs** | `docs/archive/TWO_TABS_DESIGN_HERO.md` | Today vs Community (archived). |
 | **Android** | `docs/ANDROID.md` | Play Store launch, APK + Pixel workflow, testers. |
 | **Workspace cleanup** | `docs/WORKSPACE_CLEANUP.md` | What not to delete, what to archive. |
+| **Archived (old specs/plans)** | `docs/archive/` | Older specs, one-off audits, superseded plans. Still searchable; not daily reference. |
 
 Copy/philosophy (code): `constants/CopyPhilosophy.js`
 

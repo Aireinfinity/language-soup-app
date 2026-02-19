@@ -20,9 +20,10 @@ import { useQuests } from '../contexts/QuestContext';
 
 const SOUP_COLORS = {
     blue: '#00adef',
+    turquoise: '#00ADEF',
     pink: '#ec008b',
     cream: '#FDF5E6',
-    green: '#2ecc71',
+    green: '#19b091',
 };
 
 // Date separator helper
@@ -370,18 +371,13 @@ export default function SupportChatScreen() {
                 onTextChange={setInputText}
                 sending={sending}
                 headerComponent={
-                    <BlurView intensity={95} tint="light" style={[styles.header, { paddingTop: insets.top }]}>
-                        <View style={styles.headerContent}>
-                            <Pressable onPress={() => router.back()} style={styles.iconButton}>
-                                <ChevronLeft size={28} color={SOUP_COLORS.blue} />
-                            </Pressable>
-                            <View style={styles.headerInfo}>
-                                <Text style={styles.headerTitle}>Support</Text>
-                                <View style={styles.dot} />
-                                <Text style={styles.headerSubtitle}>Noah</Text>
-                            </View>
-                        </View>
-                    </BlurView>
+                    <View style={[styles.headerLive, { paddingTop: insets.top + 8 }]}>
+                        <Pressable onPress={() => router.back()} style={({ pressed }) => [styles.headerBack, pressed && { opacity: 0.85 }]}>
+                            <ChevronLeft size={28} color="#fff" />
+                        </Pressable>
+                        <Text style={styles.headerTitleLive}>Chat with Noah</Text>
+                        <View style={{ width: 40 }} />
+                    </View>
                 }
                 bannerComponent={null}
                 placeholderText="Type a message..."
@@ -420,16 +416,33 @@ const styles = StyleSheet.create({
         flex: 1,
     },
 
-    // Header
+    headerLive: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 8,
+        paddingBottom: 12,
+        backgroundColor: SOUP_COLORS.turquoise,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 6,
+        elevation: 2,
+    },
+    headerBack: {
+        padding: 8,
+    },
+    headerTitleLive: {
+        flex: 1,
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#fff',
+        textAlign: 'center',
+    },
     header: {
         backgroundColor: '#fff',
         borderBottomWidth: 1,
         borderBottomColor: '#F2F2F7',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 2,
-        elevation: 2,
     },
     headerContent: {
         flexDirection: 'row',

@@ -13,31 +13,31 @@ const SOUP_COLORS = {
 
 const MAX_LEVEL = 6;
 
-function ProgressBar({ level, emoji, label }) {
+function ProgressBar({ level, emoji, compact }) {
     const progress = Math.min(1, (level || 1) / MAX_LEVEL);
     return (
         <View style={styles.barWrap}>
             <View style={styles.barRow}>
-                <Text style={styles.barEmoji}>{emoji}</Text>
-                <View style={styles.track}>
+                <Text style={[styles.barEmoji, compact && styles.barEmojiCompact]}>{emoji}</Text>
+                <View style={[styles.track, compact && styles.trackCompact]}>
                     <View style={[styles.fill, { width: `${progress * 100}%` }]} />
                 </View>
-                <Text style={styles.barLevel}>Lv.{level || 1}</Text>
+                <Text style={[styles.barLevel, compact && styles.barLevelCompact]}>Lv.{level || 1}</Text>
             </View>
         </View>
     );
 }
 
-export function LevelsPill({ speakLevel = 1, listenLevel = 1, onPress }) {
+export function LevelsPill({ speakLevel = 1, listenLevel = 1, onPress, compact = false }) {
     return (
         <Pressable
-            style={({ pressed }) => [styles.pill, pressed && { opacity: 0.9 }]}
+            style={({ pressed }) => [styles.pill, compact && styles.pillCompact, pressed && { opacity: 0.9 }]}
             onPress={onPress}
         >
-            <View style={styles.inner}>
-                <Text style={styles.title}>levels</Text>
-                <ProgressBar level={speakLevel} emoji="🎤" />
-                <ProgressBar level={listenLevel} emoji="👂" />
+            <View style={[styles.inner, compact && styles.innerCompact]}>
+                <Text style={[styles.title, compact && styles.titleCompact]}>levels</Text>
+                <ProgressBar level={speakLevel} emoji="🎤" compact={compact} />
+                <ProgressBar level={listenLevel} emoji="👂" compact={compact} />
             </View>
         </Pressable>
     );
@@ -52,8 +52,16 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.35)',
     },
+    pillCompact: {
+        paddingVertical: 4,
+        paddingHorizontal: 8,
+        borderRadius: 10,
+    },
     inner: {
         minWidth: 88,
+    },
+    innerCompact: {
+        minWidth: 72,
     },
     title: {
         fontSize: 10,
@@ -62,6 +70,10 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
         letterSpacing: 0.5,
         marginBottom: 6,
+    },
+    titleCompact: {
+        fontSize: 9,
+        marginBottom: 4,
     },
     barWrap: {
         marginBottom: 4,
@@ -74,12 +86,21 @@ const styles = StyleSheet.create({
     barEmoji: {
         fontSize: 12,
     },
+    barEmojiCompact: {
+        fontSize: 10,
+    },
     track: {
         flex: 1,
         height: 6,
         borderRadius: 3,
-        backgroundColor: 'rgba(255,255,255,0.25)',
-        overflow: 'hidden',
+    },
+    trackCompact: {
+        height: 4,
+        borderRadius: 2,
+    },
+    barLevelCompact: {
+        fontSize: 9,
+        minWidth: 20,
     },
     fill: {
         height: '100%',

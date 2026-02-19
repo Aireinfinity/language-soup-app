@@ -3,6 +3,10 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { X } from 'lucide-react-native';
 import { Colors } from '../constants/Colors';
 
+function triggerHaptic() {
+    try { require('../utils/haptics').haptics.light(); } catch (_) {}
+}
+
 export function ReplyPreview({ replyTo, onCancel }) {
     if (!replyTo) return null;
 
@@ -11,13 +15,17 @@ export function ReplyPreview({ replyTo, onCancel }) {
             <View style={styles.bar} />
             <View style={styles.content}>
                 <Text style={styles.label}>
-                    Replying to {replyTo.senderName || 'message'}
+                    replying to {replyTo.senderName || 'message'}
                 </Text>
                 <Text style={styles.message} numberOfLines={1}>
                     {replyTo.content}
                 </Text>
             </View>
-            <Pressable onPress={onCancel} style={styles.closeButton}>
+            <Pressable
+                onPress={() => { triggerHaptic(); onCancel(); }}
+                style={({ pressed }) => [styles.closeButton, pressed && { opacity: 0.7 }]}
+                hitSlop={8}
+            >
                 <X size={20} color="#666" />
             </Pressable>
         </View>
@@ -28,34 +36,35 @@ const styles = StyleSheet.create({
     container: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#f5f5f5',
-        paddingVertical: 8,
-        paddingHorizontal: 12,
+        backgroundColor: '#FDF9F4',
+        paddingVertical: 10,
+        paddingHorizontal: 14,
         borderTopWidth: 1,
-        borderTopColor: '#e0e0e0',
+        borderTopColor: 'rgba(0,173,239,0.12)',
     },
     bar: {
-        width: 3,
-        height: 40,
+        width: 4,
+        height: 36,
         backgroundColor: Colors.primary,
         borderRadius: 2,
         marginRight: 12,
     },
     content: {
         flex: 1,
+        minWidth: 0,
     },
     label: {
         fontSize: 12,
-        fontWeight: '600',
+        fontWeight: '700',
         color: Colors.primary,
         marginBottom: 2,
     },
     message: {
         fontSize: 14,
-        color: '#666',
+        color: '#555',
     },
     closeButton: {
-        padding: 4,
-        marginLeft: 8,
+        padding: 8,
+        marginLeft: 4,
     },
 });

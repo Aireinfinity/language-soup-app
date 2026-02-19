@@ -86,3 +86,15 @@ Noah studied **why Hungarian startups fail at pre-seed** (49% stuck; perfectioni
 - When we add features, ask: **Does this make users want to speak with each other?** Not "Does this teach grammar better?"
 
 **Summary for Cursor:** We're building **language social media** — community learning that doesn't sound lame. Lead with "speak with real people"; avoid EdTech language. Social = connection and speaking together; not addiction mechanics.
+
+---
+
+## 6. Noah's social & website (handles)
+
+Use these for the website, footer, and any "follow" / "find me" links. No need to ask for them again.
+
+| Platform | URL |
+|----------|-----|
+| **Instagram** | https://www.instagram.com/languagesoup/ |
+| **TikTok** | https://www.tiktok.com/@language.soup |
+| **LinkedIn** | https://www.linkedin.com/in/noahaire/ |
