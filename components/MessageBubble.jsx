@@ -6,11 +6,11 @@ import { AudioMessage } from './AudioMessage';
 import { MessageActionMenu } from './MessageActionMenu';
 import { ReactionViewerModal } from "./ReactionViewerModal";
 import { shareChallenge } from '../lib/shareChallenge';
-import { Share2 } from 'lucide-react-native';
+import { Share2, Check, Sparkles } from 'lucide-react-native';
 import { getLanguageFlag } from '../utils/languageFlags';
 import { VoiceFeedbackButton } from './VoiceFeedbackButton';
-import { InspirationInline } from './InspirationInline';
 import { ReactionPicker } from './ReactionPicker';
+import { LinkPreviewCard, getFirstUrl } from './LinkPreviewCard';
 
 import { getAvatarSource } from '../utils/soupUtils';
 
@@ -20,10 +20,19 @@ const SOUP_COLORS = {
     cream: '#FDF5E6',
 };
 
+function areEqual(prev, next) {
+    if (prev.message?.id !== next.message?.id) return false;
+    if (prev.message?.content !== next.message?.content) return false;
+    if (prev.message?.status !== next.message?.status) return false;
+    if (prev.isMe !== next.isMe || prev.compact !== next.compact || prev.seen !== next.seen) return false;
+    if ((prev.reactions?.length ?? 0) !== (next.reactions?.length ?? 0)) return false;
+    return true;
+}
+
 /**
- * MessageBubble - Renders a single chat message with iMessage-style reactions
+ * MessageBubble - Renders a single chat message. Memoized for list performance.
  */
-export function MessageBubble({
+function MessageBubble({
     message,
     isMe,
     showLanguageFlags = false,
@@ -39,10 +48,13 @@ export function MessageBubble({
     groupName = null,
     groupLanguage = null,
     isSpotlight = false,
-    currentChallenge = null, // Fix: Add prop
-    onShowInspiration, // New Prop
-    onGetTranscript, // (messageId) => Promise<transcript> for "Get transcript" on voice messages
+    currentChallenge = null,
+    currentUserId = null,
+    onShowInspiration,
+    onGetTranscript,
     compact = false,
+    seen = false,
+    voiceMessagesList = null,
 }) {
     const [showActionMenu, setShowActionMenu] = useState(false);
     const [showSharePreview, setShowSharePreview] = useState(false);
@@ -172,7 +184,6 @@ export function MessageBubble({
                     compact ? [ChatStyles.avatar, CompactChatOverrides.avatar] : ChatStyles.avatar,
                     ChatStyles.avatarPlaceholder,
                     isFromLanguageSoup && { backgroundColor: SOUP_COLORS.pink },
-                    !isFromLanguageSoup && { backgroundColor: '#19b091' },
                 ]}>
                     <Text style={ChatStyles.avatarText}>{displayName.charAt(0).toUpperCase() || '?'}</Text>
                 </View>
@@ -213,7 +224,7 @@ export function MessageBubble({
                 <View>
                     <AudioMessage
                         audioUrl={message.media_url || message.content}
-                        duration={message.duration_seconds}
+                        duration={message.duration_seconds ?? message.duration}
                         senderName={sender?.display_name}
                         isMe={isMe}
                         messageId={message.id}
@@ -224,9 +235,14 @@ export function MessageBubble({
                         transcript={message.transcript}
                         onGetTranscript={onGetTranscript}
                         showTranscript={false}
+                        queueFromThisMessage={
+                            (() => {
+                                if (!voiceMessagesList?.length) return undefined;
+                                const idx = voiceMessagesList.findIndex((v) => v.messageId === message.id);
+                                return idx >= 0 ? voiceMessagesList.slice(idx) : undefined;
+                            })()
+                        }
                     />
-
-                    {/* Action row under voice — removed so only play shows */}
 
                     {/* Share Preview Modal */}
                     <Modal
@@ -283,7 +299,7 @@ export function MessageBubble({
                                         setShowSharePreview(false);
                                     }}
                                 >
-                                    <Text style={styles.shareNowText}>Share Challenge 🚀</Text>
+                                    <Text style={styles.shareNowText}>Share Challenge 🔥</Text>
                                 </Pressable>
 
                                 <Pressable
@@ -335,16 +351,19 @@ export function MessageBubble({
                     <Text style={[styles.systemMessageText, (isMe || isFromLanguageSoup) && { color: '#fff' }]}>
                         {message.content}
                     </Text>
-                    {/* Need some ingredients — commented out for now */}
-                    {/* sender?.display_name?.toLowerCase() === 'language soup' &&
-                        (message.challenge_metadata || (message.content && message.content.toLowerCase().includes('#challenge'))) && (
-                            <InspirationInline
-                                metadata={message.challenge_metadata}
-                                language={groupLanguage}
-                                prompt={message.challenge_prompt || currentChallenge?.prompt_text}
-                                challengeId={message.challenge_id || currentChallenge?.id}
-                            />
-                        ) */}
+                    {sender?.display_name?.toLowerCase() === 'language soup' &&
+                        (message.challenge_metadata != null || (message.content && message.content.toLowerCase().includes('#challenge'))) &&
+                        onShowInspiration && (
+                            <Pressable
+                                style={({ pressed }) => [styles.ingredientsButton, isFromLanguageSoup && styles.ingredientsButtonBot, pressed && { opacity: 0.85 }]}
+                                onPress={() => onShowInspiration(message.challenge_metadata, {
+                                    prompt: message.challenge_prompt ?? currentChallenge?.prompt_text,
+                                    challengeId: message.challenge_id ?? currentChallenge?.id,
+                                })}
+                            >
+                                <Text style={[styles.ingredientsButtonText, isFromLanguageSoup && styles.ingredientsButtonTextBot]}>need more ingredients</Text>
+                            </Pressable>
+                        )}
                 </View>
             ) : (
                 <View>
@@ -359,39 +378,41 @@ export function MessageBubble({
                             <Text style={[styles.editedLabel, (isMe || isFromLanguageSoup) && { color: 'rgba(255,255,255,0.9)' }]}> Edited</Text>
                         )}
                     </Text>
-                    {/* Need some ingredients — commented out for now */}
-                    {/* sender?.display_name?.toLowerCase() === 'language soup' &&
-                        (message.challenge_metadata || (message.content && message.content.toLowerCase().includes('#challenge'))) && (
-                            <InspirationInline
-                                metadata={message.challenge_metadata}
-                                language={groupLanguage}
-                                prompt={message.challenge_prompt || currentChallenge?.prompt_text}
-                                challengeId={message.challenge_id || currentChallenge?.id}
-                            />
-                        ) */}
-                </View>
-            )}
-
-
-
-
-            {/* Reactions summary */}
-            {Object.keys(reactionSummary).length > 0 && (
-                <View style={[styles.reactionsContainer, isMe ? styles.reactionsContainerMe : styles.reactionsContainerThem]}>
-                    {Object.entries(reactionSummary).map(([emoji, data]) => (
-                        <Pressable
-                            key={emoji}
-                            style={styles.reactionBadge}
-                            onPress={() => onReactionPress && onReactionPress(message, emoji, data.users)}
-                        >
-                            <Text style={styles.reactionEmoji}>{emoji}</Text>
-                            {data.count > 1 && <Text style={styles.reactionCount}>{data.count}</Text>}
-                        </Pressable>
-                    ))}
+                    {getFirstUrl(message.content) && (
+                        <LinkPreviewCard url={getFirstUrl(message.content)} isMe={isMe} />
+                    )}
+                    {sender?.display_name?.toLowerCase() === 'language soup' &&
+                        (message.challenge_metadata != null || (message.content && message.content.toLowerCase().includes('#challenge'))) &&
+                        onShowInspiration && (
+                            <Pressable
+                                style={({ pressed }) => [styles.ingredientsButton, isFromLanguageSoup && styles.ingredientsButtonBot, pressed && { opacity: 0.85 }]}
+                                onPress={() => onShowInspiration(message.challenge_metadata, {
+                                    prompt: message.challenge_prompt ?? currentChallenge?.prompt_text,
+                                    challengeId: message.challenge_id ?? currentChallenge?.id,
+                                })}
+                            >
+                                <Text style={[styles.ingredientsButtonText, isFromLanguageSoup && styles.ingredientsButtonTextBot]}>need more ingredients</Text>
+                            </Pressable>
+                        )}
                 </View>
             )}
         </>
     );
+
+    const reactionsRow = Object.keys(reactionSummary).length > 0 ? (
+        <View style={[styles.reactionsRowBelow, isMe ? styles.reactionsRowBelowMe : styles.reactionsRowBelowThem]}>
+            {Object.entries(reactionSummary).map(([emoji, data]) => (
+                <Pressable
+                    key={emoji}
+                    style={styles.reactionBadge}
+                    onPress={() => onReactionPress && onReactionPress(message, emoji, data.users)}
+                >
+                    <Text style={styles.reactionEmoji}>{emoji}</Text>
+                    {data.count > 1 && <Text style={styles.reactionCount}>{data.count}</Text>}
+                </Pressable>
+            ))}
+        </View>
+    ) : null;
 
     if (isSpotlight) {
         return (
@@ -423,24 +444,27 @@ export function MessageBubble({
     }
 
     return (
-        <View style={[ChatStyles.messageRow, compact && CompactChatOverrides.messageRow, isMe ? ChatStyles.rowMe : ChatStyles.rowThem]}>
+        <View style={[ChatStyles.messageRow, message.message_type === 'voice' && ChatStyles.messageRowVoice, compact && CompactChatOverrides.messageRow, isMe ? ChatStyles.rowMe : ChatStyles.rowThem]}>
             {isMe ? (
                 <>
-                    <Pressable
-                        style={[
+                    <View style={[styles.bubbleWithReactionsWrap, message.message_type === 'voice' && styles.bubbleWrapVoice]}>
+                        <Pressable
+                            style={({ pressed }) => [
                             ChatStyles.bubble,
                             compact && CompactChatOverrides.bubble,
                             message.message_type === 'voice' && ChatStyles.bubbleVoice,
                             message.message_type === 'voice' && compact && CompactChatOverrides.bubbleVoice,
+                            message.message_type === 'voice' && (isMe ? styles.bubbleVoiceMe : styles.bubbleVoiceThem),
                             isMe ? ChatStyles.bubbleMe : (isFromLanguageSoup ? ChatStyles.bubbleFromBot : ChatStyles.bubbleThem),
                             isSending && ChatStyles.bubbleSending,
-                            showActionMenu && styles.bubbleHighlight
+                            showActionMenu && styles.bubbleHighlight,
+                            pressed && { transform: [{ scale: 0.98 }], opacity: 0.96 }
                         ]}
                         onLongPress={() => {
                             const { Keyboard } = require('react-native');
                             Keyboard.dismiss();
                             const { haptics } = require('../utils/haptics');
-                            haptics.medium();
+                            haptics.light();
 
                             if (bubbleRef.current) {
                                 bubbleRef.current.measureInWindow((x, y, width, height) => {
@@ -451,10 +475,17 @@ export function MessageBubble({
                                 setShowActionMenu(true);
                             }
                         }}
-                        delayLongPress={500}
+                        delayLongPress={400}
                         ref={bubbleRef}
                     >
                         {bubbleContent}
+                        {/* Sent (one check) / Seen (two checks) */}
+                        {isMe && !isSending && !isDeleted && (
+                            <View style={[styles.sentRow, message.message_type === 'voice' && styles.sentRowVoice]}>
+                                <Check size={14} color="rgba(255,255,255,0.9)" strokeWidth={2.5} />
+                                {seen && <Check size={14} color="rgba(255,255,255,0.9)" strokeWidth={2.5} style={{ marginLeft: -4 }} />}
+                            </View>
+                        )}
 
                         {/* WhatsApp-Style Action Menu */}
                         <MessageActionMenu
@@ -482,27 +513,48 @@ export function MessageBubble({
                             onReact={(emoji) => handleReact(emoji)}
                             defaultShowCustom={true}
                         />
-                    </Pressable>
+                        </Pressable>
+                        {reactionsRow}
+                        {isMe && message.message_type === 'voice' && (
+                            <View style={[styles.reactionsRowBelow, styles.reactionsRowBelowMe, styles.voiceActionsRowBelow]}>
+                                <Pressable style={styles.voiceActionBadgeGreen} onPress={() => setShowSharePreview(true)}>
+                                    <Text style={styles.voiceActionBadgeEmoji}>🔥</Text>
+                                </Pressable>
+                                <VoiceFeedbackButton
+                                    audioUrl={message.media_url || message.content}
+                                    language={groupLanguage}
+                                    userId={currentUserId}
+                                    groupLanguage={groupLanguage}
+                                    challengeContext={{ prompt: message.challenge_prompt || currentChallenge?.prompt_text, starter_phrase: null }}
+                                    iconOnly
+                                    greenPill
+                                />
+                            </View>
+                        )}
+                    </View>
                     {avatarElement}
                 </>
             ) : (
                 <>
                     <View style={styles.avatarSpacerThem}>{avatarElement}</View>
-                    <Pressable
-                        style={[
+                    <View style={[styles.bubbleWithReactionsWrap, styles.bubbleWithReactionsWrapThem, message.message_type === 'voice' && styles.bubbleWrapVoiceThem]}>
+                        <Pressable
+                        style={({ pressed }) => [
                             ChatStyles.bubble,
                             compact && CompactChatOverrides.bubble,
                             message.message_type === 'voice' && ChatStyles.bubbleVoice,
                             message.message_type === 'voice' && compact && CompactChatOverrides.bubbleVoice,
+                            message.message_type === 'voice' && styles.bubbleVoiceThem,
                             isFromLanguageSoup ? ChatStyles.bubbleFromBot : ChatStyles.bubbleThem,
                             isSending && ChatStyles.bubbleSending,
-                            showActionMenu && styles.bubbleHighlight
+                            showActionMenu && styles.bubbleHighlight,
+                            pressed && { transform: [{ scale: 0.98 }], opacity: 0.96 }
                         ]}
                         onLongPress={() => {
                             const { Keyboard } = require('react-native');
                             Keyboard.dismiss();
                             const { haptics } = require('../utils/haptics');
-                            haptics.medium();
+                            haptics.light();
 
                             if (bubbleRef.current) {
                                 bubbleRef.current.measureInWindow((x, y, width, height) => {
@@ -513,7 +565,7 @@ export function MessageBubble({
                                 setShowActionMenu(true);
                             }
                         }}
-                        delayLongPress={500}
+                        delayLongPress={400}
                         ref={bubbleRef}
                     >
                         {!isMe && sender && (
@@ -555,7 +607,9 @@ export function MessageBubble({
                             onReact={(emoji) => handleReact(emoji)}
                             defaultShowCustom={true}
                         />
-                    </Pressable>
+                        </Pressable>
+                        {reactionsRow}
+                    </View>
                 </>
             )}
 
@@ -581,28 +635,68 @@ export function MessageBubble({
     );
 }
 
+const MemoizedMessageBubble = React.memo(MessageBubble, areEqual);
+export { MemoizedMessageBubble as MessageBubble };
+
 const styles = StyleSheet.create({
-    reactionsContainer: {
-        position: 'absolute',
-        bottom: -10,
-        left: 8,
+    bubbleWithReactionsWrap: {
+        maxWidth: '85%',
+        alignItems: 'flex-end',
+    },
+    bubbleWrapVoice: {
+        alignSelf: 'flex-end',
+    },
+    bubbleWrapVoiceThem: {
+        alignSelf: 'flex-start',
+    },
+    bubbleVoiceMe: {
+        alignSelf: 'flex-end',
+    },
+    bubbleVoiceThem: {
+        alignSelf: 'flex-start',
+    },
+    bubbleWithReactionsWrapThem: {
+        alignItems: 'flex-start',
+    },
+    reactionsRowBelow: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
         gap: 4,
-        zIndex: 10,
+        marginTop: 4,
+        marginBottom: 2,
     },
-    reactionsContainerMe: {
-        left: 'auto',
-        right: 8,
+    reactionsRowBelowMe: {
+        alignSelf: 'flex-end',
     },
-    reactionsContainerThem: {
-        left: 8,
-        right: 'auto',
+    reactionsRowBelowThem: {
+        alignSelf: 'flex-start',
     },
     avatarWrap: {
         alignSelf: 'flex-start',
     },
     avatarSpacerThem: {
         marginRight: 12,
+    },
+    voiceActionsRowBelow: {
+        marginTop: 6,
+    },
+    voiceActionBadgeGreen: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: SOUP_COLORS.green,
+        borderRadius: 12,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        minWidth: 40,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.12,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    voiceActionBadgeEmoji: {
+        fontSize: 16,
     },
     shareButton: {
         flexDirection: 'row',
@@ -848,6 +942,15 @@ const styles = StyleSheet.create({
         borderColor: Platform.OS === 'android' ? '#eee' : 'rgba(0, 0, 0, 0.05)',
         borderWidth: 1,
     },
+    sentRow: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        marginTop: 4,
+    },
+    sentRowVoice: {
+        marginTop: 2,
+    },
     fullscreenOverlay: {
         justifyContent: 'center',
         alignItems: 'center',
@@ -876,6 +979,25 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: SOUP_COLORS.blue,
+    },
+    ingredientsButton: {
+        alignSelf: 'flex-start',
+        marginTop: 6,
+        paddingVertical: 4,
+        paddingHorizontal: 8,
+        borderRadius: 10,
+        backgroundColor: 'rgba(0,173,239,0.15)',
+    },
+    ingredientsButtonBot: {
+        backgroundColor: 'rgba(255,255,255,0.22)',
+    },
+    ingredientsButtonText: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: SOUP_COLORS.blue,
+    },
+    ingredientsButtonTextBot: {
+        color: 'rgba(255,255,255,0.95)',
     },
     fullscreenImage: {
         width: '100%',

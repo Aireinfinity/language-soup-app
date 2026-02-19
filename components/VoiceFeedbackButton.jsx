@@ -43,7 +43,7 @@ const LOADING_MESSAGES = [
     "Garnishing with tips..."
 ];
 
-export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage, challengeContext }) {
+export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage, challengeContext, iconOnly = false, greenPill = false }) {
     const [showModal, setShowModal] = useState(false);
     const [loading, setLoading] = useState(false);
     const [transcription, setTranscription] = useState('');
@@ -231,8 +231,12 @@ export function VoiceFeedbackButton({ audioUrl, language, userId, groupLanguage,
 
     return (
         <>
-            <Pressable onPress={handlePress} style={styles.button}>
-                <Text style={styles.buttonText}>✨ Correct me</Text>
+            <Pressable onPress={handlePress} style={[styles.button, iconOnly && styles.buttonIconOnly, greenPill && styles.buttonGreenPill]}>
+                {iconOnly ? (
+                    <Text style={[styles.aiLabel, greenPill && styles.aiLabelGreenPill]}>AI</Text>
+                ) : (
+                    <Text style={styles.buttonText}>✨ Correct me</Text>
+                )}
             </Pressable>
 
             <Modal
@@ -636,6 +640,24 @@ const styles = StyleSheet.create({
         color: '#2d3436',
         fontSize: 11,
         fontWeight: '700',
+    },
+    buttonIconOnly: {
+        paddingVertical: 6,
+        paddingHorizontal: 8,
+        backgroundColor: 'rgba(255,255,255,0.25)',
+    },
+    buttonGreenPill: {
+        backgroundColor: SOUP_COLORS.green,
+    },
+    aiLabel: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '800',
+        letterSpacing: 0.5,
+    },
+    aiLabelGreenPill: {
+        fontSize: 13,
+        color: '#fff',
     },
     modalOverlay: {
         flex: 1,

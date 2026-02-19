@@ -1,12 +1,13 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Pressable, StyleSheet, TouchableWithoutFeedback, Modal, Animated, Dimensions } from 'react-native';
+import { View, Text, Pressable, StyleSheet, TouchableWithoutFeedback, Modal, Animated, Dimensions, Image } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { MessageCircle, Copy, Share2, Trash2, Edit2 } from 'lucide-react-native';
-
-// Removed circular import of MessageBubble. It will be required lazily inside the component.
-
+import { getAvatarSource } from '../utils/soupUtils';
+import { ChatStyles } from '../constants/ChatStyles';
 
 const REACTIONS = ['\u2764\uFE0F', '😂', '😮', '😢', '🙏🏿', '👍🏿', '➕'];
+const MENU_PADDING = 20;
 
 export function MessageActionMenu({
     visible,
@@ -27,9 +28,20 @@ export function MessageActionMenu({
     onReactionPress,
     groupName
 }) {
+    const insets = useSafeAreaInsets();
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const scaleAnim = useRef(new Animated.Value(0.8)).current;
     const emojiAnims = useRef(REACTIONS.map(() => new Animated.Value(0))).current;
+    const screenWidth = Dimensions.get('window').width;
+    const cardWidth = screenWidth - MENU_PADDING * 2;
+    const CARD_HEIGHT_EST = 280;
+    const hasMessageLayout = messageLayout && typeof messageLayout.y === 'number' && messageLayout.y > 0;
+    const floatingTop = hasMessageLayout ? Math.max(insets.top + 8, messageLayout.y - CARD_HEIGHT_EST - 8) : null;
+    const floatingLeft = hasMessageLayout && messageLayout.x != null
+        ? (isMe
+            ? Math.max(MENU_PADDING, Math.min(messageLayout.x + messageLayout.width - cardWidth, screenWidth - cardWidth - MENU_PADDING))
+            : Math.max(MENU_PADDING, Math.min(messageLayout.x, screenWidth - cardWidth - MENU_PADDING)))
+        : MENU_PADDING;
 
     useEffect(() => {
         if (visible) {
@@ -94,211 +106,109 @@ export function MessageActionMenu({
                         <View style={styles.darkOverlay} />
                     </BlurView>
 
-                    {/* Duplicate message bubble - rendered above dark overlay */}
-                    {messageLayout && message && (
-                        <View
-                            pointerEvents="none"
-                            style={{
-                                position: 'absolute',
-                                top: messageLayout.y - 2, // Slight adjustment for modal skew
-                                left: isMe ? messageLayout.x : messageLayout.x - 36, // Shift left if avatar is present
-                                width: isMe ? messageLayout.width : messageLayout.width + 36, // Allow space for avatar only for others
-                                zIndex: 50,
-                            }}
-                        >
-                            {(() => {
-                                const { MessageBubble: LazyMessageBubble } = require('./MessageBubble');
-                                return (
-                                    <LazyMessageBubble
-                                        message={message}
-                                        isMe={isMe}
-                                        showLanguageFlags={showLanguageFlags}
-                                        senderKey={senderKey}
-                                        reactions={reactions || []}
-                                        onReact={() => { }}
-                                        onReactionPress={onReactionPress}
-                                        onReply={() => { }}
-                                        onEdit={() => { }}
-                                        onDelete={() => { }}
-                                        groupName={groupName}
-                                        isSpotlight={true}
-                                    />
-                                );
-                            })()}
-                        </View>
-                    )}
-
+                    {/* Card floats above message (like reactions) when messageLayout is set */}
                     <TouchableWithoutFeedback>
-                        <View style={styles.menuContainer}>
-                            {messageLayout && (() => {
-                                const screenHeight = Dimensions.get('window').height;
-                                const showReactionsBelow = messageLayout.y < 80;
-                                const estimatedMenuHeight = isMe ? 240 : 180;
-                                const showMenuAbove = (screenHeight - (messageLayout.y + messageLayout.height)) < estimatedMenuHeight + 20;
-
-                                // Base positions
-                                let reactionsTop = messageLayout.y - 46;
-                                let actionsTop = messageLayout.y + messageLayout.height + 8;
-
-                                // Flip logic
-                                if (showReactionsBelow) {
-                                    reactionsTop = messageLayout.y + messageLayout.height + 8;
-                                    actionsTop = reactionsTop + 54; // Below reactions
-                                } else if (showMenuAbove) {
-                                    actionsTop = messageLayout.y - estimatedMenuHeight - 8;
-                                    reactionsTop = actionsTop - 54; // Above menu
-                                }
-
-                                return (
-                                    <>
-                                        {/* Reactions Row */}
-                                        <Animated.View
-                                            style={[
-                                                styles.reactionsRowPositioned,
-                                                {
-                                                    top: reactionsTop,
-                                                    left: messageLayout.x,
-                                                    width: messageLayout.width,
-                                                    alignItems: 'center',
-                                                    transform: [{ scale: scaleAnim }],
-                                                    opacity: fadeAnim
-                                                }
-                                            ]}
-                                        >
-                                            <BlurView intensity={95} tint="light" style={styles.reactionsRow}>
-                                                {REACTIONS.map((emoji, index) => (
-                                                    <Animated.View
-                                                        key={index}
-                                                        style={{
-                                                            opacity: emojiAnims[index],
-                                                            transform: [{
-                                                                scale: emojiAnims[index].interpolate({
-                                                                    inputRange: [0, 1],
-                                                                    outputRange: [0.3, 1]
-                                                                })
-                                                            }]
-                                                        }}
-                                                    >
-                                                        <Pressable
-                                                            onPress={() => {
-                                                                if (emoji === '➕') {
-                                                                    const { haptics } = require('../utils/haptics');
-                                                                    haptics.light();
-                                                                    onClose();
-                                                                    if (onShowMoreReactions) {
-                                                                        onShowMoreReactions();
-                                                                    }
-                                                                } else {
-                                                                    const { haptics } = require('../utils/haptics');
-                                                                    haptics.light();
-                                                                    onReact(emoji);
-                                                                    onClose();
-                                                                }
-                                                            }}
-                                                            style={styles.reactionButton}
-                                                        >
-                                                            <Text style={styles.reactionEmoji}>{emoji}</Text>
-                                                        </Pressable>
-                                                    </Animated.View>
-                                                ))}
-                                            </BlurView>
+                        <Animated.View
+                            style={[
+                                styles.bottomCard,
+                                {
+                                    ...(floatingTop != null ? { top: floatingTop, left: floatingLeft } : { bottom: insets.bottom + 100, left: MENU_PADDING }),
+                                    width: cardWidth,
+                                    opacity: fadeAnim,
+                                    transform: [{ scale: scaleAnim }],
+                                },
+                            ]}
+                        >
+                            <BlurView intensity={95} tint="light" style={styles.cardInner}>
+                                {/* Preview: avatar + bubble as in chat (bigger/isolated) */}
+                                {message && (() => {
+                                    const sender = message[senderKey];
+                                    const displayName = sender?.display_name?.trim() || '?';
+                                    const avatarUrl = sender?.avatar_url;
+                                    const previewContent = message.message_type === 'voice' ? 'Voice message' : message.message_type === 'image' ? 'Photo' : (message.content || 'Message').trim() || 'Message';
+                                    return (
+                                        <View style={[styles.messagePreview, isMe ? styles.previewRowMe : styles.previewRowThem]}>
+                                            {!isMe && (
+                                                <View style={styles.previewAvatarWrap}>
+                                                    {avatarUrl ? (
+                                                        <Image source={getAvatarSource(avatarUrl)} style={styles.previewAvatar} />
+                                                    ) : (
+                                                        <View style={[styles.previewAvatar, styles.previewAvatarPlaceholder]}>
+                                                            <Text style={styles.previewAvatarLetter}>{displayName.charAt(0).toUpperCase()}</Text>
+                                                        </View>
+                                                    )}
+                                                </View>
+                                            )}
+                                            <View style={[styles.previewBubble, isMe ? ChatStyles.bubbleMe : ChatStyles.bubbleThem]}>
+                                                <Text style={[styles.previewBubbleText, isMe && styles.previewBubbleTextMe]} numberOfLines={3}>
+                                                    {previewContent}
+                                                </Text>
+                                            </View>
+                                            {isMe && (
+                                                <View style={styles.previewAvatarWrap}>
+                                                    {avatarUrl ? (
+                                                        <Image source={getAvatarSource(avatarUrl)} style={styles.previewAvatar} />
+                                                    ) : (
+                                                        <View style={[styles.previewAvatar, styles.previewAvatarPlaceholder]}>
+                                                            <Text style={styles.previewAvatarLetter}>{displayName.charAt(0).toUpperCase()}</Text>
+                                                        </View>
+                                                    )}
+                                                </View>
+                                            )}
+                                        </View>
+                                    );
+                                })()}
+                                {/* Reactions row */}
+                                <View style={styles.reactionsRow}>
+                                    {REACTIONS.map((emoji, index) => (
+                                        <Animated.View key={index} style={{ opacity: emojiAnims[index] }}>
+                                            <Pressable
+                                                onPress={() => {
+                                                    const { haptics } = require('../utils/haptics');
+                                                    haptics.light();
+                                                    if (emoji === '➕') {
+                                                        onClose();
+                                                        if (onShowMoreReactions) onShowMoreReactions();
+                                                    } else {
+                                                        onReact(emoji);
+                                                        onClose();
+                                                    }
+                                                }}
+                                                style={styles.reactionButton}
+                                            >
+                                                <Text style={styles.reactionEmoji}>{emoji}</Text>
+                                            </Pressable>
                                         </Animated.View>
-
-                                        {/* Actions Row */}
-                                        <Animated.View
-                                            style={[
-                                                styles.actionsRowPositioned,
-                                                {
-                                                    top: actionsTop,
-                                                    left: isMe ? undefined : (messageLayout.x - 20 < 10 ? 10 : messageLayout.x - 20),
-                                                    right: isMe ? (Dimensions.get('window').width - (messageLayout.x + messageLayout.width) - 20 < 10 ? 10 : Dimensions.get('window').width - (messageLayout.x + messageLayout.width) - 20) : undefined,
-                                                    transform: [{ scale: scaleAnim }],
-                                                    opacity: fadeAnim
-                                                }
-                                            ]}
-                                        >
-                                            <BlurView intensity={100} tint="light" style={styles.actionsRow}>
-                                                <Pressable
-                                                    onPress={() => {
-                                                        const { haptics } = require('../utils/haptics');
-                                                        haptics.light();
-                                                        onReply();
-                                                        onClose();
-                                                    }}
-                                                    style={styles.actionButton}
-                                                >
-                                                    <Text style={styles.actionText}>Reply</Text>
-                                                    <MessageCircle size={20} color="#333" />
-                                                </Pressable>
-
-                                                <View style={styles.separator} />
-
-                                                <Pressable
-                                                    onPress={() => {
-                                                        const { haptics } = require('../utils/haptics');
-                                                        haptics.light();
-                                                        onCopy();
-                                                        onClose();
-                                                    }}
-                                                    style={styles.actionButton}
-                                                >
-                                                    <Text style={styles.actionText}>Copy</Text>
-                                                    <Copy size={20} color="#333" />
-                                                </Pressable>
-
-                                                <View style={styles.separator} />
-
-                                                <Pressable
-                                                    onPress={() => {
-                                                        const { Alert } = require('react-native');
-                                                        const { haptics } = require('../utils/haptics');
-                                                        haptics.light();
-                                                        Alert.alert('Coming Soon', 'Translate feature is coming soon!');
-                                                        onClose();
-                                                    }}
-                                                    style={styles.actionButton}
-                                                >
-                                                    <Text style={styles.actionText}>Translate</Text>
-                                                    <Share2 size={20} color="#333" />
-                                                </Pressable>
-
-                                                {isMe && (
-                                                    <>
-                                                        <View style={styles.separator} />
-                                                        <Pressable
-                                                            onPress={() => {
-                                                                const { haptics } = require('../utils/haptics');
-                                                                haptics.light();
-                                                                onEdit();
-                                                                onClose();
-                                                            }}
-                                                            style={styles.actionButton}
-                                                        >
-                                                            <Text style={styles.actionText}>Edit</Text>
-                                                            <Edit2 size={20} color="#333" />
-                                                        </Pressable>
-
-                                                        <View style={styles.separator} />
-                                                        <Pressable
-                                                            onPress={() => {
-                                                                const { haptics } = require('../utils/haptics');
-                                                                haptics.light();
-                                                                onDelete();
-                                                                onClose();
-                                                            }}
-                                                            style={styles.actionButton}
-                                                        >
-                                                            <Text style={[styles.actionText, { color: '#ff3b30' }]}>Delete</Text>
-                                                            <Trash2 size={20} color="#ff3b30" />
-                                                        </Pressable>
-                                                    </>
-                                                )}
-                                            </BlurView>
-                                        </Animated.View>
-                                    </>
-                                );
-                            })()}
-                        </View>
+                                    ))}
+                                </View>
+                                {/* Actions row: Reply, Copy, Translate, Edit (me), Delete (me) */}
+                                <View style={styles.actionsRowVertical}>
+                                    <Pressable onPress={() => { const { haptics } = require('../utils/haptics'); haptics.light(); onReply(); onClose(); }} style={styles.actionButton}>
+                                        <MessageCircle size={20} color="#333" /><Text style={styles.actionText}>Reply</Text>
+                                    </Pressable>
+                                    <View style={styles.separator} />
+                                    <Pressable onPress={() => { const { haptics } = require('../utils/haptics'); haptics.light(); onCopy(); onClose(); }} style={styles.actionButton}>
+                                        <Copy size={20} color="#333" /><Text style={styles.actionText}>Copy</Text>
+                                    </Pressable>
+                                    <View style={styles.separator} />
+                                    <Pressable onPress={() => { const { Alert } = require('react-native'); const { haptics } = require('../utils/haptics'); haptics.light(); Alert.alert('Coming soon', 'Translate is coming soon!'); onClose(); }} style={styles.actionButton}>
+                                        <Share2 size={20} color="#333" /><Text style={styles.actionText}>Translate</Text>
+                                    </Pressable>
+                                    {isMe && (
+                                        <>
+                                            <View style={styles.separator} />
+                                            <Pressable onPress={() => { const { haptics } = require('../utils/haptics'); haptics.light(); onEdit(); onClose(); }} style={styles.actionButton}>
+                                                <Edit2 size={20} color="#333" /><Text style={styles.actionText}>Edit</Text>
+                                            </Pressable>
+                                            <View style={styles.separator} />
+                                            <Pressable onPress={() => { const { haptics } = require('../utils/haptics'); haptics.light(); onDelete(); onClose(); }} style={styles.actionButton}>
+                                                <Trash2 size={20} color="#ff3b30" /><Text style={[styles.actionText, { color: '#ff3b30' }]}>Delete</Text>
+                                            </Pressable>
+                                        </>
+                                    )}
+                                </View>
+                            </BlurView>
+                        </Animated.View>
                     </TouchableWithoutFeedback>
                 </Animated.View>
             </TouchableWithoutFeedback>
@@ -311,71 +221,109 @@ const styles = StyleSheet.create({
         ...StyleSheet.absoluteFillObject,
         zIndex: 1000,
     },
-    menuContainer: {
-        // No centering - use absolute positioning for children
-    },
-    reactionsRow: {
-        flexDirection: 'row',
-        borderRadius: 20,
-        paddingHorizontal: 6,
-        paddingVertical: 4,
-        overflow: 'hidden',
-        backgroundColor: 'rgba(255, 255, 255, 0.95)', // Bright white background
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 }, // Stronger shadow
-        shadowOpacity: 0.2,
-        shadowRadius: 12,
-        elevation: 8,
-    },
-    reactionButton: {
-        paddingHorizontal: 4, // Very tight
-        paddingVertical: 1,
-    },
-    reactionEmoji: {
-        fontSize: 20, // Much smaller
-    },
-
     darkOverlay: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(0, 0, 0, 0.4)', // Slightly lighter to let blur feel more "natural"
+        backgroundColor: 'rgba(0, 0, 0, 0.4)',
     },
-    reactionsRowPositioned: {
+    bottomCard: {
         position: 'absolute',
         zIndex: 1000,
     },
-    actionsRowPositioned: {
-        position: 'absolute',
-        zIndex: 1000,
-        paddingHorizontal: 12, // Minimal gutter
-    },
-    actionsRow: {
-        borderRadius: 14,
+    cardInner: {
+        borderRadius: 20,
         overflow: 'hidden',
-        backgroundColor: '#f8f8f8', // Solid light grey/white for that WhatsApp menu look
-        width: 180, // Fixed width for vertical list
+        backgroundColor: 'rgba(255,255,255,0.95)',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.2,
         shadowRadius: 12,
         elevation: 8,
     },
+    messagePreview: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        paddingHorizontal: 16,
+        paddingTop: 14,
+        paddingBottom: 12,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: '#eee',
+        gap: 10,
+    },
+    previewRowMe: {
+        justifyContent: 'flex-end',
+    },
+    previewRowThem: {
+        justifyContent: 'flex-start',
+    },
+    previewAvatarWrap: {
+        marginBottom: 2,
+    },
+    previewAvatar: {
+        width: 44,
+        height: 44,
+        borderRadius: 10,
+    },
+    previewAvatarPlaceholder: {
+        backgroundColor: '#00adef',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    previewAvatarLetter: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: '800',
+    },
+    previewBubble: {
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        maxWidth: '70%',
+        borderRadius: 18,
+        borderBottomRightRadius: 6,
+        borderBottomLeftRadius: 6,
+    },
+    previewBubbleText: {
+        fontSize: 14,
+        color: '#fff',
+        lineHeight: 20,
+    },
+    previewBubbleTextMe: {
+        color: '#fff',
+    },
+    reactionsRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 8,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: '#eee',
+    },
+    reactionButton: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+    },
+    reactionEmoji: {
+        fontSize: 22,
+    },
+    actionsRowVertical: {
+        paddingVertical: 4,
+    },
     actionButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        backgroundColor: 'rgba(255, 255, 255, 0.7)', // Translucent to let blur work
+        gap: 12,
+        paddingHorizontal: 20,
+        paddingVertical: 14,
     },
     actionText: {
-        fontSize: 16, // Larger for vertical list
+        fontSize: 16,
         color: '#333',
-        fontWeight: '400',
+        fontWeight: '500',
     },
     separator: {
         height: StyleSheet.hairlineWidth,
-        backgroundColor: '#ddd',
-        marginHorizontal: 0,
+        backgroundColor: '#eee',
+        marginHorizontal: 20,
     },
 });
 
